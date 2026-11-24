@@ -10,3 +10,7 @@ mise run ci
 ```
 
 What it is for, the rules and the setup are in [AGENTS.md](AGENTS.md).
+
+## Licence
+
+MIT, see [LICENSE](LICENSE).
