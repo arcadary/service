@@ -33,3 +33,7 @@
 # Ignore key files for decrypting credentials and more.
 /config/*.key
 
+
+# Local ub-agents configuration and execution artifacts
+.ub-agents/
+ub-agents.local.yaml

@@ -1,0 +1,135 @@
+# Project-owned starter. Customize models, checks, instructions, and merge authority.
+repository: "arcadary/service"
+shared-instructions: .agents/ub_agents.md
+queue:
+  milestones: ignore
+  dependencies: wait
+  priority:
+    labels:
+    - prio:urgent
+    - prio:high
+    - prio:medium
+    - prio:low
+
+# Let these bots' comments and reviews reach agents as feedback, with no other authority.
+# https://agents.uberblick.ai/docs/configuration/approvals.html
+# trusted-bots: [copilot-pull-request-reviewer, Copilot]
+
+# Dependabot PRs need no maintainer start or head approval, and their bodies
+# (upstream release notes) never reach agents: the title and the diff are the
+# whole stated intent. The integrator merges them under the Dependabot rules in
+# .agents/ub_agents.md.
+trusted-pr-authors: [dependabot]
+
+# Set up dependencies before every new run, after the control-checkout refresh,
+# even if HEAD did not move, and in each new private worktree (except fork PRs).
+# The command must be idempotent and fast when nothing changed.
+# Upgrade every launcher before omitting when-changed; earlier builds require it.
+checkout-setup:
+  command: [sh, -c, 'mise trust ./mise.toml && mise install && exec mise run setup']
+  timeout-seconds: 900
+
+# For slower installs, optional when-changed limits control-checkout setup to
+# changes in these repository-relative files; an empty list or null is invalid.
+# checkout-setup:
+#   command: [npm, ci]
+#   when-changed: [package-lock.json, package.json]
+
+# Default arguments for each CLI.
+# Grants full access without the Codex sandbox: https://agents.uberblick.ai/docs/configuration/permissions.html
+# Grants unattended edits and git/gh/report commands: https://agents.uberblick.ai/docs/configuration/permissions.html
+# Claude may also run mise, the bin/ scripts (bin/ci, bin/rails, bin/rubocop and the
+# others) and read-only filters, so it can run the project's checks.
+runtime-args:
+  codex: [--sandbox, danger-full-access]
+  claude: ["--permission-mode", "acceptEdits", "--permission-prompts", "none", "--allowedTools", "Bash(git *)", "Bash(gh *)", "Bash(mise *)", "Bash(bin/*)", "Bash(grep *)", "Bash(head *)", "Bash(tail *)", "Bash(wc *)", "Bash(sort *)", "Bash(uniq *)", "Bash(cut *)", "Bash(diff *)", "Bash(jq *)", "Bash(ls *)", "Bash(cat *)", "Bash({report_command} report *)", "Bash({report_command} read *)", "Bash({report_command} retrospective *)", "--add-dir", "{scratch}"]
+# An agent's runtime-args list or mapping replaces these defaults entirely.
+# Omit the agent key to inherit; an empty list or mapping disables the defaults.
+
+# Update both agent CLIs and gh once a day between runs, each with its own updater.
+runtime-updates:
+  codex: auto
+  claude: auto
+  gh: auto
+  ub: auto
+
+# Customize these outcomes and rules with the project's owners.
+agents:
+  issue-preparer:
+    runtime: "codex:gpt-6.1-sol:high"
+    kind: issue
+    trigger: needs-preparation
+    outcomes:
+      prepared: {add: [ready]}
+      review: {add: [needs-review]}
+      split: {}
+      needs-human: {add: [needs-human]}
+    instructions: .agents/issue-preparer.md
+    retrospectives: 7
+    worktree: true
+    agent-timeout-minutes: 60
+
+  issue-reviewer:
+    runtime: "claude:claude-opus-5-5:high"
+    kind: issue
+    trigger: needs-review
+    outcomes:
+      approved: {add: [ready]}
+      changes-requested: {add: [needs-preparation]}
+      needs-human: {add: [needs-human]}
+    instructions: .agents/issue-reviewer.md
+    retrospectives: 8
+    worktree: true
+    agent-timeout-minutes: 60
+    different-runtime-from: issue-preparer
+
+  implementer:
+    runtime: "codex:gpt-6.1-sol:high"
+    trigger: [ready, needs-changes]
+    outcomes:
+      handed-off: {add: [needs-review]}
+      needs-human: {add: [needs-human]}
+    instructions: .agents/implementer.md
+    retrospectives: 9
+    worktree: true
+    agent-timeout-minutes: 180
+
+  reviewer:
+    runtime: "claude:claude-opus-5-5:high"
+    kind: pr
+    trigger: needs-review
+    outcomes:
+      approved: {add: [ready-to-merge]}
+      changes-requested: {add: [needs-changes], max-rounds: 3}
+    instructions: .agents/reviewer.md
+    retrospectives: 10
+    worktree: true
+    agent-timeout-minutes: 180
+    different-runtime-from: implementer
+    # Native GitHub approval requires an identity other than the PR author.
+
+  integrator:
+    runtime: "codex:gpt-6.1-sol:high"
+    kind: pr
+    # Dependabot labels its PRs `dependencies`, which sends them straight here.
+    trigger: [ready-to-merge, dependencies]
+    outcomes:
+      # The launcher waits for every CI check at the reported head, then squash-merges.
+      merged: {merge: squash}
+      maintainer-merge: {add: [needs-human]}
+      changes-requested: {add: [needs-changes]}
+    # A PR GitHub reports as conflicting goes straight back to the implementer.
+    on-conflict: changes-requested
+    instructions: .agents/integrator.md
+    retrospectives: 11
+    worktree: true
+    agent-timeout-minutes: 180
+
+limits:
+  agent-timeout-minutes: 180
+  max-attempts: 5
+  retry-backoff-seconds: 60
+  max-backoff-seconds: 3600
+
+poll-seconds: 30
+stop-labels: [needs-human]

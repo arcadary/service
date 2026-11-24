@@ -63,6 +63,10 @@ It runs `bin/ci`, the steps in `config/ci.rb`: setup, RuboCop (`bin/rubocop`), t
 
 Tests use the SQLite test database and no network. A test that needs an outside service uses a fake.
 
+## Agent loop
+
+Work runs through [ub-agents](https://agents.uberblick.ai): `ub-agents.yaml` holds the roles and labels, `.agents/` the instructions, and `.agents/ub_agents.md` the merge rules. An issue labelled `needs-preparation` is prepared, implemented, reviewed and merged; the owner merges what the rules leave to a maintainer. Dependabot pull requests skip preparation and review and go straight to the integrator, which merges minor and patch updates once CI passes and leaves majors and sensitive packages to the owner.
+
 ## Where things are
 
 - `app/`, `config/`, `db/`, `test/`: the Rails application as generated.
