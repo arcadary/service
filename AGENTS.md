@@ -2,7 +2,7 @@
 
 The remote service for [Arcadary](https://github.com/arcadary/arcadary), a retro game launcher for Steam Machine and Steam Deck. The launcher works without it. When a device is online, the service gives it what cannot ship inside the app: catalog updates, compatibility records per device class and controller profiles.
 
-This repository is private and nothing is deployed yet. It holds an empty Rails application; every feature below is still to be built.
+This repository is public and nothing is deployed yet. It holds an empty Rails application; every feature below is still to be built.
 
 ## What the service is
 
