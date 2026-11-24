@@ -1,24 +1,11 @@
-# README
+# Arcadary service
 
-This README would normally document whatever steps are necessary to get the
-application up and running.
+The remote service for [Arcadary](https://github.com/bk-one/arcadary): catalog updates, compatibility records and controller profiles for the launcher. It is an empty Rails 8.1 application for now; nothing is built or deployed.
 
-Things you may want to cover:
+```bash
+bin/setup --skip-server
+bin/dev
+bin/ci
+```
 
-* Ruby version
-
-* System dependencies
-
-* Configuration
-
-* Database creation
-
-* Database initialization
-
-* How to run the test suite
-
-* Services (job queues, cache servers, search engines, etc.)
-
-* Deployment instructions
-
-* ...
+What it is for, the rules and the setup are in [AGENTS.md](AGENTS.md).
