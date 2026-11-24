@@ -42,10 +42,12 @@ These are the owner's choices. Do not replace them with something else, and do n
 Tools are managed with [mise](https://mise.jdx.dev): `mise.toml` pins Ruby 3.4.13 and installs fnox. `.ruby-version` and the Dockerfile's `RUBY_VERSION` name the same Ruby for GitHub Actions and the image; change all three together. Rails is 8.1.
 
 ```bash
-mise install              # Ruby and fnox, once
-bin/setup --skip-server   # installs gems and prepares the SQLite databases in storage/
-bin/dev                   # serves http://localhost:3000
+mise install       # Ruby and fnox, once
+mise run setup     # installs gems and prepares the SQLite databases in storage/
+mise run dev       # serves http://localhost:3000
 ```
+
+A shell with `mise activate` prints these and the other common commands when it enters the folder (the `enter` hook in `mise.toml`). Each task is a thin name for a `bin/` script, and `mise tasks` lists them all. Keep the hook's list in step when a task is added.
 
 `/up` answers 200 when the application has booted.
 
@@ -54,10 +56,10 @@ bin/dev                   # serves http://localhost:3000
 Run all of them before handing work over:
 
 ```bash
-bin/ci
+mise run ci
 ```
 
-It runs the steps in `config/ci.rb`: setup, RuboCop (`bin/rubocop`), the gem audit (`bin/bundler-audit`), the importmap audit, Brakeman (`bin/brakeman`), the tests (`bin/rails test`) and the seeds. GitHub Actions runs the same tools on every pull request (`.github/workflows/ci.yml`). There are no system tests yet, so the generator's `system-test` CI job is removed; add it back with the first test in `test/system`.
+It runs `bin/ci`, the steps in `config/ci.rb`: setup, RuboCop (`bin/rubocop`), the gem audit (`bin/bundler-audit`), the importmap audit, Brakeman (`bin/brakeman`), the tests (`bin/rails test`) and the seeds. GitHub Actions runs the same tools on every pull request (`.github/workflows/ci.yml`). There are no system tests yet, so the generator's `system-test` CI job is removed; add it back with the first test in `test/system`.
 
 Tests use the SQLite test database and no network. A test that needs an outside service uses a fake.
 
