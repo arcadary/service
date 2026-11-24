@@ -1,0 +1,3 @@
+[mcp_servers.uberblick]
+command = "ub"
+args = ["mcp", "serve"]
