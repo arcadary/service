@@ -62,6 +62,39 @@ The integrator handles it on every run like this:
 Runtimes Dependabot does not see, such as the Ruby version in `mise.toml`,
 `.ruby-version` and the Dockerfile, stay manual.
 
+## Milestone branches
+
+A milestone is a feature that reaches `main` in one piece. Every issue in a milestone
+merges into the milestone's own branch, and a maintainer merges that branch into `main`
+when the team decides to release it. An issue without a milestone, and every Dependabot
+PR, targets `main` as before.
+
+- **The branch.** The milestone's description names it on a line of its own:
+  `Branch: milestone/SLUG`, where SLUG is the milestone's title in lower case with
+  every run of other characters replaced by `-` (for example `milestone/catalog-api`).
+  There is no `Preview:` line: no host deploys every branch, so the team tries a
+  milestone by deploying its branch to staging.
+- **First issue.** When the description has no `Branch:` line yet, the implementer
+  creates `milestone/SLUG` from current `main`, pushes it, and adds the line to the
+  description (`gh api -X PATCH repos/{owner}/{repo}/milestones/NUMBER -f
+  description=...`, keeping the text already there).
+- **Issue PRs** target the milestone branch (`gh pr create --base milestone/SLUG`). For
+  such a PR the integrator's check that the base is the default branch becomes: the base
+  is the `Branch:` line of the closing issue's milestone. Any other base is blocked.
+- **Keeping it on current main.** Whenever `main` has moved, the agent working on the
+  branch merges `main` into it before it builds (implementer) or before it merges
+  (integrator): by merge, never by rebase or force push. It fixes a trivial conflict on
+  the spot, such as a lockfile or a small hotfix line. Anything harder goes to a
+  maintainer (`needs-human`), with concrete suggestions for resolving it.
+- **Closing issues.** GitHub closes issues only on merges into the default branch. After
+  a merge into a milestone branch the integrator checks that the closing issue is
+  closed, and closes it if not.
+- **The milestone PR.** Once the milestone's first issue has landed, the integrator opens
+  one PR from `milestone/SLUG` into `main`, titled `Milestone: TITLE`, whose body lists
+  the issues that have landed. After every later merge into the branch it updates that
+  list. Agents never add workflow labels to this PR and never merge it: merging it is
+  the maintainer's release decision.
+
 ## Human decisions
 
 A maintainer (an admin of this repository) answers scope and policy questions. An issue's author may answer only if they have write
