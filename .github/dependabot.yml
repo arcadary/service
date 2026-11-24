@@ -1,12 +1,37 @@
+# Updates are grouped: one pull request for all security fixes, and one weekly for
+# minor and patch versions. Version updates wait seven days after a release;
+# security updates never wait. The loop's integrator merges them under the
+# Dependabot rules in .agents/ub_agents.md; majors come as their own pull requests
+# and go to a maintainer.
 version: 2
 updates:
 - package-ecosystem: bundler
   directory: "/"
   schedule:
     interval: weekly
+  cooldown:
+    default-days: 7
+  groups:
+    security:
+      applies-to: security-updates
+      patterns: ["*"]
+    minor-and-patch:
+      applies-to: version-updates
+      patterns: ["*"]
+      update-types: [minor, patch]
   open-pull-requests-limit: 10
 - package-ecosystem: github-actions
   directory: "/"
   schedule:
     interval: weekly
+  cooldown:
+    default-days: 7
+  groups:
+    security:
+      applies-to: security-updates
+      patterns: ["*"]
+    minor-and-patch:
+      applies-to: version-updates
+      patterns: ["*"]
+      update-types: [minor, patch]
   open-pull-requests-limit: 10
