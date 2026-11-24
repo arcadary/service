@@ -15,13 +15,19 @@ queue:
 # https://agents.uberblick.ai/docs/configuration/approvals.html
 # trusted-bots: [copilot-pull-request-reviewer, Copilot]
 
+# Dependabot PRs need no maintainer start or head approval, and their bodies
+# (upstream release notes) never reach agents: the title and the diff are the
+# whole stated intent. The integrator merges them under the Dependabot rules in
+# .agents/ub_agents.md.
+trusted-pr-authors: [dependabot]
+
 # Set up dependencies before every new run, after the control-checkout refresh,
 # even if HEAD did not move, and in each new private worktree (except fork PRs).
 # The command must be idempotent and fast when nothing changed.
 # Upgrade every launcher before omitting when-changed; earlier builds require it.
-# checkout-setup:
-#   command: [sh, -c, 'mise trust ./mise.toml && exec mise run install']
-#   timeout-seconds: 600
+checkout-setup:
+  command: [sh, -c, 'mise trust ./mise.toml && mise install && exec mise run setup']
+  timeout-seconds: 900
 
 # For slower installs, optional when-changed limits control-checkout setup to
 # changes in these repository-relative files; an empty list or null is invalid.
@@ -32,10 +38,11 @@ queue:
 # Default arguments for each CLI.
 # Grants full access without the Codex sandbox: https://agents.uberblick.ai/docs/configuration/permissions.html
 # Grants unattended edits and git/gh/report commands: https://agents.uberblick.ai/docs/configuration/permissions.html
-# Add the project's check commands to --allowedTools: "Bash(<project check command>)".
+# Claude may also run mise, the bin/ scripts (bin/ci, bin/rails, bin/rubocop and the
+# others) and read-only filters, so it can run the project's checks.
 runtime-args:
   codex: [--sandbox, danger-full-access]
-  claude: ["--permission-mode", "acceptEdits", "--permission-prompts", "none", "--allowedTools", "Bash(git *)", "Bash(gh *)", "Bash({report_command} report *)", "Bash({report_command} read *)", "Bash({report_command} retrospective *)", "--add-dir", "{scratch}"]
+  claude: ["--permission-mode", "acceptEdits", "--permission-prompts", "none", "--allowedTools", "Bash(git *)", "Bash(gh *)", "Bash(mise *)", "Bash(bin/*)", "Bash(grep *)", "Bash(head *)", "Bash(tail *)", "Bash(wc *)", "Bash(sort *)", "Bash(uniq *)", "Bash(cut *)", "Bash(diff *)", "Bash(jq *)", "Bash(ls *)", "Bash(cat *)", "Bash({report_command} report *)", "Bash({report_command} read *)", "Bash({report_command} retrospective *)", "--add-dir", "{scratch}"]
 # An agent's runtime-args list or mapping replaces these defaults entirely.
 # Omit the agent key to inherit; an empty list or mapping disables the defaults.
 
@@ -104,9 +111,11 @@ agents:
   integrator:
     runtime: "codex:gpt-6.1-sol:high"
     kind: pr
-    trigger: ready-to-merge
+    # Dependabot labels its PRs `dependencies`, which sends them straight here.
+    trigger: [ready-to-merge, dependencies]
     outcomes:
-      merged: {}
+      # The launcher waits for every CI check at the reported head, then squash-merges.
+      merged: {merge: squash}
       maintainer-merge: {add: [needs-human]}
       changes-requested: {add: [needs-changes]}
     # A PR GitHub reports as conflicting goes straight back to the implementer.
