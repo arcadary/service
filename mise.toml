@@ -1,3 +1,49 @@
+# Shown when a shell with `mise activate` enters this folder.
+[hooks]
+enter = """
+echo ''
+echo '🕹️  Arcadary service'
+echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+echo ''
+echo '  Quick start:'
+echo '    mise install         Ruby and fnox, once'
+echo '    mise run setup       Install gems and prepare the databases'
+echo '    mise run dev         Start the server at http://localhost:3000'
+echo ''
+echo '  Common commands:'
+echo '    mise run ci          Every check, as before handing work over'
+echo '    mise run test        Run the tests'
+echo '    mise run lint        RuboCop'
+echo '    mise run console     Rails console'
+echo ''
+echo '  Run mise tasks for all available commands'
+echo ''
+"""
+
 [tools]
 ruby = "3.4.13"
 fnox = "latest"
+
+[tasks.setup]
+description = "Install gems and prepare the databases"
+run = "bin/setup --skip-server"
+
+[tasks.dev]
+description = "Start the server at http://localhost:3000"
+run = "bin/dev"
+
+[tasks.ci]
+description = "Every check: setup, RuboCop, audits, Brakeman, tests, seeds"
+run = "bin/ci"
+
+[tasks.test]
+description = "Run the tests"
+run = "bin/rails test"
+
+[tasks.lint]
+description = "RuboCop"
+run = "bin/rubocop"
+
+[tasks.console]
+description = "Rails console"
+run = "bin/rails console"

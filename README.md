@@ -4,9 +4,9 @@ The remote service for [Arcadary](https://github.com/arcadary/arcadary): the pro
 
 ```bash
 mise install
-bin/setup --skip-server
-bin/dev
-bin/ci
+mise run setup
+mise run dev
+mise run ci
 ```
 
 What it is for, the rules and the setup are in [AGENTS.md](AGENTS.md).
