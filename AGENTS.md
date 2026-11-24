@@ -1,27 +1,30 @@
 # Arcadary service
 
-The remote service for [Arcadary](https://github.com/bk-one/arcadary), a retro game launcher for Steam Machine and Steam Deck. The launcher works without it. When a device is online, the service gives it what cannot ship inside the app: catalog updates, compatibility records per device class and controller profiles.
+The remote service for [Arcadary](https://github.com/arcadary/arcadary), a retro game launcher for Steam Machine and Steam Deck. The launcher works without it. When a device is online, the service gives it what cannot ship inside the app: catalog updates, compatibility records per device class and controller profiles.
 
 This repository is private and nothing is deployed yet. It holds an empty Rails application; every feature below is still to be built.
 
 ## What the service is
 
-- **Public reads** are anonymous: no player account, no cookie, no personalised response. The same URL returns the same bytes, so a CDN can cache them.
+One Rails application serves two things: the project's **homepage** (server-rendered HTML for people) and the **JSON API** the launcher talks to.
+
+- **Public API reads** are anonymous: no player account, no cookie, no personalised response. The same URL returns the same bytes, so a CDN can cache them.
 - **One opt-in write path** takes run reports from devices. A report is triage and supporting evidence; it never changes a game's status by itself.
 - **Reviewer and admin pages** are authenticated and never served from a shared cache. A game becomes Verified only when a named reviewer who owns that exact file has played it.
 - **Later:** artwork delivery (after a rights review) and a pairing redirect.
 
-The background is the launcher repository's spike report, [docs/spike-174-remote-service.md](https://github.com/bk-one/arcadary/blob/6a8db20ace59afce558a8daa06dfdd84dca48471/docs/spike-174-remote-service.md), and the owner's decisions on [bk-one/arcadary#174](https://github.com/bk-one/arcadary/issues/174).
+The background is the launcher repository's spike report, [docs/spike-174-remote-service.md](https://github.com/arcadary/arcadary/blob/6a8db20ace59afce558a8daa06dfdd84dca48471/docs/spike-174-remote-service.md), and the owner's decisions on [arcadary/arcadary#174](https://github.com/arcadary/arcadary/issues/174).
 
 ## Rules
 
 - **No game files, ever.** The service never receives, stores, serves or links to a ROM, and never describes where to get one. A file is identified by its checksum only. No file names from a player's device either.
-- **No player accounts and no telemetry by default.** A read by checksum still shows the service and the CDN which file a household has, together with its IP address. Say so honestly in code comments, logs policy and documents; never claim reads are private.
-- **Nothing is logged that is not needed.** No checksums or IP addresses in application logs unless an issue decides otherwise.
-- **No secrets in git.** `config/master.key`, `.env*` and Kamal secrets stay out of the repository. There is no `config/credentials.yml.enc` yet; create it with `bin/rails credentials:edit` when the first secret is needed, and give the key to the owner.
+- **No player accounts.** A read by checksum still shows the service and the CDN which file a household has, together with its IP address. Say so honestly in code comments, the logging policy and documents; never claim reads are private.
+- **Telemetry is for internal use only, and anonymised.** It exists to run and improve the service, is never shared or sold, and holds nothing that identifies a person, a household or a device: no IP address, no stable device ID, no file names.
+- **Nothing is logged that is not needed.** No IP addresses in application logs or telemetry, and no checksum next to anything that could tie it to a household, unless an issue decides otherwise.
+- **No secrets in git.** Tools come from mise and secrets from fnox, which hands them to the application as environment variables. Rails encrypted credentials are not used: there is no `config/credentials.yml.enc` and no `config/master.key`, and `.env*` files and Kamal secrets stay out of the repository. There is no `fnox.toml` yet; it comes with the first secret.
 - **Agents never deploy, provision or spend.** No `kamal deploy`, no registry push, no server, domain or account. `config/deploy.yml` holds the generator's placeholder values.
-- **Ask before downloading anything** other than the gems in `Gemfile.lock`.
-- **Keep it simple.** A normal Rails application: server-rendered HTML, a versioned JSON API under `/v1`, no separate JavaScript frontend.
+- **Ask before downloading anything** other than the tools in `mise.toml` and the gems in `Gemfile.lock`.
+- **Keep it simple.** A normal Rails application: server-rendered HTML for the homepage and the reviewer pages, a versioned JSON API under `/v1`, no separate JavaScript frontend.
 - Commit only when asked. Work comes from GitHub issues, and every change arrives as a pull request.
 
 ## Decided, not built yet
@@ -36,9 +39,10 @@ These are the owner's choices. Do not replace them with something else, and do n
 
 ## Setup
 
-Ruby is pinned in `.ruby-version` (3.4.13) and Rails is 8.1. Install that Ruby with your version manager (for example `mise install ruby@3.4.13`), then:
+Tools are managed with [mise](https://mise.jdx.dev): `mise.toml` pins Ruby 3.4.13 and installs fnox. `.ruby-version` and the Dockerfile's `RUBY_VERSION` name the same Ruby for GitHub Actions and the image; change all three together. Rails is 8.1.
 
 ```bash
+mise install              # Ruby and fnox, once
 bin/setup --skip-server   # installs gems and prepares the SQLite databases in storage/
 bin/dev                   # serves http://localhost:3000
 ```
