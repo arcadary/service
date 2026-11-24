@@ -11,7 +11,7 @@ your worktree; never install globally.
 
 Only the integrator merges, by squash, once the checks above and every CI check
 pass at the exact head it merges. No agent enables auto-merge, changes branch
-protection or publishes a release. Leave the merge to `@bk-one` when the PR:
+protection or publishes a release. Leave the merge to a maintainer (an admin of this repository) when the PR:
 
 - changes agent configuration or guidance: `ub-agents.yaml`, `.agents/`, `.claude/`
   and any `AGENTS.md` or `CLAUDE.md`;
@@ -64,7 +64,7 @@ Runtimes Dependabot does not see, such as the Ruby version in `mise.toml`,
 
 ## Human decisions
 
-`@bk-one` answers scope and policy questions. An issue's author may answer only if they have write
+A maintainer (an admin of this repository) answers scope and policy questions. An issue's author may answer only if they have write
 access.
 
 ## New issues
