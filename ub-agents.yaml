@@ -21,19 +21,12 @@ queue:
 # .agents/ub_agents.md.
 trusted-pr-authors: [dependabot]
 
-# Set up dependencies before every new run, after the control-checkout refresh,
-# even if HEAD did not move, and in each new private worktree (except fork PRs).
-# The command must be idempotent and fast when nothing changed.
-# Upgrade every launcher before omitting when-changed; earlier builds require it.
+# Use the existing mise setup path in each new private worktree (except fork PRs).
+# In the control checkout, rerun when dependencies, tools or setup change.
 checkout-setup:
   command: [sh, -c, 'mise trust ./mise.toml && mise install && exec mise run setup']
+  when-changed: [Gemfile.lock, Gemfile, mise.toml, .ruby-version, bin/setup]
   timeout-seconds: 900
-
-# For slower installs, optional when-changed limits control-checkout setup to
-# changes in these repository-relative files; an empty list or null is invalid.
-# checkout-setup:
-#   command: [npm, ci]
-#   when-changed: [package-lock.json, package.json]
 
 # Default arguments for each CLI.
 # Grants full access without the Codex sandbox: https://agents.uberblick.ai/docs/configuration/permissions.html

@@ -4,6 +4,9 @@
 
 Project checks are documented in `AGENTS.md` ("Checks"): `mise run ci` runs all of them.
 
+Required GitHub Actions checks from `.github/workflows/ci.yml`: `scan_ruby`,
+`scan_js`, `lint` and `test`. All four must pass at the merge head.
+
 Run the relevant checks before handoff and record the results. Keep installs inside
 your worktree; never install globally.
 
@@ -17,6 +20,9 @@ protection or publishes a release. Leave the merge to a maintainer (an admin of 
   and any `AGENTS.md` or `CLAUDE.md`;
 - changes setup, CI or release tooling;
 - adds a runtime dependency;
+- changes the production persistence layout: the primary, cache, queue or cable
+  SQLite database paths or migration mappings in `config/database.yml`, or the
+  persistent `storage/` volume shared with Active Storage in `config/deploy.yml`;
 - changes what users rely on, such as commands, options, public APIs or output,
   beyond what the closing issue asks for.
 
@@ -83,3 +89,15 @@ whose goal it fits. Leave it out only when none fits, and say so in your report.
 - Changed behavior is documented where users and agents read it; search the docs for
   the old wording, not only the pages the issue names.
 - The simplest working change wins; no dead code or speculative options.
+
+Repository-specific focus:
+
+- For launcher endpoints, check the inherited `allow_browser versions: :modern`
+  and `stale_when_importmap_changes` in `ApplicationController` against the
+  launcher's request headers and cache validators; browser requests alone do not
+  establish launcher compatibility.
+- Keep the production Solid Cache, Queue and Cable database connections aligned
+  with `config/database.yml` and their separate schemas. Development and test use
+  different cache and cable adapters, so passing tests alone do not exercise those
+  production connections (`config/cache.yml`, `config/cable.yml` and
+  `config/environments/production.rb`).
