@@ -9,6 +9,7 @@ CI.run do
   step "Security: Importmap vulnerability audit", "bin/importmap audit"
   step "Security: Brakeman code analysis", "bin/brakeman --quiet --no-pager --exit-on-warn --exit-on-error"
   step "Tests: RSpec", "bin/rspec"
+  step "OpenAPI: swagger/ matches the specs", "bin/rails rswag:specs:swaggerize && git diff --exit-code -- swagger/"
   step "Tests: Seeds", "env RAILS_ENV=test bin/rails db:seed:replant"
 
   # Optional: Run system tests

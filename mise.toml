@@ -15,6 +15,7 @@ echo '    mise run ci          Every check, as before handing work over'
 echo '    mise run test        Run the tests'
 echo '    mise run lint        RuboCop'
 echo '    mise run console     Rails console'
+echo '    mise run openapi     Regenerate the OpenAPI document from the specs'
 echo ''
 echo '  Run mise tasks for all available commands'
 echo ''
@@ -47,3 +48,7 @@ run = "bin/rubocop"
 [tasks.console]
 description = "Rails console"
 run = "bin/rails console"
+
+[tasks.openapi]
+description = "Regenerate swagger/v1/swagger.yaml from the request specs"
+run = "bin/rails rswag:specs:swaggerize"

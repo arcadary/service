@@ -43,6 +43,8 @@ gem "image_processing", "~> 2.2"
 group :development, :test do
   # Testing framework [https://github.com/rspec/rspec-rails]
   gem "rspec-rails"
+  # OpenAPI documents generated from request specs [https://github.com/rswag/rswag]
+  gem "rswag-specs"
 
   # See https://guides.rubyonrails.org/debugging_rails_applications.html#debugging-with-the-debug-gem
   gem "debug", platforms: %i[ mri windows ], require: "debug/prelude"
@@ -67,3 +69,7 @@ group :test do
   gem "capybara"
   gem "selenium-webdriver"
 end
+
+# Serve the OpenAPI document and its browsable UI at /api-docs [https://github.com/rswag/rswag]
+gem "rswag-api"
+gem "rswag-ui"
