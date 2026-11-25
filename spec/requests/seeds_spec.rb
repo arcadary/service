@@ -40,11 +40,4 @@ RSpec.describe "Bundled homebrew seeds", type: :request do
       expect_seeded_lookups
     end
   end
-
-  it "records owner-supplied provenance beside the seed data" do
-    source = Rails.root.join("db/seeds.rb").read
-    expect(source).to include("2c82aa013a95ed6154da7cdd41c577e7324f1e56", "games/ucity.gbc", "131,072 bytes",
-      "games/tobu.gb", "262,144 bytes", "5f026649611c9606ce0bf70dc1552e054e7df5bc",
-      "8a8f3c1f21f903ea5a7df8fc8b0a6aa5a602e150")
-  end
 end

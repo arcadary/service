@@ -1,5 +1,3 @@
-# Finds a release by the SHA-1 of its game file. Failures are exceptions, so
-# callers handle them with rescue_from instead of checking return values.
 class ReleaseService
   SHA1 = /\A[0-9a-fA-F]{40}\z/
 

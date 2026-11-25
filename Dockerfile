@@ -28,11 +28,6 @@ ENV RAILS_ENV="production" \
     BUNDLE_WITHOUT="development" \
     LD_PRELOAD="/usr/local/lib/libjemalloc.so"
 
-# Checksum URLs reveal file identity and client IP to the service and CDN.
-# Disable Thruster access logs so stdout cannot pair them. External CDN and
-# deployment-proxy (including kamal-proxy) logging is unverified until deployment
-# and is not covered by local log checks. See README.md, "Privacy and logging".
-
 # Throw-away build stage to reduce size of final image
 FROM base AS build
 
@@ -59,9 +54,6 @@ RUN bundle exec bootsnap precompile -j 1 app/ lib/
 
 # Precompiling assets for production without requiring secret RAILS_MASTER_KEY
 RUN SECRET_KEY_BASE_DUMMY=1 ./bin/rails assets:precompile
-
-
-
 
 # Final stage for app image
 FROM base

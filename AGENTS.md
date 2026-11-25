@@ -30,10 +30,12 @@ The background is the launcher repository's spike report, [docs/spike-174-remote
 
 ## Code conventions
 
+- **No code comments.** Code says what it does through its names and structure; when it needs a comment to be understood, change the code instead. A comment is the rare exception, for a reason the code cannot show (a workaround for an outside bug, with its link). Context belongs in the commit message, the pull request or the issue. Specs never test comments.
+
 The short version is below. The full guidelines are in [`.github/instructions/`](.github/instructions/), one file per area; read the ones for the files you change. Each file names the paths it covers in its `applyTo` header.
 
 - [controllers](.github/instructions/controllers.instructions.md), [services](.github/instructions/services.instructions.md), [decorators](.github/instructions/decorators.instructions.md), [models](.github/instructions/models.instructions.md)
-- [API design](.github/instructions/api.instructions.md), [specs](.github/instructions/specs.instructions.md), [logging and privacy](.github/instructions/logging.instructions.md)
+- [code style](.github/instructions/code-style.instructions.md), [API design](.github/instructions/api.instructions.md), [specs](.github/instructions/specs.instructions.md), [logging and privacy](.github/instructions/logging.instructions.md)
 
 When a change does not fit them, say why in the pull request rather than working around them quietly. A new area gets a new file.
 

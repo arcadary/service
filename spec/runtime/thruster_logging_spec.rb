@@ -4,8 +4,6 @@ require "socket"
 require "timeout"
 
 RSpec.describe "Production image request logging" do
-  # Exercise the bundled proxy locally, with no TLS or outside service. The tiny
-  # upstream isolates Thruster stdout from Rails (covered by the request specs).
   def proxy_stdout(log_requests)
     backend = TCPServer.new("127.0.0.1", 0)
     target_port = backend.addr[1]
@@ -41,7 +39,6 @@ RSpec.describe "Production image request logging" do
           response = http.get(path, { "X-Forwarded-For" => "203.0.113.19" })
           break if response.code == "200"
         rescue Errno::ECONNREFUSED, EOFError
-          # The proxy may still be starting.
         end
         sleep 0.05
       end

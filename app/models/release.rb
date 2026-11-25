@@ -1,5 +1,4 @@
 class Release < ApplicationRecord
-  # Raised by ReleaseService and handled by controllers with rescue_from.
   class InvalidSha1 < StandardError; end
   class ReleaseNotFound < StandardError; end
 
