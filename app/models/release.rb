@@ -4,7 +4,7 @@ class Release < ApplicationRecord
 
   SYSTEMS = %w[nes snes gb gbc megadrive pcengine atari2600 c64].freeze
 
-  belongs_to :game
+  belongs_to :game, touch: true
 
   validates :sha1, presence: true, uniqueness: true,
     format: { with: /\A[0-9a-f]{40}\z/ }

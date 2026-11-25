@@ -6,7 +6,7 @@ module V1
     rescue_from Release::ReleaseNotFound, with: :release_not_found
 
     before_action :set_release
-    before_action -> { answer_not_modified(etag: [ ReleaseDecorator::VERSION, @release, @release.game ]) }
+    before_action -> { answer_not_modified(record: @release, version: ReleaseDecorator::VERSION) }
 
     def show
       render json: ReleaseDecorator.decorate(@release)

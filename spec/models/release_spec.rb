@@ -10,6 +10,12 @@ RSpec.describe Release, type: :model do
     expect(release.errors[:game]).to be_present
   end
 
+  it "touches its game when it changes" do
+    game = Game.create!(public_id: "touching-game", title: "A game")
+    release = game.releases.create!(sha1: "d" * 40, system: "gb")
+    expect { release.update!(region: "Europe") }.to(change { game.reload.updated_at })
+  end
+
   it "requires a unique checksum" do
     release.save!
     duplicate = game.releases.build(sha1: release.sha1, system: "gbc")

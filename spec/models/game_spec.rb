@@ -20,6 +20,12 @@ RSpec.describe Game, type: :model do
     expect(game.reload.public_id).to eq("stable-game")
   end
 
+  it "touches its releases when it changes, so their ETags change with the game" do
+    game = Game.create!(public_id: "touched-game", title: "A game")
+    release = game.releases.create!(sha1: "c" * 40, system: "gb")
+    expect { game.update!(title: "Renamed") }.to(change { release.reload.updated_at })
+  end
+
   it "owns distinct releases across systems and regions" do
     game = Game.create!(public_id: "stable-game", title: "A game")
     first = game.releases.create!(sha1: "a" * 40, system: "gb", region: "Japan")
