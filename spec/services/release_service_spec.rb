@@ -14,11 +14,11 @@ RSpec.describe ReleaseService do
 
   it "raises InvalidSha1 for a malformed checksum" do
     [ "a" * 39, "a" * 41, "g" * 40, "", nil ].each do |sha1|
-      expect { described_class.find_by(sha1: sha1) }.to raise_error(ReleaseService::InvalidSha1)
+      expect { described_class.find_by(sha1: sha1) }.to raise_error(Release::InvalidSha1)
     end
   end
 
   it "raises ReleaseNotFound for an unknown checksum" do
-    expect { described_class.find_by(sha1: "0" * 40) }.to raise_error(ReleaseService::ReleaseNotFound)
+    expect { described_class.find_by(sha1: "0" * 40) }.to raise_error(Release::ReleaseNotFound)
   end
 end

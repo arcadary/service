@@ -1,4 +1,8 @@
 class Release < ApplicationRecord
+  # Raised by ReleaseService and handled by controllers with rescue_from.
+  class InvalidSha1 < StandardError; end
+  class ReleaseNotFound < StandardError; end
+
   SYSTEMS = %w[nes snes gb gbc megadrive pcengine atari2600 c64].freeze
 
   belongs_to :game

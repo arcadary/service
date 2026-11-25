@@ -13,8 +13,8 @@ A controller translates HTTP into a service call and a rendered result. It holds
   ```ruby
   module V1
     class ReleasesController < ActionController::API
-      rescue_from ReleaseService::InvalidSha1, with: :invalid_sha1
-      rescue_from ReleaseService::ReleaseNotFound, with: :release_not_found
+      rescue_from Release::InvalidSha1, with: :invalid_sha1
+      rescue_from Release::ReleaseNotFound, with: :release_not_found
 
       before_action :set_release
       before_action :answer_not_modified
