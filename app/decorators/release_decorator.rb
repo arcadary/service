@@ -5,6 +5,10 @@ class ReleaseDecorator
     new(release)
   end
 
+  def self.version
+    [ VERSION, *GameDecorator.version ]
+  end
+
   def initialize(release)
     @release = release
   end
@@ -12,7 +16,7 @@ class ReleaseDecorator
   def as_json(*)
     {
       release: @release.slice(:sha1, :system, :region, :revision),
-      game: { id: @release.game.public_id, title: @release.game.title }
+      game: GameDecorator.decorate(@release.game).as_json
     }
   end
 end

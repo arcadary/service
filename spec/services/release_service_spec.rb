@@ -1,8 +1,8 @@
 require "rails_helper"
 
 RSpec.describe ReleaseService do
-  let(:game) { Game.create!(public_id: "service-game", title: "A game") }
-  let!(:release) { game.releases.create!(sha1: "abcdef0123456789abcdef0123456789abcdef01", system: "c64") }
+  let(:game) { create(:game, public_id: "service-game") }
+  let!(:release) { create(:release, game: game, sha1: "abcdef0123456789abcdef0123456789abcdef01", system: "c64") }
 
   it "finds a release by its SHA-1" do
     expect(described_class.find_by(sha1: release.sha1)).to eq(release)

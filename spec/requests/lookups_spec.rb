@@ -1,8 +1,8 @@
 require "swagger_helper"
 
 RSpec.describe "Lookup", type: :request do
-  let(:game) { Game.create!(public_id: "lookup-game", title: "A game") }
-  let!(:release) { game.releases.create!(sha1: "abcdef0123456789abcdef0123456789abcdef01", system: "c64") }
+  let(:game) { create(:game, public_id: "lookup-game") }
+  let!(:release) { create(:release, game: game, sha1: "abcdef0123456789abcdef0123456789abcdef01", system: "c64") }
 
   path "/v1/lookup/{sha1}.json" do
     get "Find what a game file is, by its SHA-1" do

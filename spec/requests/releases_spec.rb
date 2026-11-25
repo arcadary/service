@@ -1,8 +1,8 @@
 require "swagger_helper"
 
 RSpec.describe "Release", type: :request do
-  let(:game) { Game.create!(public_id: "lookup-game", title: "A game") }
-  let!(:release) { game.releases.create!(sha1: "abcdef0123456789abcdef0123456789abcdef01", system: "c64") }
+  let(:game) { create(:game, public_id: "lookup-game") }
+  let!(:release) { create(:release, game: game, sha1: "abcdef0123456789abcdef0123456789abcdef01", system: "c64") }
   let(:url) { "/v1/releases/#{release.sha1}.json" }
   let(:expected_payload) do
     {
@@ -81,10 +81,10 @@ RSpec.describe "Release", type: :request do
     expect(response.parsed_body.dig("game", "title")).to eq("Renamed")
   end
 
-  it "answers 200 again once the decorator's output changes" do
+  it "answers 200 again once the game's JSON shape changes" do
     get url
     etag = response.headers.fetch("ETag")
-    stub_const("ReleaseDecorator::VERSION", ReleaseDecorator::VERSION + 1)
+    stub_const("GameDecorator::VERSION", GameDecorator::VERSION + 1)
     get url, headers: { "If-None-Match" => etag }
     expect(response).to have_http_status(:ok)
   end
@@ -93,7 +93,7 @@ RSpec.describe "Release", type: :request do
     path = "/v1/releases/#{'0' * 40}.json"
     get path
     expect(response).to have_http_status(:not_found)
-    game.releases.create!(sha1: "0" * 40, system: "gb")
+    create(:release, game: game, sha1: "0" * 40, system: "gb")
     get path
     expect(response).to have_http_status(:ok)
   end

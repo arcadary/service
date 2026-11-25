@@ -11,3 +11,4 @@ applyTo: "spec/**"
 - **Decorator specs** in `spec/decorators`: the exact JSON shape.
 - **Model specs** in `spec/models`: associations and validations as one-line [shoulda-matchers](https://github.com/thoughtbot/shoulda-matchers) (`it { is_expected.to belong_to(:game).touch(true) }`, `validate_uniqueness_of`, `validate_inclusion_of`), and a written example only for behaviour the matchers cannot express (callbacks such as touching, custom validations).
 - No network in specs; a service that calls out gets a fake.
+- **Test data comes from factory_bot** (`spec/factories/`): `create(:release)`, `build(:game, title: "Renamed")`. A spec names only the attributes that matter to it; each factory holds one valid default and no traits until a real case needs one.
