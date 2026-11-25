@@ -29,6 +29,8 @@ The background is the launcher repository's spike report, [docs/spike-174-remote
 
 ## Code conventions
 
+The short version is below; [docs/guidelines.md](docs/guidelines.md) has the full guidelines for controllers, services, decorators, models, API design and specs. Follow them in every change.
+
 - **Small controllers.** A controller action calls a service and renders a decorator, nothing else:
 
   ```ruby
