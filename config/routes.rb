@@ -1,4 +1,9 @@
 Rails.application.routes.draw do
+  scope "v1", module: "v1", format: false, defaults: { format: :json }, constraints: { sha1: /[^\/]+/ } do
+    get "lookup/:sha1.json", to: "lookups#show", as: :lookup
+    get "releases/:sha1.json", to: "releases#show", as: :release
+  end
+
   mount Rswag::Ui::Engine => "/api-docs"
   mount Rswag::Api::Engine => "/api-docs"
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html

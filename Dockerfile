@@ -22,6 +22,7 @@ RUN apt-get update -qq && \
 
 # Set production environment variables and enable jemalloc for reduced memory usage and latency.
 ENV RAILS_ENV="production" \
+    LOG_REQUESTS="false" \
     BUNDLE_DEPLOYMENT="1" \
     BUNDLE_PATH="/usr/local/bundle" \
     BUNDLE_WITHOUT="development" \
@@ -53,9 +54,6 @@ RUN bundle exec bootsnap precompile -j 1 app/ lib/
 
 # Precompiling assets for production without requiring secret RAILS_MASTER_KEY
 RUN SECRET_KEY_BASE_DUMMY=1 ./bin/rails assets:precompile
-
-
-
 
 # Final stage for app image
 FROM base
