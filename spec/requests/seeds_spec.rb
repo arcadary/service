@@ -13,7 +13,7 @@ RSpec.describe "Bundled homebrew seeds", type: :request do
       [ "5f026649611c9606ce0bf70dc1552e054e7df5bc", "ucity", "µCity", "gbc" ],
       [ "8a8f3c1f21f903ea5a7df8fc8b0a6aa5a602e150", "tobu-tobu-girl", "Tobu Tobu Girl", "gb" ]
     ].each do |sha1, public_id, title, system|
-      get "/v1/releases/sha1/#{sha1}.json"
+      get "/v1/releases/#{sha1}.json"
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body).to eq(
         "game" => { "id" => public_id, "title" => title },

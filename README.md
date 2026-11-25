@@ -1,6 +1,6 @@
 # Arcadary service
 
-The remote service for [Arcadary](https://github.com/arcadary/arcadary): a Rails 8.1 application for the project's homepage and launcher JSON API. The first slice identifies a game and release through `GET /v1/releases/sha1/{sha1}.json`, seeded with µCity and Tobu Tobu Girl. The remaining catalog, compatibility, controller-profile and page features are still to be built. Nothing is deployed.
+The remote service for [Arcadary](https://github.com/arcadary/arcadary): a Rails 8.1 application for the project's homepage and launcher JSON API. The first slice identifies a game file through `GET /v1/lookup/{sha1}.json`, which redirects to its release and game, seeded with µCity and Tobu Tobu Girl. The remaining catalog, compatibility, controller-profile and page features are still to be built. Nothing is deployed.
 
 ```bash
 mise install

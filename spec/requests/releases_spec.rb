@@ -1,9 +1,9 @@
 require "swagger_helper"
 
-RSpec.describe "Release lookup", type: :request do
+RSpec.describe "Release", type: :request do
   let(:game) { Game.create!(public_id: "lookup-game", title: "A game") }
   let!(:release) { game.releases.create!(sha1: "abcdef0123456789abcdef0123456789abcdef01", system: "c64") }
-  let(:url) { "/v1/releases/sha1/#{release.sha1}.json" }
+  let(:url) { "/v1/releases/#{release.sha1}.json" }
   let(:expected_payload) do
     {
       "release" => { "sha1" => release.sha1, "system" => "c64", "region" => nil, "revision" => nil },
@@ -11,10 +11,10 @@ RSpec.describe "Release lookup", type: :request do
     }
   end
 
-  path "/v1/releases/sha1/{sha1}.json" do
-    get "Identify a game file by SHA-1" do
+  path "/v1/releases/{sha1}.json" do
+    get "A release and its game, by the SHA-1 of its game file" do
       produces "application/json"
-      description "Anonymous, cookie-free lookup. The .json suffix is required. Hex is case-insensitive. Successes are public for 300 seconds with an ETag; errors are never stored."
+      description "The target of a lookup redirect. Hex is case-insensitive. Successes are public for 300 seconds with an ETag; errors are never stored."
       parameter name: :sha1, in: :path, required: true,
         schema: { type: :string, pattern: "^[0-9a-fA-F]{40}$", minLength: 40, maxLength: 40 }
 
@@ -90,7 +90,7 @@ RSpec.describe "Release lookup", type: :request do
   end
 
   it "finds a release added after an unknown lookup" do
-    path = "/v1/releases/sha1/#{'0' * 40}.json"
+    path = "/v1/releases/#{'0' * 40}.json"
     get path
     expect(response).to have_http_status(:not_found)
     game.releases.create!(sha1: "0" * 40, system: "gb")
@@ -105,7 +105,8 @@ RSpec.describe "Release lookup", type: :request do
     Rails.logger.broadcast_to(capture)
     begin
       [ release.sha1, "0" * 40, "not-a-checksum" ].each do |sha1|
-        get "/v1/releases/sha1/#{sha1}.json", headers: { "REMOTE_ADDR" => "198.51.100.18" }
+        get "/v1/lookup/#{sha1}.json", headers: { "REMOTE_ADDR" => "198.51.100.18" }
+        get "/v1/releases/#{sha1}.json", headers: { "REMOTE_ADDR" => "198.51.100.18" }
       end
       expect(output.string).to eq("")
     ensure

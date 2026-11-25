@@ -1,6 +1,8 @@
 Rails.application.routes.draw do
-  get "v1/releases/sha1/:sha1.json", to: "v1/releases#show",
-    format: false, defaults: { format: :json }, constraints: { sha1: /[^\/]+/ }
+  scope "v1", format: false, defaults: { format: :json }, constraints: { sha1: /[^\/]+/ } do
+    get "lookup/:sha1.json", to: "v1/lookups#show", as: :v1_lookup
+    get "releases/:sha1.json", to: "v1/releases#show", as: :v1_release
+  end
 
   mount Rswag::Ui::Engine => "/api-docs"
   mount Rswag::Api::Engine => "/api-docs"
