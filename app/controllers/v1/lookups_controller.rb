@@ -5,7 +5,7 @@ module V1
     before_action :lookup_release
 
     def show
-      return redirect_permanently_to(v1_release_path(sha1: sha1)) if @release
+      return redirect_permanently_to(release_path(sha1)) if @release
 
       render_error("not_found", status: :not_found)
     end
