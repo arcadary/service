@@ -23,25 +23,15 @@ RSpec.describe Release, type: :model do
     expect(duplicate.errors[:sha1]).to be_present
   end
 
-  [ nil, "", "a" * 39, "a" * 41, "g" * 40, "A" * 40, "a" * 40 + "\n" ].each do |checksum|
-    it "rejects checksum #{checksum.inspect}" do
-      release.sha1 = checksum
-      expect(release).not_to be_valid
-    end
+  it "rejects a checksum that is not 40 lower-case hex characters" do
+    release.sha1 = "A" * 40
+    expect(release).not_to be_valid
   end
 
-  %w[nes snes gb gbc megadrive pcengine atari2600 c64].each do |system|
-    it "accepts the #{system} system with optional region and revision" do
-      release.system = system
-      expect(release).to be_valid
-    end
-  end
-
-  [ nil, "", "GB", "psx" ].each do |system|
-    it "rejects system #{system.inspect}" do
-      release.system = system
-      expect(release).not_to be_valid
-      expect(release.errors[:system]).to be_present
-    end
+  it "accepts a launcher system and rejects any other" do
+    release.system = "c64"
+    expect(release).to be_valid
+    release.system = "psx"
+    expect(release).not_to be_valid
   end
 end

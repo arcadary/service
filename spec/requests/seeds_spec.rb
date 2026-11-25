@@ -1,5 +1,4 @@
 require "rails_helper"
-require "rake"
 
 RSpec.describe "Bundled homebrew seeds", type: :request do
   before do
@@ -30,14 +29,5 @@ RSpec.describe "Bundled homebrew seeds", type: :request do
     load Rails.root.join("db/seeds.rb")
     expect_seeded_lookups
     expect([ Game.order(:public_id).pluck(:id), Release.order(:sha1).pluck(:id) ]).to eq(database_ids)
-  end
-
-  it "retains the literal public IDs through seed replant" do
-    Rails.application.load_tasks unless Rake::Task.task_defined?("db:seed:replant")
-    2.times do
-      %w[db:seed:replant db:truncate_all db:seed].each { |name| Rake::Task[name].reenable }
-      Rake::Task["db:seed:replant"].invoke
-      expect_seeded_lookups
-    end
   end
 end

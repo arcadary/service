@@ -17,7 +17,7 @@ Checksum reads are anonymous, but they reveal which file a household has and the
 
 Rails silences lookup requests before request-start logging, covering parameter, controller and SQL logs as well, including paths with repeated slashes. SHA-1 parameters are also filtered defensively. Routing errors (for example, a missing `.json` suffix) can still log the checksum URL at error level, without the client IP. The endpoint adds no telemetry or request-specific log lines. The production image sets `LOG_REQUESTS=false` to disable Thruster's access logs, which otherwise pair checksum URLs with client IPs. Keep that setting disabled, including any `THRUSTER_LOG_REQUESTS` override.
 
-Local checks capture Rails logs and Thruster stdout. External CDN and deployment-proxy logging (including kamal-proxy) remains unverified until deployment and is not covered by these checks. Deployment must verify those logging policies separately.
+The specs check Rails logs only. Thruster, external CDN and deployment-proxy logging (including kamal-proxy) remains unverified until deployment and is not covered by these checks. Deployment must verify those logging policies separately.
 
 ## Licence
 

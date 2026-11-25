@@ -115,7 +115,7 @@ whose goal it fits. Leave it out only when none fits, and say so in your report.
 ## Review focus
 
 - The change stays within the issue's scope; other ideas become follow-up issues.
-- New behavior has tests that fail without the change.
+- New behavior has tests that fail without the change, and only for real cases: no specs for inputs no caller sends, permutations of one case, or framework behaviour (see `.github/instructions/specs.instructions.md`). Overtesting is a finding.
 - Callers of changed behavior still work; a finding names a concrete input that goes
   wrong.
 - No secrets, and no untrusted text reaching commands or output.
