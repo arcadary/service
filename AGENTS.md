@@ -28,6 +28,22 @@ The background is the launcher repository's spike report, [docs/spike-174-remote
 - **Keep it simple.** A normal Rails application: server-rendered HTML for the homepage and the reviewer pages, a versioned JSON API under `/v1`, no separate JavaScript frontend.
 - Commit only when asked. Work comes from GitHub issues, and every change arrives as a pull request.
 
+## Code conventions
+
+- **Small controllers.** A controller action calls a service and renders a decorator, nothing else:
+
+  ```ruby
+  class ReleasesController < ActionController::API
+    def show
+      render json: ReleaseDecorator.decorate(@release)
+    end
+  end
+  ```
+
+- **Services** hold the logic, in `app/services/service/` (for example `Service::Release.find_by(sha1)`). They signal failure by raising an exception (`ReleaseNotFound`, `InvalidSha1`), never by returning `nil` or an error value. Controllers map those exceptions to responses with `rescue_from`.
+- **Decorators** in `app/decorators/` shape the JSON a controller renders (`ReleaseDecorator.decorate(release)`), as plain Ruby classes.
+- **Before actions** do whatever they can: loading the record (`before_action :set_release`, which calls the service and sets `@release`), and conditional requests (a `before_action` that answers `304` from the ETag and returns early).
+
 ## Decided, not built yet
 
 These are the owner's choices. Do not replace them with something else, and do not build them outside an issue that asks for it.
