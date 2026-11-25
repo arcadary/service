@@ -38,7 +38,7 @@ run = "bin/ci"
 
 [tasks.test]
 description = "Run the tests"
-run = "bin/rails test"
+run = "bin/rspec"
 
 [tasks.lint]
 description = "RuboCop"

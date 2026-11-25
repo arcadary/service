@@ -59,9 +59,9 @@ Run all of them before handing work over:
 mise run ci
 ```
 
-It runs `bin/ci`, the steps in `config/ci.rb`: setup, RuboCop (`bin/rubocop`), the gem audit (`bin/bundler-audit`), the importmap audit, Brakeman (`bin/brakeman`), the tests (`bin/rails test`) and the seeds. GitHub Actions runs the same tools on every pull request (`.github/workflows/ci.yml`). There are no system tests yet, so the generator's `system-test` CI job is removed; add it back with the first test in `test/system`.
+It runs `bin/ci`, the steps in `config/ci.rb`: setup, RuboCop (`bin/rubocop`), the gem audit (`bin/bundler-audit`), the importmap audit, Brakeman (`bin/brakeman`), the specs (`bin/rspec`) and the seeds. GitHub Actions runs the same tools on every pull request (`.github/workflows/ci.yml`). There are no system tests yet, so the generator's `system-test` CI job is removed; add it back with the first system spec in `spec/system`.
 
-Tests use the SQLite test database and no network. A test that needs an outside service uses a fake.
+Tests are RSpec specs in `spec/` (models in `spec/models`, endpoints as request specs in `spec/requests`); there is no Minitest. They use the SQLite test database and no network, and a spec that needs an outside service uses a fake.
 
 ## Agent loop
 
