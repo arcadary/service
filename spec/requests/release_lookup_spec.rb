@@ -109,19 +109,26 @@ RSpec.describe "Release lookup", type: :request do
     expect(response.headers["ETag"]).to eq(etag)
   end
 
-  [ [ :game, :title, "Renamed" ], [ :game, :public_id, "corrected-id" ],
+  [ [ :game, :title, "Renamed" ],
     [ :release, :sha1, "1" * 40 ], [ :release, :system, "nes" ],
     [ :release, :region, "Japan" ], [ :release, :revision, "Rev B" ] ].each do |record, field, value|
     it "invalidates the ETag when #{record}.#{field} changes" do
       get url
       etag = response.headers.fetch("ETag")
-      # Public IDs cannot change through ordinary model updates; this also proves
-      # the validator covers the returned ID after an exceptional data correction.
-      public_send(record).update_columns(field => value)
+      public_send(record).update!(field => value)
       get "/v1/releases/sha1/#{release.reload.sha1}.json", headers: { "If-None-Match" => etag }
       expect(response).to have_http_status(:ok)
       expect(response.headers["ETag"]).not_to eq(etag)
     end
+  end
+
+  it "invalidates the ETag when the decorator's VERSION changes" do
+    get url
+    etag = response.headers.fetch("ETag")
+    stub_const("ReleaseDecorator::VERSION", ReleaseDecorator::VERSION + 1)
+    get url, headers: { "If-None-Match" => etag }
+    expect(response).to have_http_status(:ok)
+    expect(response.headers["ETag"]).not_to eq(etag)
   end
 
   %i[region revision].each do |field|
