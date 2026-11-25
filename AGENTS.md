@@ -40,7 +40,7 @@ The background is the launcher repository's spike report, [docs/spike-174-remote
   end
   ```
 
-- **Services** hold the logic, in `app/services/service/` (for example `Service::Release.find_by(sha1)`). They signal failure by raising an exception (`ReleaseNotFound`, `InvalidSha1`), never by returning `nil` or an error value. Controllers map those exceptions to responses with `rescue_from`.
+- **Services** hold the logic, in `app/services/service/` (for example `Service::Release.find_by(sha1:)`). They signal failure by raising an exception (`ReleaseNotFound`, `InvalidSha1`), never by returning `nil` or an error value. Controllers map those exceptions to responses with `rescue_from`.
 - **Decorators** in `app/decorators/` shape the JSON a controller renders (`ReleaseDecorator.decorate(release)`), as plain Ruby classes.
 - **Before actions** do whatever they can: loading the record (`before_action :set_release`, which calls the service and sets `@release`), and conditional requests (a `before_action` that answers `304` from the ETag and returns early).
 
