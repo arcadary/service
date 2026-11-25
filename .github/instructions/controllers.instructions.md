@@ -4,7 +4,7 @@ applyTo: "app/controllers/**"
 
 # Controllers
 
-The release lookup (`app/controllers/v1/releases_controller.rb`, `app/services/service/release.rb`, `app/decorators/release_decorator.rb`) is the reference example.
+The release lookup (`app/controllers/v1/releases_controller.rb`, `app/services/release_service.rb`, `app/decorators/release_decorator.rb`) is the reference example.
 
 A controller translates HTTP into a service call and a rendered result. It holds no business logic.
 
@@ -13,8 +13,8 @@ A controller translates HTTP into a service call and a rendered result. It holds
   ```ruby
   module V1
     class ReleasesController < ActionController::API
-      rescue_from Service::Release::InvalidSha1, with: :invalid_sha1
-      rescue_from Service::Release::ReleaseNotFound, with: :release_not_found
+      rescue_from ReleaseService::InvalidSha1, with: :invalid_sha1
+      rescue_from ReleaseService::ReleaseNotFound, with: :release_not_found
 
       before_action :set_release
       before_action :answer_not_modified
@@ -30,4 +30,4 @@ A controller translates HTTP into a service call and a rendered result. It holds
 - **Errors are `rescue_from`, not `if`.** A controller never checks a service's return value for failure. Each exception a service can raise maps to one handler, and each handler renders one documented error response. Unexpected exceptions are not rescued; they become a `500`.
 - **JSON API controllers inherit `ActionController::API`**, live under `V1::` (or the next version), and set no cookie or session. HTML pages (the homepage, reviewer pages) inherit `ApplicationController`.
 - **Strong parameters, scalar values.** Read a parameter once, as the type the service expects (`params[:sha1].to_s`), and pass it as a keyword argument. Never pass `params` or a hash of them into a service.
-- **Caching is explicit.** A public read sets `expires_in ... public: true` and an ETag taken from the rendered body. Errors and anything personal send `Cache-Control: no-store`.
+- **Caching is explicit.** A public read sets `expires_in ... public: true` and an ETag from the records it shows and the decorator's version: `fresh_when(etag: [ ReleaseDecorator::VERSION, @release, @release.game ], public: true)`. List every record whose fields appear in the response. Errors and anything personal send `Cache-Control: no-store`.
