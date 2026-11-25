@@ -1,22 +1,37 @@
 module V1
   # Public JSON reads have no browser, session or importmap callbacks.
   class ReleasesController < ActionController::API
+    rescue_from Service::Release::InvalidSha1, with: :invalid_sha1
+    rescue_from Service::Release::ReleaseNotFound, with: :release_not_found
+
+    before_action :set_release
+    before_action :answer_not_modified
+
     def show
-      sha1 = params[:sha1].to_s
-      return lookup_error("invalid_sha1", :bad_request) unless /\A[0-9a-fA-F]{40}\z/.match?(sha1)
-
-      release = Release.includes(:game).find_by(sha1: sha1.downcase)
-      return lookup_error("release_not_found", :not_found) unless release
-
-      json = {
-        release: release.slice(:sha1, :system, :region, :revision),
-        game: { id: release.game.public_id, title: release.game.title }
-      }.to_json
-      expires_in 300, public: true
-      render json: json if stale?(etag: json, public: true)
+      render json: ReleaseDecorator.decorate(@release)
     end
 
     private
+      def set_release
+        @release = Service::Release.find_by(sha1: params[:sha1].to_s)
+      end
+
+      # The ETag is taken from the response body, so it changes with the JSON
+      # shape as well as the data. A client with a fresh copy gets a 304 and
+      # the action never runs.
+      def answer_not_modified
+        expires_in 300, public: true
+        fresh_when(etag: ReleaseDecorator.decorate(@release).to_json, public: true)
+      end
+
+      def invalid_sha1
+        lookup_error("invalid_sha1", :bad_request)
+      end
+
+      def release_not_found
+        lookup_error("release_not_found", :not_found)
+      end
+
       def lookup_error(error, status)
         response.headers["Cache-Control"] = "no-store"
         render json: { error: error }, status: status
