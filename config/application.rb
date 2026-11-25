@@ -16,6 +16,15 @@ module ArcadaryService
     # Common ones are `templates`, `generators`, or `middleware`, for example.
     config.autoload_lib(ignore: %w[assets tasks])
 
+    # Anonymous checksum reads still reveal the file and caller IP to the service
+    # and CDN. Silence Rails request-start, parameters, controller and SQL logs
+    # before they can associate the URL with a household (including caller headers).
+    # Thruster logging is disabled in Dockerfile. External CDN and deployment-proxy
+    # logging, including kamal-proxy, remains unverified until deployment; local log
+    # checks do not cover it. See README.md, "Privacy and logging".
+    config.middleware.insert_before Rails::Rack::Logger, Rails::Rack::SilenceRequest,
+      path: %r{\A/v1/releases/sha1/}
+
     # Configuration for the application, engines, and railties goes here.
     #
     # These settings can be overridden in specific environments using the files

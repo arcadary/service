@@ -2,13 +2,14 @@
 
 The remote service for [Arcadary](https://github.com/arcadary/arcadary), a retro game launcher for Steam Machine and Steam Deck. The launcher works without it. When a device is online, the service gives it what cannot ship inside the app: catalog updates, compatibility records per device class and controller profiles.
 
-This repository is public and nothing is deployed yet. It holds an empty Rails application; every feature below is still to be built.
+This repository is public and nothing is deployed yet. The Rails application implements the first public game-file lookup and two bundled-homebrew seeds; the other features below are still to be built.
 
 ## What the service is
 
 One Rails application serves two things: the project's **homepage** (server-rendered HTML for people) and the **JSON API** the launcher talks to.
 
 - **Public API reads** are anonymous: no player account, no cookie, no personalised response. The same URL returns the same bytes, so a CDN can cache them.
+- **Implemented:** `GET /v1/releases/sha1/{sha1}.json` identifies a release and game by SHA-1, with public caching for 300 seconds and ETags. Errors are JSON with `no-store`. The `.json` suffix is required. `/api-docs` documents the contract.
 - **One opt-in write path** takes run reports from devices. A report is triage and supporting evidence; it never changes a game's status by itself.
 - **Reviewer and admin pages** are authenticated and never served from a shared cache. A game becomes Verified only when a named reviewer who owns that exact file has played it.
 - **Later:** artwork delivery (after a rights review) and a pairing redirect.
@@ -20,7 +21,7 @@ The background is the launcher repository's spike report, [docs/spike-174-remote
 - **No game files, ever.** The service never receives, stores, serves or links to a ROM, and never describes where to get one. A file is identified by its checksum only. No file names from a player's device either.
 - **No player accounts.** A read by checksum still shows the service and the CDN which file a household has, together with its IP address. Say so honestly in code comments, the logging policy and documents; never claim reads are private.
 - **Telemetry is for internal use only, and anonymised.** It exists to run and improve the service, is never shared or sold, and holds nothing that identifies a person, a household or a device: no IP address, no stable device ID, no file names.
-- **Nothing is logged that is not needed.** No IP addresses in application logs or telemetry, and no checksum next to anything that could tie it to a household, unless an issue decides otherwise.
+- **Nothing is logged that is not needed.** No IP addresses in application logs or telemetry, and no checksum next to anything that could tie it to a household, unless an issue decides otherwise. See [Privacy and logging](README.md#privacy-and-logging) for the lookup's protections and deployment checks still outstanding.
 - **No secrets in git.** Tools come from mise and secrets from fnox, which hands them to the application as environment variables. Rails encrypted credentials are not used: there is no `config/credentials.yml.enc` and no `config/master.key`, and `.env*` files and Kamal secrets stay out of the repository. There is no `fnox.toml` yet; it comes with the first secret.
 - **Agents never deploy, provision or spend.** No `kamal deploy`, no registry push, no server, domain or account. `config/deploy.yml` holds the generator's placeholder values.
 - **Ask before downloading anything** other than the tools in `mise.toml` and the gems in `Gemfile.lock`.
@@ -69,7 +70,7 @@ Work runs through [ub-agents](https://agents.uberblick.ai): `ub-agents.yaml` hol
 
 ## Where things are
 
-- `app/`, `config/`, `db/`, `test/`: the Rails application as generated.
+- `app/`, `config/`, `db/`, `spec/`: the Rails application, catalog models, seeds and specs.
 - `storage/`: SQLite databases, git-ignored.
 - `swagger/v1/swagger.yaml`: the OpenAPI document, generated from the request specs; never edited by hand.
-- `Dockerfile`, `config/deploy.yml`, `.kamal/`: the generator's container and Kamal files, not adapted yet.
+- `Dockerfile`: production image with Thruster request logging disabled. `config/deploy.yml` and `.kamal/` still hold generator placeholders.

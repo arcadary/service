@@ -22,10 +22,16 @@ RUN apt-get update -qq && \
 
 # Set production environment variables and enable jemalloc for reduced memory usage and latency.
 ENV RAILS_ENV="production" \
+    LOG_REQUESTS="false" \
     BUNDLE_DEPLOYMENT="1" \
     BUNDLE_PATH="/usr/local/bundle" \
     BUNDLE_WITHOUT="development" \
     LD_PRELOAD="/usr/local/lib/libjemalloc.so"
+
+# Checksum URLs reveal file identity and client IP to the service and CDN.
+# Disable Thruster access logs so stdout cannot pair them. External CDN and
+# deployment-proxy (including kamal-proxy) logging is unverified until deployment
+# and is not covered by local log checks. See README.md, "Privacy and logging".
 
 # Throw-away build stage to reduce size of final image
 FROM base AS build

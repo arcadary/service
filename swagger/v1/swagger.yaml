@@ -5,6 +5,122 @@ info:
   version: v1
   description: Public, anonymous JSON API for the Arcadary launcher. Generated from
     the request specs in spec/requests; do not edit swagger/ by hand.
-paths: {}
+paths:
+  "/v1/releases/sha1/{sha1}.json":
+    get:
+      summary: Identify a game file by SHA-1
+      description: Anonymous, cookie-free lookup. The .json suffix is required. Hex
+        is case-insensitive. Successes are public for 300 seconds with an ETag; errors
+        are never stored.
+      parameters:
+      - name: sha1
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: "^[0-9a-fA-F]{40}$"
+          minLength: 40
+          maxLength: 40
+      responses:
+        '200':
+          description: release and game
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - max-age=300, public
+            ETag:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - release
+                - game
+                additionalProperties: false
+                properties:
+                  release:
+                    type: object
+                    required:
+                    - sha1
+                    - system
+                    - region
+                    - revision
+                    additionalProperties: false
+                    properties:
+                      sha1:
+                        type: string
+                        pattern: "^[0-9a-f]{40}$"
+                      system:
+                        type: string
+                        enum:
+                        - nes
+                        - snes
+                        - gb
+                        - gbc
+                        - megadrive
+                        - pcengine
+                        - atari2600
+                        - c64
+                      region:
+                        type: string
+                        nullable: true
+                      revision:
+                        type: string
+                        nullable: true
+                  game:
+                    type: object
+                    required:
+                    - id
+                    - title
+                    additionalProperties: false
+                    properties:
+                      id:
+                        type: string
+                      title:
+                        type: string
+        '400':
+          description: malformed SHA-1
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - error
+                additionalProperties: false
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - invalid_sha1
+        '404':
+          description: unknown SHA-1
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - error
+                additionalProperties: false
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - release_not_found
 servers:
 - url: "/"

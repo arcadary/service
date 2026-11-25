@@ -1,4 +1,9 @@
 Rails.application.routes.draw do
+  # The literal suffix keeps the lookup JSON-only. Malformed segments reach the
+  # controller for a fixed 400 response instead of failing a checksum route constraint.
+  get "v1/releases/sha1/:sha1.json", to: "v1/releases#show",
+    format: false, defaults: { format: :json }, constraints: { sha1: /[^\/]+/ }
+
   mount Rswag::Ui::Engine => "/api-docs"
   mount Rswag::Api::Engine => "/api-docs"
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html

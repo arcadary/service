@@ -10,5 +10,26 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 0) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_25_203000) do
+  create_table "games", force: :cascade do |t|
+    t.string "public_id", null: false
+    t.string "title", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["public_id"], name: "index_games_on_public_id", unique: true
+  end
+
+  create_table "releases", force: :cascade do |t|
+    t.integer "game_id", null: false
+    t.string "sha1", null: false
+    t.string "system", null: false
+    t.string "region"
+    t.string "revision"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["game_id"], name: "index_releases_on_game_id"
+    t.index ["sha1"], name: "index_releases_on_sha1", unique: true
+  end
+
+  add_foreign_key "releases", "games"
 end
