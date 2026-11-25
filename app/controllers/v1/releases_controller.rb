@@ -1,7 +1,5 @@
 module V1
-  class ReleasesController < ActionController::API
-    include ConditionalGet
-
+  class ReleasesController < ApiController
     rescue_from Release::InvalidSha1, with: :invalid_sha1
     rescue_from Release::ReleaseNotFound, with: :release_not_found
 
@@ -18,16 +16,11 @@ module V1
       end
 
       def invalid_sha1
-        lookup_error("invalid_sha1", :bad_request)
+        render_error("invalid_sha1", status: :bad_request)
       end
 
       def release_not_found
-        lookup_error("release_not_found", :not_found)
-      end
-
-      def lookup_error(error, status)
-        response.headers["Cache-Control"] = "no-store"
-        render json: { error: error }, status: status
+        render_error("release_not_found", status: :not_found)
       end
   end
 end
