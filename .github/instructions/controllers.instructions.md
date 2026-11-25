@@ -13,11 +13,13 @@ A controller translates HTTP into a service call and a rendered result. It holds
   ```ruby
   module V1
     class ReleasesController < ActionController::API
+      include ConditionalGet
+
       rescue_from Release::InvalidSha1, with: :invalid_sha1
       rescue_from Release::ReleaseNotFound, with: :release_not_found
 
       before_action :set_release
-      before_action :answer_not_modified
+      before_action -> { answer_not_modified(etag: [ ReleaseDecorator::VERSION, @release, @release.game ]) }
 
       def show
         render json: ReleaseDecorator.decorate(@release)
@@ -30,4 +32,4 @@ A controller translates HTTP into a service call and a rendered result. It holds
 - **Errors are `rescue_from`, not `if`.** A controller never checks a service's return value for failure. Each exception a service can raise maps to one handler, and each handler renders one documented error response. Unexpected exceptions are not rescued; they become a `500`.
 - **JSON API controllers inherit `ActionController::API`**, live under `V1::` (or the next version), and set no cookie or session. HTML pages (the homepage, reviewer pages) inherit `ApplicationController`.
 - **Strong parameters, scalar values.** Read a parameter once, as the type the service expects (`params[:sha1].to_s`), and pass it as a keyword argument. Never pass `params` or a hash of them into a service.
-- **Caching is explicit.** A public read sets `expires_in ... public: true` and an ETag from the records it shows and the decorator's version: `fresh_when(etag: [ ReleaseDecorator::VERSION, @release, @release.game ], public: true)`. List every record whose fields appear in the response. Errors and anything personal send `Cache-Control: no-store`.
+- **Caching is explicit.** Conditional GETs go through `answer_not_modified(etag:, max_age:)` from the `ConditionalGet` concern (included in `ApplicationController`, and in API controllers, which inherit `ActionController::API`). The controller calls it from a `before_action` lambda that lists the ETag's parts: the decorator's `VERSION` and every record whose fields appear in the response. Errors and anything personal send `Cache-Control: no-store`.

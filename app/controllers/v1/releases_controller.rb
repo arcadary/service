@@ -1,11 +1,16 @@
 module V1
   # Public JSON reads have no browser, session or importmap callbacks.
   class ReleasesController < ActionController::API
+    # The API does not inherit ApplicationController (its browser and importmap
+    # callbacks would refuse the launcher), so it includes the shared concern.
+    include ConditionalGet
+
     rescue_from Release::InvalidSha1, with: :invalid_sha1
     rescue_from Release::ReleaseNotFound, with: :release_not_found
 
     before_action :set_release
-    before_action :answer_not_modified
+    # The ETag changes with the release, its game and the JSON shape.
+    before_action -> { answer_not_modified(etag: [ ReleaseDecorator::VERSION, @release, @release.game ]) }
 
     def show
       render json: ReleaseDecorator.decorate(@release)
@@ -14,14 +19,6 @@ module V1
     private
       def set_release
         @release = ReleaseService.find_by(sha1: params[:sha1].to_s)
-      end
-
-      # The ETag comes from the records' updated_at and the decorator's VERSION,
-      # so it changes with the data and with the JSON shape. A client with a
-      # fresh copy gets a 304 and the action never runs.
-      def answer_not_modified
-        expires_in 300, public: true
-        fresh_when(etag: [ ReleaseDecorator::VERSION, @release, @release.game ], public: true)
       end
 
       def invalid_sha1
