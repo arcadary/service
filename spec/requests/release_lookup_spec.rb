@@ -124,6 +124,23 @@ RSpec.describe "Release lookup", type: :request do
     end
   end
 
+  %i[region revision].each do |field|
+    it "invalidates the ETag when #{field} changes between null and an empty string" do
+      get url
+      expect(response.parsed_body.fetch("release").fetch(field.to_s)).to be_nil
+      etag = response.headers.fetch("ETag")
+
+      [ "", nil ].each do |value|
+        release.update!(field => value)
+        get url, headers: { "If-None-Match" => etag }
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body.fetch("release").fetch(field.to_s)).to eq(value)
+        expect(response.headers["ETag"]).not_to eq(etag)
+        etag = response.headers.fetch("ETag")
+      end
+    end
+  end
+
   [ [ "0" * 40, 404, "release_not_found" ], [ "not-hex", 400, "invalid_sha1" ] ].each do |sha1, status, error|
     it "never caches or conditionally returns 304 for #{status}" do
       path = "/v1/releases/sha1/#{sha1}.json"
@@ -187,14 +204,16 @@ RSpec.describe "Release lookup", type: :request do
       expect(output.string).to include("Started GET", "SELECT 12345")
       output.truncate(0)
       output.rewind
-      [ [ url, 200 ], [ "/v1/releases/sha1/#{'0' * 40}.json", 404 ],
-        [ "/v1/releases/sha1/not-hex.json", 400 ] ].each do |path, status|
-        get path, headers: {
-          "REMOTE_ADDR" => "198.51.100.18", "X-Forwarded-For" => "203.0.113.19",
-          "Forwarded" => "for=203.0.113.19", "X-Request-ID" => "household-marker",
-          "Cookie" => "household=cookie-marker", "Authorization" => "Bearer caller-secret"
-        }
-        expect(response.status).to eq(status)
+      [ "/v1/releases/sha1/", "//v1/releases/sha1/", "/v1//releases/sha1/",
+        "/v1/releases//sha1/", "/v1/releases/sha1//", "///v1///releases///sha1///" ].each do |prefix|
+        [ [ release.sha1, 200 ], [ "0" * 40, 404 ], [ "not-hex", 400 ] ].each do |sha1, status|
+          get "#{prefix}#{sha1}.json", headers: {
+            "REMOTE_ADDR" => "198.51.100.18", "X-Forwarded-For" => "203.0.113.19",
+            "Forwarded" => "for=203.0.113.19", "X-Request-ID" => "household-marker",
+            "Cookie" => "household=cookie-marker", "Authorization" => "Bearer caller-secret"
+          }
+          expect(response.status).to eq(status)
+        end
       end
       expect(output.string).to eq("")
     ensure

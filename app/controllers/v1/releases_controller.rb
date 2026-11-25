@@ -8,12 +8,12 @@ module V1
       release = Release.includes(:game).find_by(sha1: sha1.downcase)
       return lookup_error("release_not_found", :not_found) unless release
 
-      payload = {
+      json = {
         release: release.slice(:sha1, :system, :region, :revision),
         game: { id: release.game.public_id, title: release.game.title }
-      }
+      }.to_json
       expires_in 300, public: true
-      render json: payload if stale?(etag: payload, public: true)
+      render json: json if stale?(etag: json, public: true)
     end
 
     private
