@@ -2,7 +2,10 @@ require "rails_helper"
 
 RSpec.describe Game, type: :model do
   it "requires a title and a unique public ID" do
-    expect(Game.new).not_to be_valid
+    missing = Game.new
+    expect(missing).not_to be_valid
+    expect(missing.errors[:title]).to be_present
+    expect(missing.errors[:public_id]).to be_present
     game = Game.create!(public_id: "stable-game", title: "Original title")
     duplicate = Game.new(public_id: game.public_id, title: "Other game")
     expect(duplicate).not_to be_valid
