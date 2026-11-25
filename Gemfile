@@ -65,6 +65,8 @@ group :development do
 end
 
 group :test do
+  # One-line specs for associations and validations [https://github.com/thoughtbot/shoulda-matchers]
+  gem "shoulda-matchers"
   # Use system testing [https://guides.rubyonrails.org/testing.html#system-testing]
   gem "capybara"
   gem "selenium-webdriver"

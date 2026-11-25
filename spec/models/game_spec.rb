@@ -1,36 +1,22 @@
 require "rails_helper"
 
 RSpec.describe Game, type: :model do
-  it "requires a title and a unique public ID" do
-    missing = Game.new
-    expect(missing).not_to be_valid
-    expect(missing.errors[:title]).to be_present
-    expect(missing.errors[:public_id]).to be_present
-    game = Game.create!(public_id: "stable-game", title: "Original title")
-    duplicate = Game.new(public_id: game.public_id, title: "Other game")
-    expect(duplicate).not_to be_valid
-    expect(duplicate.errors[:public_id]).to be_present
-  end
+  subject { Game.new(public_id: "a-game", title: "A game") }
 
-  it "keeps its public ID when renamed and rejects reassignment" do
-    game = Game.create!(public_id: "stable-game", title: "Original title")
-    game.update!(title: "New title")
-    expect(game.reload.public_id).to eq("stable-game")
+  it { is_expected.to have_many(:releases).dependent(:restrict_with_exception) }
+  it { is_expected.to validate_presence_of(:title) }
+  it { is_expected.to validate_presence_of(:public_id) }
+  it { is_expected.to validate_uniqueness_of(:public_id) }
+
+  it "keeps its public ID once created" do
+    game = Game.create!(public_id: "stable-game", title: "A game")
     expect(game.update(public_id: "new-id")).to be(false)
     expect(game.reload.public_id).to eq("stable-game")
   end
 
-  it "touches its releases when it changes, so their ETags change with the game" do
+  it "touches its releases when it changes" do
     game = Game.create!(public_id: "touched-game", title: "A game")
     release = game.releases.create!(sha1: "c" * 40, system: "gb")
     expect { game.update!(title: "Renamed") }.to(change { release.reload.updated_at })
-  end
-
-  it "owns distinct releases across systems and regions" do
-    game = Game.create!(public_id: "stable-game", title: "A game")
-    first = game.releases.create!(sha1: "a" * 40, system: "gb", region: "Japan")
-    second = game.releases.create!(sha1: "b" * 40, system: "snes", region: "Europe", revision: "Rev A")
-    expect(game.releases).to contain_exactly(first, second)
-    expect(second.game).to eq(game)
   end
 end
