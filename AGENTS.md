@@ -30,6 +30,13 @@ The background is the launcher repository's spike report, [docs/spike-174-remote
 
 ## Code conventions
 
+The short version is below. The full guidelines are in [`.github/instructions/`](.github/instructions/), one file per area; read the ones for the files you change. Each file names the paths it covers in its `applyTo` header.
+
+- [controllers](.github/instructions/controllers.instructions.md), [services](.github/instructions/services.instructions.md), [decorators](.github/instructions/decorators.instructions.md), [models](.github/instructions/models.instructions.md)
+- [API design](.github/instructions/api.instructions.md), [specs](.github/instructions/specs.instructions.md), [logging and privacy](.github/instructions/logging.instructions.md)
+
+When a change does not fit them, say why in the pull request rather than working around them quietly. A new area gets a new file.
+
 - **Small controllers.** A controller action calls a service and renders a decorator, nothing else:
 
   ```ruby
