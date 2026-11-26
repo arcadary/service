@@ -10,12 +10,20 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_25_203000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_26_173000) do
+  create_table "game_identities", force: :cascade do |t|
+    t.integer "game_id", null: false
+    t.string "key", null: false
+    t.index ["game_id"], name: "index_game_identities_on_game_id"
+    t.index ["key"], name: "index_game_identities_on_key", unique: true
+  end
+
   create_table "games", force: :cascade do |t|
     t.string "public_id", null: false
     t.string "title", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.boolean "catalog_curated", default: false, null: false
     t.index ["public_id"], name: "index_games_on_public_id", unique: true
   end
 
@@ -27,9 +35,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_25_203000) do
     t.string "revision"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "source_title"
     t.index ["game_id"], name: "index_releases_on_game_id"
     t.index ["sha1"], name: "index_releases_on_sha1", unique: true
   end
 
+  add_foreign_key "game_identities", "games"
   add_foreign_key "releases", "games"
 end

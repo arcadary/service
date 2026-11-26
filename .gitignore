@@ -37,3 +37,6 @@
 # Local ub-agents configuration and execution artifacts
 .ub-agents/
 ub-agents.local.yaml
+
+# Reference checksum lists are fetched locally, never versioned.
+*.dat

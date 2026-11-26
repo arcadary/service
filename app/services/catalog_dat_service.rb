@@ -1,0 +1,76 @@
+require "strscan"
+
+class CatalogDatService
+  class InvalidDat < StandardError; end
+
+  def self.parse(path:, system:)
+    new(text: File.read(path, encoding: "UTF-8"), system: system).parse
+  end
+
+  def initialize(text:, system:)
+    @scanner = StringScanner.new(text)
+    @system = system
+  end
+
+  def parse
+    nodes = pairs
+    rows = []
+    skipped = []
+    nodes.select { |key, _| key == "game" }.each do |_, game|
+      raise InvalidDat, "game must be a block" unless game.is_a?(Array)
+
+      title = game.assoc("name")&.last
+      raise InvalidDat, "game has no name" unless title.is_a?(String) && title.present?
+
+      attributes = CatalogNameService.attributes(title: title, system: @system)
+      raise InvalidDat, "game has an empty display title" if attributes[:title].empty?
+
+      game.select { |key, _| key == "rom" }.each do |_, rom|
+        raise InvalidDat, "rom must be a block" unless rom.is_a?(Array)
+
+        sha1 = rom.assoc("sha1")&.last.to_s.downcase
+        unless ReleaseService::SHA1.match?(sha1)
+          skipped << "missing or invalid SHA-1 for #{title}"
+          next
+        end
+        rows << attributes.merge(sha1: sha1, system: @system, source_title: title)
+      end
+    end
+    raise InvalidDat, "no valid releases" if rows.empty?
+    raise InvalidDat, "duplicate SHA-1 in system" if rows.map { |row| row[:sha1] }.uniq.size != rows.size
+
+    { rows: rows, skipped: skipped }
+  end
+
+  private
+    def token
+      @scanner.skip(/\s+/)
+      return if @scanner.eos?
+      return @scanner.getch if @scanner.peek(1).in?([ "(", ")" ])
+
+      if @scanner.peek(1) == '"'
+        quoted = @scanner.scan(/"(?:\\.|[^"\\])*"/m)
+        raise InvalidDat, "unterminated quoted value" unless quoted
+
+        quoted[1...-1].gsub(/\\(["\\])/, '\1')
+      else
+        @scanner.scan(/[^\s()"]+/) or raise InvalidDat, "invalid token"
+      end
+    end
+
+    def pairs(nested: false)
+      result = []
+      while (key = token)
+        return result if key == ")" && nested
+        raise InvalidDat, "unexpected parenthesis" if key.in?([ "(", ")" ])
+
+        value = token
+        raise InvalidDat, "missing value for #{key}" unless value && value != ")"
+
+        result << [ key, value == "(" ? pairs(nested: true) : value ]
+      end
+      raise InvalidDat, "unclosed block" if nested
+
+      result
+    end
+end
