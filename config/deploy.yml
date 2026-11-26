@@ -13,16 +13,19 @@ servers:
   #     - 192.168.0.1
   #   cmd: bin/jobs
 
-# Enable SSL auto certification via Let's Encrypt and allow for multiple apps on a single web server.
-# If used with Cloudflare, set encryption mode in SSL/TLS setting to "Full" to enable CF-to-app encryption.
-#
-# Using an SSL proxy like this requires turning on config.assume_ssl and config.force_ssl in production.rb!
-#
-# Don't use this when deploying to multiple web servers (then you have to terminate SSL at your load balancer).
-#
+# Cloudflare terminates TLS and reaches kamal-proxy only through the cloudflared tunnel below, in plain HTTP on
+# Docker's kamal network. The host's firewall has no web ports open, and the origin holds no certificate.
+# kamal-proxy runs without a log: its request log records X-Forwarded-For, which Cloudflare always fills with the
+# visitor's IP, next to each path and so each checksum. forward_headers is off because the app has no use for them.
 proxy:
-  ssl: true
+  ssl: false
+  forward_headers: false
   host: api.arcadary.org
+  run:
+    publish: false
+    log_max_size: ""
+    options:
+      log-driver: none
 
 # Where you keep your container images.
 registry:
@@ -94,26 +97,14 @@ builder:
 # ssh:
 #   user: app
 
-# Use accessory services (secrets come from .kamal/secrets).
-# accessories:
-#   db:
-#     image: mysql:8.0
-#     host: 192.168.0.2
-#     # Change to 3306 to expose port to the world instead of just local network.
-#     port: "127.0.0.1:3306:3306"
-#     env:
-#       clear:
-#         MYSQL_ROOT_HOST: '%'
-#       secret:
-#         - MYSQL_ROOT_PASSWORD
-#     files:
-#       - config/mysql/production.cnf:/etc/mysql/my.cnf
-#       - db/production.sql:/docker-entrypoint-initdb.d/setup.sql
-#     directories:
-#       - data:/var/lib/mysql
-#   redis:
-#     image: valkey/valkey:8
-#     host: 192.168.0.2
-#     port: 6379
-#     directories:
-#       - data:/data
+# The Cloudflare Tunnel the infrastructure repository creates: cloudflared dials out to Cloudflare and hands each
+# request to kamal-proxy. Its ingress rules live in Cloudflare; the token comes from fnox.
+accessories:
+  cloudflared:
+    image: cloudflare/cloudflared:2026.11.2
+    roles:
+      - web
+    cmd: tunnel run
+    env:
+      secret:
+        - TUNNEL_TOKEN
