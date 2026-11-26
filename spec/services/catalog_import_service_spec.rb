@@ -20,7 +20,7 @@ RSpec.describe CatalogImportService do
       { title: "No checksum", sha1: "invalid" }
     ]
     result = import_entries(entries: entries)
-    expect(result[:games]).to eq(created: 1, updated: 0, unchanged: 0, skipped: 0)
+    expect(result[:games]).to eq(created: 1, updated: 0, unchanged: 0, skipped: 1)
     expect(result[:releases]).to eq(created: 5, updated: 0, unchanged: 0, skipped: 1)
     expect(result[:skipped_reasons]).to eq([ "missing or invalid SHA-1 for No checksum" ])
     expect(Release.order(:sha1).pluck(:region, :revision)).to eq([ [ "USA", "Rev 1" ], [ "USA", "Rev 1" ], [ "Japan, USA", "v1.3" ], [ "Europe", nil ], [ "World", nil ] ])

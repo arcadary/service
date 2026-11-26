@@ -2,6 +2,14 @@ require "tmpdir"
 require "json"
 
 module CatalogHelpers
+  def self.included(group)
+    group.before do
+      GameIdentity.delete_all
+      Release.delete_all
+      Game.delete_all
+    end
+  end
+
   def checksum(number)
     format("%040x", number)
   end

@@ -8,9 +8,10 @@ RSpec.describe CatalogMappingService do
   end
 
   it "rejects invalid IDs, orphan checksums, duplicate IDs/checksums and empty games before writes" do
+    before_count = Game.count
     [ "Bad_id Title\n  #{'a' * 40}", "  #{'a' * 40}", "same Title\n  #{'a' * 40}\nsame Other\n  #{'b' * 40}", "one One\n  #{'a' * 40}\ntwo Two\n  #{'a' * 40}", "empty Empty" ].each do |text|
       expect { described_class.new(text: text) }.to raise_error(described_class::InvalidMapping)
     end
-    expect(Game.count).to eq(0)
+    expect(Game.count).to eq(before_count)
   end
 end

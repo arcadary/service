@@ -18,6 +18,8 @@ class CatalogDatService
     nodes = pairs
     rows = []
     skipped = []
+    skipped_releases = 0
+    skipped_game_keys = []
     nodes.select { |key, _| key == "game" }.each do |_, game|
       raise InvalidDat, "game must be a block" unless game.is_a?(Array)
 
@@ -27,21 +29,26 @@ class CatalogDatService
       attributes = CatalogNameService.attributes(title: title, system: @system)
       raise InvalidDat, "game has an empty display title" if attributes[:title].empty?
 
-      game.select { |key, _| key == "rom" }.each do |_, rom|
+      roms = game.select { |key, _| key == "rom" }
+      skipped << "no ROM checksum entries for #{title}" if roms.empty?
+      valid_count = rows.size
+      roms.each do |_, rom|
         raise InvalidDat, "rom must be a block" unless rom.is_a?(Array)
 
         sha1 = rom.assoc("sha1")&.last.to_s.downcase
         unless ReleaseService::SHA1.match?(sha1)
           skipped << "missing or invalid SHA-1 for #{title}"
+          skipped_releases += 1
           next
         end
         rows << attributes.merge(sha1: sha1, system: @system, source_title: title)
       end
+      skipped_game_keys << attributes[:key] if rows.size == valid_count
     end
     raise InvalidDat, "no valid releases" if rows.empty?
     raise InvalidDat, "duplicate SHA-1 in system" if rows.map { |row| row[:sha1] }.uniq.size != rows.size
 
-    { rows: rows, skipped: skipped }
+    { rows: rows, skipped: { reasons: skipped, releases: skipped_releases, games: (skipped_game_keys - rows.map { |row| row[:key] }).uniq.size } }
   end
 
   private

@@ -33,7 +33,7 @@ class CatalogImportService
       write_aliases
       write_releases
     end
-    @counts.merge(transaction_seconds: Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, skipped_reasons: @skipped)
+    @counts.merge(transaction_seconds: Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, skipped_reasons: @skipped[:reasons])
   end
 
   private
@@ -128,8 +128,8 @@ class CatalogImportService
         release
       end
       @counts = {
-        games: counts(records: @affected_games),
-        releases: counts(records: @release_changes).merge(skipped: @skipped.size)
+        games: counts(records: @affected_games).merge(skipped: @skipped[:games]),
+        releases: counts(records: @release_changes).merge(skipped: @skipped[:releases])
       }
     end
 
