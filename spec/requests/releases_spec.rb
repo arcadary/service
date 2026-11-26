@@ -6,34 +6,22 @@ RSpec.describe "Release", type: :request do
   let(:url) { "/v1/releases/#{release.sha1}.json" }
   let(:expected_payload) do
     {
-      "release" => { "sha1" => release.sha1, "system" => "c64", "region" => nil, "revision" => nil },
-      "game" => { "id" => "lookup-game", "title" => "A game" }
+      "release" => { "id" => release.public_id, "sha1" => release.sha1, "system" => "c64", "region" => nil, "revision" => nil },
+      "game" => { "id" => "lookup-game", "title" => "A game" },
+      "media" => [ { "key" => "main", "position" => 1, "label" => nil, "role" => "game", "sha1" => release.sha1, "size" => nil, "format" => nil } ],
+      "startup" => { "schema" => 1, "boot" => "main", "drives" => { "8" => "main" }, "revision" => "20ac504497948774502ee889d50c8b20f4dcb493ee0a66f064e818b91cb8c9ff" }
     }
   end
 
   path "/v1/releases/{sha1}.json" do
     get "A release and its game, by the SHA-1 of its game file" do
       produces "application/json"
-      description "The target of a lookup redirect. Hex is case-insensitive. Successes are public for 300 seconds with an ETag; errors are never stored."
+      description "The target of an unambiguous lookup redirect. Hex is case-insensitive; release.sha1 is the asked file and release.id identifies the whole release. Media are in position order. Startup applies defaults and includes a SHA-256 revision over effective startup and ordered checksums. C64 slots are 8 and 9; other systems have no drives. The service never infers a set from one checksum or from file names. Successes are public for 300 seconds with an ETag; errors are never stored."
       parameter name: :sha1, in: :path, required: true,
         schema: { type: :string, pattern: "^[0-9a-fA-F]{40}$", minLength: 40, maxLength: 40 }
 
       response "200", "release and game" do
-        schema type: :object, required: %w[release game], additionalProperties: false,
-          properties: {
-            release: {
-              type: :object, required: %w[sha1 system region revision], additionalProperties: false,
-              properties: {
-                sha1: { type: :string, pattern: "^[0-9a-f]{40}$" },
-                system: { type: :string, enum: %w[nes snes gb gbc megadrive pcengine atari2600 c64] },
-                region: { type: :string, nullable: true }, revision: { type: :string, nullable: true }
-              }
-            },
-            game: {
-              type: :object, required: %w[id title], additionalProperties: false,
-              properties: { id: { type: :string }, title: { type: :string } }
-            }
-          }
+        schema "$ref" => "#/components/schemas/Release"
         header "Cache-Control", schema: { type: :string, enum: [ "max-age=300, public" ] }
         header "ETag", schema: { type: :string }
         let(:sha1) { release.sha1 }
@@ -60,7 +48,58 @@ RSpec.describe "Release", type: :request do
         let(:sha1) { "0" * 40 }
         run_test!
       end
+
+      response "409", "file belongs to several releases; use /v1/media/{sha1}.json" do
+        schema type: :object, required: [ "error" ], additionalProperties: false,
+          properties: { error: { type: :string, enum: [ "ambiguous_release" ] } }
+        header "Cache-Control", schema: { type: :string, enum: [ "no-store" ] }
+        let(:sha1) { release.sha1 }
+        before { create(:release_medium, media_file: release.media_files.sole) }
+        run_test!
+      end
     end
+  end
+
+  it "returns the same ordered set and startup for every disk, with the asked checksum" do
+    second = create(:release_medium, release: release, label: "Side B")
+    save_disk = create(:release_medium, release: release, key: "save", position: 3, role: "save", label: "Save disk")
+    release.update!(startup: { "schema" => 1, "boot" => "disk-2", "drives" => { "8" => "disk-2", "9" => "main" } })
+    bodies = [ release.sha1, second.media_file.sha1, save_disk.media_file.sha1 ].map do |sha1|
+      get "/v1/releases/#{sha1}.json", headers: { "User-Agent" => "Arcadary/1.0" }
+      expect(response).to have_http_status(:ok)
+      body = response.parsed_body
+      expect(body.fetch("release")).to include("id" => release.public_id, "sha1" => sha1)
+      body.fetch("release").delete("sha1")
+      body
+    end
+    expect(bodies.uniq.size).to eq(1)
+    expect(bodies.first.fetch("media").map { |medium| medium.values_at("key", "position", "label", "role") }).to eq([
+      [ "main", 1, nil, "game" ], [ "disk-2", 2, "Side B", "game" ], [ "save", 3, "Save disk", "save" ]
+    ])
+    expect(bodies.first.fetch("startup")).to include("boot" => "disk-2", "drives" => { "8" => "disk-2", "9" => "main" })
+  end
+
+  it "invalidates validators for media, startup and decorator changes, and distinguishes asked disks" do
+    medium = create(:release_medium, release: release)
+    get url
+    etag = response.headers.fetch("ETag")
+    medium.update!(label: "Side B")
+    get url, headers: { "If-None-Match" => etag }
+    expect(response).to have_http_status(:ok)
+    etag = response.headers.fetch("ETag")
+    medium.media_file.update!(size: 196608)
+    get url, headers: { "If-None-Match" => etag }
+    expect(response).to have_http_status(:ok)
+    etag = response.headers.fetch("ETag")
+    release.reload.update!(startup: { "schema" => 1, "boot" => "disk-2", "drives" => { "8" => "disk-2" } })
+    get url, headers: { "If-None-Match" => etag }
+    expect(response).to have_http_status(:ok)
+    etag = response.headers.fetch("ETag")
+    get "/v1/releases/#{medium.media_file.sha1}.json", headers: { "If-None-Match" => etag }
+    expect(response).to have_http_status(:ok)
+    stub_const("ReleaseDecorator::VERSION", ReleaseDecorator::VERSION + 1)
+    get url, headers: { "If-None-Match" => etag }
+    expect(response).to have_http_status(:ok)
   end
 
   it "answers 304 when the client's copy is current" do
@@ -107,6 +146,7 @@ RSpec.describe "Release", type: :request do
       [ release.sha1, "0" * 40, "not-a-checksum" ].each do |sha1|
         get "/v1/lookup/#{sha1}.json", headers: { "REMOTE_ADDR" => "198.51.100.18" }
         get "/v1/releases/#{sha1}.json", headers: { "REMOTE_ADDR" => "198.51.100.18" }
+        get "/v1/media/#{sha1}.json", headers: { "REMOTE_ADDR" => "198.51.100.18" }
       end
       expect(output.string).to eq("")
     ensure

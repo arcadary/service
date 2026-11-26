@@ -41,7 +41,7 @@ class CatalogDatService
           skipped_releases += 1
           next
         end
-        rows << attributes.merge(sha1: sha1, system: @system, source_title: title)
+        rows << attributes.merge(sha1: sha1, system: @system, source_title: title).merge(media_attributes(rom: rom))
       end
       skipped_game_keys << attributes[:key] if rows.size == valid_count
     end
@@ -52,6 +52,17 @@ class CatalogDatService
   end
 
   private
+    def media_attributes(rom:)
+      size = rom.assoc("size")&.last
+      attributes = {
+        size: size && Integer(size, 10),
+        format: File.extname(rom.assoc("name")&.last.to_s).delete_prefix(".").downcase.presence,
+        crc32: rom.assoc("crc")&.last&.downcase,
+        md5: rom.assoc("md5")&.last&.downcase
+      }
+      attributes.compact
+    end
+
     def token
       @scanner.skip(/\s+/)
       return if @scanner.eos?

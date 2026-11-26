@@ -9,7 +9,7 @@ This repository is public and nothing is deployed yet. The Rails application imp
 One Rails application serves two things: the project's **homepage** (server-rendered HTML for people) and the **JSON API** the launcher talks to.
 
 - **Public API reads** are anonymous: no player account, no cookie, no personalised response. The same URL returns the same bytes, so a CDN can cache them.
-- **Implemented:** `GET /v1/lookup/{sha1}.json` is the entry point for any game file: a known checksum answers `301` to its resource, cached publicly for a day (today always `GET /v1/releases/{sha1}.json`, a release and its game, cached for 300 seconds with ETags); an unknown one answers `404`. Errors are JSON with `no-store`. The `.json` suffix is required. `/api-docs` documents the contract.
+- **Implemented:** `GET /v1/lookup/{sha1}.json` is the entry point for any game file: a known checksum answers `301` to its resource, cached publicly for a day (`GET /v1/releases/{sha1}.json`, or `/v1/media/{sha1}.json` for a shared file, cached for 300 seconds with ETags); an unknown one answers `404`. Releases include ordered media and validated startup; see [Ordered media and startup](README.md#ordered-media-and-startup). Errors are JSON with `no-store`. The `.json` suffix is required. `/api-docs` documents the contract.
 - **One opt-in write path** takes run reports from devices. A report is triage and supporting evidence; it never changes a game's status by itself.
 - **Reviewer and admin pages** are authenticated and never served from a shared cache. A game becomes Verified only when a named reviewer who owns that exact file has played it.
 - **Later:** artwork delivery (after a rights review) and a pairing redirect.

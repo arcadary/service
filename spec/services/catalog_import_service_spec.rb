@@ -11,6 +11,29 @@ RSpec.describe CatalogImportService do
     end
   end
 
+  it "imports media metadata and preserves media identities and timestamps on repeat imports" do
+    entries = [ { title: "Example (USA)", sha1: checksum(1), filename: "example.NES", size: 16384, crc: "ABCDEF12", md5: "A" * 32 } ]
+    import_entries(entries: entries)
+    release = Release.sole
+    expect(release.release_media.sole.attributes.slice("key", "position", "label", "role")).to eq("key" => "main", "position" => 1, "label" => nil, "role" => "game")
+    expect(MediaFile.sole.attributes.slice("sha1", "size", "format", "crc32", "md5")).to eq("sha1" => checksum(1), "size" => 16384, "format" => "nes", "crc32" => "abcdef12", "md5" => "a" * 32)
+    before = snapshot
+    import_entries(entries: entries)
+    expect(snapshot).to eq(before)
+    expect { import_entries(entries: [ entries.first.merge(size: 32768) ]) }.to change { release.reload.updated_at }
+    expect(MediaFile.sole.size).to eq(32768)
+    expect(release.public_id).to eq(before[1].sole.fetch("public_id"))
+  end
+
+  it "leaves curated multi-disk and shared releases intact when an offline import encounters their files" do
+    import_entries(entries: [ { title: "Example", sha1: checksum(1) } ])
+    release = Release.sole
+    create(:release_medium, release: release)
+    before = snapshot
+    expect { import_entries(entries: [ { title: "Example", sha1: checksum(1) } ]) }.to raise_error(described_class::IdentityConflict, /multi-disk or shared/)
+    expect(snapshot).to eq(before)
+  end
+
   it "groups regional/revision and NES headered/unheadered releases, normalizes SHA-1 and repeats without writes" do
     entries = [
       { title: "Example (USA) (Rev 1)", checksums: [ "A" * 40, "b" * 40 ], filename: "example.nes" },

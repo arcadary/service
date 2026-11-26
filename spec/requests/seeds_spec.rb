@@ -4,7 +4,9 @@ require "rake"
 RSpec.describe "Bundled homebrew seeds", type: :request do
   before do
     GameIdentity.delete_all
+    ReleaseMedium.delete_all
     Release.delete_all
+    MediaFile.delete_all
     Game.delete_all
   end
 
@@ -17,9 +19,11 @@ RSpec.describe "Bundled homebrew seeds", type: :request do
     ].each do |sha1, public_id, title, system|
       get "/v1/releases/#{sha1}.json"
       expect(response).to have_http_status(:ok)
-      expect(response.parsed_body).to eq(
+      expect(response.parsed_body).to include(
         "game" => { "id" => public_id, "title" => title },
-        "release" => { "sha1" => sha1, "system" => system, "region" => nil, "revision" => nil }
+        "release" => { "id" => Release.find_by!(sha1: sha1).public_id, "sha1" => sha1, "system" => system, "region" => nil, "revision" => nil },
+        "media" => [ { "key" => "main", "position" => 1, "label" => nil, "role" => "game", "sha1" => sha1, "size" => nil, "format" => nil } ],
+        "startup" => { "schema" => 1, "boot" => "main", "drives" => {}, "revision" => match(/\A[0-9a-f]{64}\z/) }
       )
     end
   end

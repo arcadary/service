@@ -29,6 +29,47 @@ RSpec.configure do |config|
         TEXT
       },
       paths: {},
+      components: {
+        schemas: {
+          Release: {
+            type: :object, required: %w[release game media startup], additionalProperties: false,
+            properties: {
+              release: {
+                type: :object, required: %w[id sha1 system region revision], additionalProperties: false,
+                properties: {
+                  id: { type: :string }, sha1: { type: :string, pattern: "^[0-9a-f]{40}$" },
+                  system: { type: :string, enum: %w[nes snes gb gbc megadrive pcengine atari2600 c64] },
+                  region: { type: :string, nullable: true }, revision: { type: :string, nullable: true }
+                }
+              },
+              game: {
+                type: :object, required: %w[id title], additionalProperties: false,
+                properties: { id: { type: :string }, title: { type: :string } }
+              },
+              media: {
+                type: :array, minItems: 1,
+                items: {
+                  type: :object, required: %w[key position label role sha1 size format], additionalProperties: false,
+                  properties: {
+                    key: { type: :string, pattern: "^[a-z0-9-]{1,32}$" }, position: { type: :integer, minimum: 1 },
+                    label: { type: :string, nullable: true, maxLength: 80 }, role: { type: :string, enum: %w[game save] },
+                    sha1: { type: :string, pattern: "^[0-9a-f]{40}$" }, size: { type: :integer, minimum: 0, nullable: true },
+                    format: { type: :string, pattern: "^[a-z0-9]+$", nullable: true }
+                  }
+                }
+              },
+              startup: {
+                type: :object, required: %w[schema boot drives revision], additionalProperties: false,
+                properties: {
+                  schema: { type: :integer, enum: [ 1 ] }, boot: { type: :string },
+                  drives: { type: :object, additionalProperties: false, properties: { "8" => { type: :string }, "9" => { type: :string } } },
+                  revision: { type: :string, pattern: "^[0-9a-f]{64}$" }
+                }
+              }
+            }
+          }
+        }
+      },
       servers: [
         { url: '/' }
       ]
