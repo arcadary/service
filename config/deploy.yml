@@ -4,10 +4,10 @@ service: arcadary_service
 # Name of the container image (use your-user/app-name on external registries).
 image: arcadary_service
 
-# Deploy to these servers.
+# The host the infrastructure repository creates. Its address comes from fnox, because this repository is public.
 servers:
   web:
-    - 192.168.0.1
+    - <%= ENV.fetch("DEPLOY_HOST") %>
   # job:
   #   hosts:
   #     - 192.168.0.1
@@ -20,9 +20,9 @@ servers:
 #
 # Don't use this when deploying to multiple web servers (then you have to terminate SSL at your load balancer).
 #
-# proxy:
-#   ssl: true
-#   host: app.example.com
+proxy:
+  ssl: true
+  host: api.arcadary.org
 
 # Where you keep your container images.
 registry:
@@ -39,7 +39,7 @@ registry:
 # Inject ENV variables into containers (secrets come from .kamal/secrets).
 env:
   secret:
-    - RAILS_MASTER_KEY
+    - SECRET_KEY_BASE
   clear:
     # Run the Solid Queue Supervisor inside the web server's Puma process to do jobs.
     # When you start using multiple servers, you should split out job processing to a dedicated machine.
