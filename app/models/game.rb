@@ -1,5 +1,6 @@
 class Game < ApplicationRecord
   has_many :releases, dependent: :restrict_with_exception
+  has_many :game_identities, dependent: :restrict_with_exception
 
   validates :title, :public_id, presence: true
   validates :public_id, uniqueness: true

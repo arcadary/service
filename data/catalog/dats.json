@@ -1,0 +1,15 @@
+{
+  "repository": "libretro/libretro-database",
+  "commit": "f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029",
+  "path": "metadat/no-intro",
+  "systems": {
+    "nes": { "file": "Nintendo - Nintendo Entertainment System.dat", "sha256": "acfd36bc7805cd453a50ebcf92c9b19c8090fc2180bcbc0f414c11df26fce25e" },
+    "snes": { "file": "Nintendo - Super Nintendo Entertainment System.dat", "sha256": "c46a41df05343c66c0a4d40cb13570ea9806a8539318667656fcbc835ae1c568" },
+    "gb": { "file": "Nintendo - Game Boy.dat", "sha256": "521bba4ab57c5beeb0f4d836c95235163d0651b1483dfd9e1814f19e2ea44118" },
+    "gbc": { "file": "Nintendo - Game Boy Color.dat", "sha256": "b035e7daa626e392f6147b3765ca748c48ce8b5f32873768a8fdd3d331073b36" },
+    "megadrive": { "file": "Sega - Mega Drive - Genesis.dat", "sha256": "00498033b0c67ba056861065020c0e6a139d46ef583e32b6d1f0ff949e692510" },
+    "pcengine": { "file": "NEC - PC Engine - TurboGrafx 16.dat", "sha256": "a0ef55ce15c251a361b097a540f80df5cb329177c383929b7a6583684f7f8cca" },
+    "atari2600": { "file": "Atari - 2600.dat", "sha256": "ee8ea1ba8b03d559590e0afd080fba03bac970e0e409d714dca886140e03f505" },
+    "c64": { "file": "Commodore - 64.dat", "sha256": "eefb66d899ef83431d655a8ee45981bfd19ed7393f603d24489f5773db136204" }
+  }
+}

@@ -1,0 +1,26 @@
+Arcadary service catalog data
+
+The entire service catalog, including imported metadata, project corrections,
+additions and later fields, is licensed under Creative Commons Attribution-
+ShareAlike 4.0 International (CC-BY-SA-4.0):
+https://creativecommons.org/licenses/by-sa/4.0/
+Legal code: https://creativecommons.org/licenses/by-sa/4.0/legalcode
+
+Origin: No-Intro, https://no-intro.org/
+Source: libretro/libretro-database, commit
+f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029, metadat/no-intro/
+https://github.com/libretro/libretro-database/tree/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/metadat/no-intro
+Upstream licence:
+https://github.com/libretro/libretro-database/blob/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/LICENSE
+
+Changes by Arcadary: import checksum metadata into games and releases, normalize
+titles, regions and revisions, group releases using explicit launcher identities
+and system-scoped fallback identities, and add the project's seeds and corrections.
+The curated identity snapshot is from bk-one/arcadary, commit
+9d0760e0ae29fc28508b112893bf1d8aee0f0c25, data/games.txt:
+https://github.com/bk-one/arcadary/blob/9d0760e0ae29fc28508b112893bf1d8aee0f0c25/data/games.txt
+
+When sharing or adapting catalog data, provide appropriate attribution, link to
+CC-BY-SA-4.0, indicate changes, and license adaptations under the same licence.
+This notice licenses metadata only. It grants no rights in game files or artwork.
+The application source code remains MIT licensed; see LICENSE.

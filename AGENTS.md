@@ -2,7 +2,7 @@
 
 The remote service for [Arcadary](https://github.com/arcadary/arcadary), a retro game launcher for Steam Machine and Steam Deck. The launcher works without it. When a device is online, the service gives it what cannot ship inside the app: catalog updates, compatibility records per device class and controller profiles.
 
-This repository is public and nothing is deployed yet. The Rails application implements the first public game-file lookup and two bundled-homebrew seeds; the other features below are still to be built.
+This repository is public and nothing is deployed yet. The Rails application implements the public game-file lookup and an offline importer for eight pinned No-Intro lists (29,336 distinct checksums), plus two optional bundled-homebrew seeds that need no DATs. See [Catalog data](README.md#catalog-data) for the fetch/import commands, identity rules and CC-BY-SA-4.0 catalog licence. The other features below are still to be built.
 
 ## What the service is
 

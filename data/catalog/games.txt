@@ -1,0 +1,39 @@
+# Game IDs: which releases in the game database are one game, and which plays first.
+#
+# Our own hand-curated data, compiled into src/Catalog/Data/gamedb.bin by build-db (see data/README.md).
+#
+#   <game ID> <title>
+#       <SHA-1 of a database row>   # <No-Intro name>
+#
+# A game line starts at the beginning of the line; each indented line under it is one release, most preferred
+# first. "#" starts a comment. A NES release has two rows in the database, the dump with its iNES header (.nes)
+# and without it (.unh): list both, headered first.
+
+# Nintendo's Tetris; Tengen's is another game with the same name.
+tetris Tetris
+    3026d28b63d94c921fe58364f8b0659d10b5a0ac  # Tetris (USA)
+    fd9079cb5e8479eb06d93c2ae5175bfce871746a  # Tetris (USA), headerless
+    ad03f42ea1cb0673f2cb1c23d6b579ad392647f0  # Tetris (Europe)
+    66883b9eddec933e36b6bff0479cefd2434ffb40  # Tetris (Europe), headerless
+
+tetris-tengen Tetris (Tengen)
+    ae18422396bad1619153f1b156688399a2022a61  # Tetris (USA) (Tengen)
+    e675d418256854070f76136602dfc7545f5171ae  # Tetris (USA) (Tengen), headerless
+
+# A port: Namco's NES and Game Boy releases are one game, the NES one first.
+pac-man Pac-Man
+    ef76cebddc57b7c96cfc95b55dcc712fd5934b2c  # Pac-Man (USA) (Namco)
+    92c3361b9e3b28a51fd30e7845c988a6d576ee65  # Pac-Man (USA) (Namco), headerless
+    a05f50d3571c0572eb0433474a99c966a67a2d1b  # Pac-Man (USA) [Game Boy]
+    ec0402f21653ef0cbe91e5e67d76e84125712124  # Pac-Man (Europe)
+    d1ea0bb3e919c5b2e5fe3a13d1cdab9849db473c  # Pac-Man (Europe), headerless
+    8d9fda32419ca7030ba15f67ff8f857c1a119916  # Pac-Man (Europe) [Game Boy]
+
+# A revision: Rev 1 plays before the first release.
+dr-mario Dr. Mario
+    0f18c2a5760be0647339b0e3cab9183af86fdd8c  # Dr. Mario (Japan, USA) (En) (Rev 1)
+    59b43881456c0720e9a35e391b11c4b2c55a8f91  # Dr. Mario (Japan, USA) (En) (Rev 1), headerless
+    d51bf5cabd06ffac94d3b72e6d9bbc0f014ecc9c  # Dr. Mario (Japan, USA) (En)
+    ff6459bc3af5743e3d303823999f33d74abdf1aa  # Dr. Mario (Japan, USA) (En), headerless
+    e87d760b1c3402011ec0263a890e55d1e063b592  # Dr. Mario (Europe)
+    a0939930d9655e7fd2c3fae69d558614f2d27480  # Dr. Mario (Europe), headerless

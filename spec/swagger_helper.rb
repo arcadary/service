@@ -20,7 +20,13 @@ RSpec.configure do |config|
       info: {
         title: 'Arcadary service API',
         version: 'v1',
-        description: 'Public, anonymous JSON API for the Arcadary launcher. Generated from the request specs in spec/requests; do not edit swagger/ by hand.'
+        description: <<~TEXT.strip
+          Public, anonymous JSON API for the Arcadary launcher. Generated from the request specs in spec/requests; do not edit swagger/ by hand.
+
+          Catalog data originates from [No-Intro](https://no-intro.org/), sourced through [libretro-database at f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029](https://github.com/libretro/libretro-database/tree/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/metadat/no-intro). Arcadary imports checksum metadata, groups releases into games, normalizes titles/regions/revisions and applies explicit launcher identity mappings. The entire service catalog, including project corrections, additions and later fields, is licensed under [CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/), as is the [upstream source at the pin](https://github.com/libretro/libretro-database/blob/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/LICENSE). Application code remains MIT.
+
+          The pinned NES DAT includes distinct headered .nes and unheadered .unh releases. A launcher hashing NES payload bytes without the iNES header sends the matching unheadered checksum. All eight lists are covered, including C64 tape metadata; catalog coverage does not imply launcher playback support. No game files or player filenames are received, stored or served.
+        TEXT
       },
       paths: {},
       servers: [
