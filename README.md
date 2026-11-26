@@ -19,6 +19,17 @@ Rails silences lookup requests before request-start logging, covering parameter,
 
 The specs check Rails logs only. Thruster, external CDN and deployment-proxy logging (including kamal-proxy) remains unverified until deployment and is not covered by these checks. Deployment must verify those logging policies separately.
 
+## Deployment
+
+Production is one Hetzner host behind Cloudflare, created by the infrastructure repository, and the service answers on `api.arcadary.org`. Kamal builds the image locally for amd64 and moves it to the host through its local registry, so no registry account is needed. fnox supplies the host's address (`DEPLOY_HOST`) and `SECRET_KEY_BASE`. The owner deploys, never an agent:
+
+```bash
+fnox exec -- bin/kamal setup    # the first time: installs Docker and kamal-proxy, then deploys
+fnox exec -- bin/kamal deploy   # every time after
+```
+
+Until kamal-proxy has its Let's Encrypt certificate, `https://api.arcadary.org` answers with Cloudflare's error 526. Keep Cloudflare's "Always Use HTTPS" off: the certificate's challenge arrives over plain HTTP.
+
 ## Licence
 
 MIT, see [LICENSE](LICENSE).
