@@ -21,7 +21,6 @@ class CatalogImportService
     @aliases = GameIdentity.all.index_by(&:key)
     @new_aliases = {}
     @assignments = {}
-    @curated = []
   end
 
   def import
@@ -57,7 +56,6 @@ class CatalogImportService
           raise IdentityConflict, "curated ID #{game.public_id} belongs to a fallback identity"
         end
         game ||= add_game(public_id: mapping[:public_id], title: mapping[:title])
-        @curated << game
         game.title = mapping[:title]
         game.catalog_curated = true
         @assignments[row[:sha1]] = game

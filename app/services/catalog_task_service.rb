@@ -12,7 +12,8 @@ class CatalogTaskService
         output.puts(JSON.generate(result.merge(system: system)))
       rescue CatalogDatService::InvalidDat, CatalogImportService::IdentityConflict, ActiveRecord::ActiveRecordError, SystemCallError => error
         failures << system
-        output.puts(JSON.generate(system: system, failed: error.message, games: { skipped: "whole system" }, releases: { skipped: "whole system" }))
+        counts = { created: 0, updated: 0, unchanged: 0, skipped: 0 }
+        output.puts(JSON.generate(system: system, failed: error.message, whole_system_skipped: true, games: counts, releases: counts))
       end
     end
     raise ImportFailed, "failed systems: #{failures.join(', ')}" if failures.any?

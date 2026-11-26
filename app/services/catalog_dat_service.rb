@@ -5,6 +5,8 @@ class CatalogDatService
 
   def self.parse(path:, system:)
     new(text: File.read(path, encoding: "UTF-8"), system: system).parse
+  rescue ArgumentError, EncodingError => error
+    raise InvalidDat, error.message
   end
 
   def initialize(text:, system:)
@@ -46,7 +48,8 @@ class CatalogDatService
     def token
       @scanner.skip(/\s+/)
       return if @scanner.eos?
-      return @scanner.getch if @scanner.peek(1).in?([ "(", ")" ])
+      return :open if @scanner.scan(/\(/)
+      return :close if @scanner.scan(/\)/)
 
       if @scanner.peek(1) == '"'
         quoted = @scanner.scan(/"(?:\\.|[^"\\])*"/m)
@@ -61,13 +64,13 @@ class CatalogDatService
     def pairs(nested: false)
       result = []
       while (key = token)
-        return result if key == ")" && nested
-        raise InvalidDat, "unexpected parenthesis" if key.in?([ "(", ")" ])
+        return result if key == :close && nested
+        raise InvalidDat, "unexpected parenthesis" if key.in?([ :open, :close ])
 
         value = token
-        raise InvalidDat, "missing value for #{key}" unless value && value != ")"
+        raise InvalidDat, "missing value for #{key}" unless value && value != :close
 
-        result << [ key, value == "(" ? pairs(nested: true) : value ]
+        result << [ key, value == :open ? pairs(nested: true) : value ]
       end
       raise InvalidDat, "unclosed block" if nested
 
