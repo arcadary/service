@@ -1,0 +1,159 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly REPOSITORY=arcadary/service
+readonly REQUIRED_CHECKS='["scan_ruby", "scan_js", "lint", "test"]'
+readonly LABEL=org.arcadary.service.auto-deploy
+readonly INTERVAL_SECONDS=300
+readonly STATE="$HOME/.local/state/arcadary-auto-deploy"
+readonly CHECKOUT="$STATE/service"
+readonly LOG="$HOME/Library/Logs/arcadary-auto-deploy.log"
+readonly PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+readonly DOMAIN="gui/$(id -u)"
+
+readonly REDACT_SECRETS='
+  BEGIN {
+    $| = 1;
+    %secrets = map { $_ => $ENV{$_} } grep { length($ENV{$_} // "") } qw(DEPLOY_HOST SECRET_KEY_BASE TUNNEL_TOKEN);
+  }
+  for my $name (keys %secrets) { s/\Q$secrets{$name}\E/<$name>/g }
+'
+
+say() {
+  printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"
+}
+
+notify() {
+  osascript -e 'on run argv' -e 'display notification (item 1 of argv) with title "Arcadary deploy"' -e 'end run' "$1" \
+    >/dev/null 2>&1 || true
+}
+
+recorded() {
+  [ "$(cat "$STATE/$1" 2>/dev/null)" = "$2" ]
+}
+
+record() {
+  printf '%s\n' "$2" > "$STATE/$1"
+}
+
+ci_result() {
+  gh api "repos/$REPOSITORY/commits/$1/check-runs?per_page=100" --jq "
+    .check_runs as \$runs
+    | if (\$runs | map(.status) | any(. != \"completed\")) then \"pending\"
+      elif (\$runs | map(.conclusion) | any(IN(\"success\", \"skipped\", \"neutral\") | not)) then \"failed\"
+      elif ($REQUIRED_CHECKS - (\$runs | map(.name)) | length) > 0 then \"pending\"
+      else \"passed\" end"
+}
+
+deploy() {
+  git -C "$CHECKOUT" checkout --quiet --force --detach "$1" &&
+    cd "$CHECKOUT" &&
+    mise trust --quiet mise.toml &&
+    { mise exec -- bundle check >/dev/null || mise exec -- bundle install --quiet; } &&
+    mise exec -- fnox exec -- bash -c 'set -o pipefail; bin/kamal deploy --lock-wait 2>&1 | perl -pe "$1"' \
+      redact "$REDACT_SECRETS"
+}
+
+run() {
+  mkdir -p "$STATE"
+  [ -d "$CHECKOUT/.git" ] || git clone --quiet "https://github.com/$REPOSITORY.git" "$CHECKOUT"
+  git -C "$CHECKOUT" fetch --quiet origin main 2>/dev/null || exit 0
+
+  local sha ci
+  sha=$(git -C "$CHECKOUT" rev-parse FETCH_HEAD)
+  if recorded deployed "$sha" || recorded failed "$sha"; then exit 0; fi
+
+  ci=$(ci_result "$sha") || { say "Could not read the CI result for $sha"; exit 0; }
+  case $ci in
+    pending)
+      exit 0
+      ;;
+    failed)
+      record failed "$sha"
+      say "CI failed at $sha: not deploying"
+      notify "CI failed on main at ${sha:0:7}: not deployed"
+      exit 0
+      ;;
+  esac
+
+  if ! docker info >/dev/null 2>&1; then
+    recorded waiting "$sha" || { record waiting "$sha"; say "Docker is not running: $sha waits for it"; }
+    exit 0
+  fi
+
+  say "Deploying $sha"
+  if deploy "$sha"; then
+    record deployed "$sha"
+    say "Deployed $sha"
+    notify "Deployed ${sha:0:7} to api.arcadary.org"
+  else
+    record failed "$sha"
+    say "Deploy of $sha failed"
+    notify "Deploy of ${sha:0:7} failed: see $LOG"
+  fi
+}
+
+tool_path() {
+  local tool
+  for tool in mise docker gh git; do
+    command -v "$tool" >/dev/null || { echo "$tool is not on PATH" >&2; exit 1; }
+    dirname "$(command -v "$tool")"
+  done
+  printf '%s\n' /usr/bin /bin /usr/sbin /sbin
+}
+
+plist() {
+  cat <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>$LABEL</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>$STATE/auto-deploy</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>$1</string>
+  </dict>
+  <key>StartInterval</key>
+  <integer>$INTERVAL_SECONDS</integer>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>$LOG</string>
+  <key>StandardErrorPath</key>
+  <string>$LOG</string>
+</dict>
+</plist>
+PLIST
+}
+
+install() {
+  local path
+  path=$(tool_path | awk '!seen[$0]++' | paste -sd: -)
+  mkdir -p "$STATE" "$(dirname "$PLIST")" "$(dirname "$LOG")"
+  cp "${BASH_SOURCE[0]}" "$STATE/auto-deploy"
+  launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
+  plist "$path" > "$PLIST"
+  launchctl bootstrap "$DOMAIN" "$PLIST"
+  echo "Checking main every $INTERVAL_SECONDS seconds; the log is $LOG"
+}
+
+uninstall() {
+  launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
+  rm -f "$PLIST"
+  rm -rf "$STATE"
+  echo "Automatic deploys stopped"
+}
+
+case ${1:-run} in
+  run) run ;;
+  retry) rm -f "$STATE/failed"; run ;;
+  install) install ;;
+  uninstall) uninstall ;;
+  *) echo "Usage: bin/auto-deploy [run | retry | install | uninstall]" >&2; exit 64 ;;
+esac
