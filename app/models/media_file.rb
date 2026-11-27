@@ -1,3 +1,5 @@
+# Catalog metadata for one emulator input, such as a cartridge or disk image,
+# identified by SHA-1. Several releases can use the same file.
 class MediaFile < ApplicationRecord
   has_many :release_media, dependent: :restrict_with_exception
   has_many :releases, through: :release_media
