@@ -25,12 +25,16 @@ RSpec.configure do |config|
 
           Catalog data originates from [No-Intro](https://no-intro.org/), sourced through [libretro-database at f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029](https://github.com/libretro/libretro-database/tree/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/metadat/no-intro). Arcadary imports checksum metadata, groups releases into games, normalizes titles/regions/revisions and applies explicit launcher identity mappings. The entire service catalog, including project corrections, additions and later fields, is licensed under [CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/), as is the [upstream source at the pin](https://github.com/libretro/libretro-database/blob/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/LICENSE). Application code remains MIT.
 
-          The pinned NES DAT includes distinct headered .nes and unheadered .unh releases. A launcher hashing NES payload bytes without the iNES header sends the matching unheadered checksum. All eight lists are covered, including C64 tape metadata; catalog coverage does not imply launcher playback support. No game files or player filenames are received, stored or served.
+          The pinned NES DAT includes distinct headered .nes and unheadered .unh releases. A launcher hashing NES payload bytes without the iNES header sends the matching unheadered checksum. All eight lists are covered, including C64 tape metadata; catalog coverage does not imply launcher playback support. Public reads receive no file bytes or player filenames. The opt-in validation write flow accepts unknown files into private storage and changes no catalog or verification status. No public file route exists.
         TEXT
       },
       paths: {},
       components: {
         schemas: {
+          ValidationReceived: {
+            type: :object, required: [ "status" ], additionalProperties: false,
+            properties: { status: { type: :string, enum: [ "received" ] } }
+          },
           Release: {
             type: :object, required: %w[release game media startup], additionalProperties: false,
             properties: {

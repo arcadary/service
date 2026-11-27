@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_26_210000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_27_210000) do
   create_table "game_identities", force: :cascade do |t|
     t.integer "game_id", null: false
     t.string "key", null: false
@@ -67,6 +67,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_26_210000) do
     t.index ["game_id"], name: "index_releases_on_game_id"
     t.index ["public_id"], name: "index_releases_on_public_id", unique: true
     t.index ["sha1"], name: "index_releases_on_sha1"
+  end
+
+  create_table "validation_submissions", force: :cascade do |t|
+    t.string "sha1", null: false
+    t.bigint "byte_size", null: false
+    t.string "system", null: false
+    t.datetime "completed_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["sha1"], name: "index_validation_submissions_on_sha1", unique: true
+    t.check_constraint "byte_size > 0 AND byte_size <= 134217728", name: "validation_submission_size"
   end
 
   add_foreign_key "game_identities", "games"
