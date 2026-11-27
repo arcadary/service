@@ -13,16 +13,16 @@ class McpCatalogToolsService
       MCP::Tool.define(name: name, description: "#{description} #{HELP}",
         input_schema: input_schema(name: name), output_schema: output_schema(name: name),
         annotations: { read_only_hint: true, destructive_hint: false, idempotent_hint: true, open_world_hint: false }) do |server_context: nil, **arguments|
-        McpCatalogToolsService.call(tool: name, **arguments)
+        McpCatalogToolsService.call(tool: name, arguments: arguments)
       end
     end
   end
 
-  def self.call(tool:, **arguments)
-    result = { "data" => McpCatalogReadService.call(tool: tool, **arguments) }
-    raise McpCatalogReadService::InvalidInput if JSON.generate(result).bytesize > MAX_RESULT_BYTES
+  def self.call(tool:, arguments:)
+    raise McpCatalogReadService::InvalidInput unless JSONSchemer.schema(input_schema(name: tool)).valid?(arguments.stringify_keys)
 
-    MCP::Tool::Response.new(structured_content: result)
+    result = { "data" => McpCatalogReadService.call(tool: tool, **arguments) }
+    response(result: result)
   rescue McpCatalogReadService::InvalidInput
     failure(code: "invalid_input")
   rescue McpCatalogReadService::NotFound
@@ -34,9 +34,17 @@ class McpCatalogToolsService
   def self.failure(code:, candidates: nil)
     error = { "code" => code }
     error["candidates"] = candidates if candidates
-    MCP::Tool::Response.new(error: true, structured_content: { "error" => error })
+    response(result: { "error" => error }, error: true)
   end
   private_class_method :failure
+
+  def self.response(result:, error: false)
+    serialized = JSON.generate(result)
+    return failure(code: "invalid_input") if serialized.bytesize > MAX_RESULT_BYTES
+
+    MCP::Tool::Response.new([ { type: "text", text: serialized } ], error: error, structured_content: result)
+  end
+  private_class_method :response
 
   def self.input_schema(name:)
     properties = {

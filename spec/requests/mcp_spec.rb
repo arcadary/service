@@ -66,7 +66,7 @@ RSpec.describe "Authenticated catalog MCP", type: :request do
 
   it "authenticates discovery, malformed bodies, unsupported methods and subtree misses before catalog access" do
     expect(McpTransportService).not_to receive(:call)
-    [ [ :post, "/mcp" ], [ :get, "/mcp/discovery" ], [ :patch, "/mcp" ], [ :post, "/mcp//unknown" ], [ :get, "/m%63p/discovery" ] ].each do |method, path|
+    [ [ :post, "/mcp" ], [ :get, "/mcp/discovery" ], [ :patch, "/mcp" ], [ :post, "/mcp//unknown" ], [ :get, "/m%63p/discovery" ], [ :get, "/mcp/%ff" ] ].each do |method, path|
       public_send(method, path, params: "malformed", headers: { "CONTENT_TYPE" => "application/json" })
       expect(response).to have_http_status(:unauthorized)
       expect(response.headers["Cache-Control"]).to eq("no-store")
@@ -95,6 +95,14 @@ RSpec.describe "Authenticated catalog MCP", type: :request do
     expect(negotiated.dig("result", "protocolVersion")).to eq("2025-11-25")
     rpc(method: "tools/list", extra_headers: { "MCP-Protocol-Version" => "2099-01-01", "Accept" => "application/json, text/event-stream" })
     expect(response).to have_http_status(:bad_request)
+    discovered = rpc(method: "server/discover", params: { _meta: {
+      "io.modelcontextprotocol/protocolVersion" => "2026-07-28",
+      "io.modelcontextprotocol/clientInfo" => { name: "synthetic-spec", version: "1" },
+      "io.modelcontextprotocol/clientCapabilities" => {}
+    } }, extra_headers: { "MCP-Protocol-Version" => "2026-07-28", "Mcp-Method" => "server/discover", "Accept" => "application/json, text/event-stream" })
+    expect(discovered.dig("result", "supportedVersions")).to include("2026-07-28")
+    expect(discovered.dig("result", "capabilities", "tools")).to eq({})
+    expect(response).to have_http_status(:ok)
   end
 
   it "distinguishes malformed protocol from domain failures" do
@@ -104,6 +112,7 @@ RSpec.describe "Authenticated catalog MCP", type: :request do
     expect(response.headers["Cache-Control"]).to eq("no-store")
     expect(tool(name: "get_release", sha1: "bad")).to include("isError" => true, "structuredContent" => { "error" => { "code" => "invalid_input" } })
     expect(tool(name: "get_game", id: "unknown").dig("structuredContent", "error", "code")).to eq("not_found")
+    expect(tool(name: "search_games", limit: 51).dig("structuredContent", "error", "code")).to eq("invalid_input")
   end
 
   it "bounds request bytes and nesting before catalog calls" do
@@ -144,6 +153,13 @@ RSpec.describe "Authenticated catalog MCP", type: :request do
     expect(response.body).not_to include("sensitive failure")
   end
 
+  it "returns a domain failure rather than partial data when a catalog result exceeds the byte bound" do
+    game = create(:game, title: "x" * McpCatalogToolsService::MAX_RESULT_BYTES)
+    result = tool(name: "get_game", id: game.public_id)
+    expect(result.dig("structuredContent", "error", "code")).to eq("invalid_input")
+    expect(response.body.bytesize).to be < 1000
+  end
+
   it "suppresses private bodies, checksums, audit notes and credentials before Rails request logging" do
     release = create(:release)
     output = StringIO.new
@@ -172,5 +188,6 @@ RSpec.describe "Authenticated catalog MCP", type: :request do
     expect(data).to include("id" => release.public_id, "authoring_revision" => 0, "source" => hash_including("source_system" => "source-system"))
     expect(data.dig("canonical", "startup")).to eq(ReleaseStartupService.for_release(release: release))
     expect(data.dig("canonical", "media", "items").sole).to include("sha1" => release.sha1, "position" => 1)
+    expect(JSON.parse(result.fetch("content").sole.fetch("text"))).to eq(result.fetch("structuredContent"))
   end
 end

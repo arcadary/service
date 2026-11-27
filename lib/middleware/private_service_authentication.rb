@@ -7,7 +7,7 @@ class PrivateServiceAuthentication
   end
 
   def call(env)
-    path = Rack::Utils.unescape_path(env.fetch("PATH_INFO")).gsub(%r{/+}, "/")
+    path = Rack::Utils.unescape_path(env.fetch("PATH_INFO")).b.gsub(%r{/+}, "/")
     return @app.call(env) unless @paths.call.any? { |pattern| pattern === path }
 
     Rails.logger.silence(Logger::UNKNOWN) do

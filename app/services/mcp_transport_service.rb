@@ -8,7 +8,7 @@ class McpTransportService
     return error(status: 403, code: "forbidden") unless allowed_request?(env: env)
 
     server = MCP::Server.new(name: "arcadary-catalog", version: "1", tools: McpCatalogToolsService.tools,
-      configuration: MCP::Configuration.new(validate_tool_call_results: true))
+      configuration: MCP::Configuration.new(validate_tool_call_arguments: false, validate_tool_call_results: true))
     MCP::Server::Transports::StreamableHTTPTransport.new(server,
       stateless: true, enable_json_response: true, serve_subscriptions_listen: false,
       max_request_bytes: MAX_REQUEST_BYTES, allowed_hosts: HOSTS, allowed_origins: ORIGINS).call(env)
