@@ -2,6 +2,15 @@
 
 require 'rails_helper'
 
+screenshot_schema = {
+  type: :object, required: %w[kind url width height licence], additionalProperties: false,
+  properties: {
+    kind: { type: :string, enum: %w[title gameplay] },
+    url: { type: :string, format: :uri, pattern: '^https://' },
+    width: { type: :integer, minimum: 1 }, height: { type: :integer, minimum: 1 }, licence: { type: :string }
+  }
+}
+
 RSpec.configure do |config|
   # Specify a root folder where Swagger JSON files are generated
   # NOTE: If you're using the rswag-api to serve API descriptions, you'll need
@@ -21,34 +30,43 @@ RSpec.configure do |config|
         title: 'Arcadary service API',
         version: 'v1',
         description: <<~TEXT.strip
-          Public, anonymous JSON API for the Arcadary launcher. Generated from the request specs in spec/requests; do not edit swagger/ by hand.
+          Public, anonymous reads for the Arcadary launcher; opt-in anonymous validation receipts and authenticated capture-device uploads. JSON routes end in .json; screenshot delivery ends in .png. Generated from the request specs in spec/requests; do not edit swagger/ by hand.
 
-          Catalog data originates from [No-Intro](https://no-intro.org/), sourced through [libretro-database at f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029](https://github.com/libretro/libretro-database/tree/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/metadat/no-intro). Arcadary imports checksum metadata, groups releases into games, normalizes titles/regions/revisions and applies explicit launcher identity mappings. The entire service catalog, including project corrections, additions and later fields, is licensed under [CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/), as is the [upstream source at the pin](https://github.com/libretro/libretro-database/blob/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/LICENSE). Application code remains MIT.
+          Catalog data originates from [No-Intro](https://no-intro.org/), sourced through [libretro-database at f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029](https://github.com/libretro/libretro-database/tree/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/metadat/no-intro). Arcadary imports checksum metadata, groups releases into games, normalizes titles/regions/revisions and applies explicit launcher identity mappings. The entire service catalog, including project corrections, additions and later metadata fields, is licensed under [CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/), as is the [upstream source at the pin](https://github.com/libretro/libretro-database/blob/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/LICENSE). Screenshot images are excluded: their own licence applies. Application code remains MIT.
 
           The pinned NES DAT includes distinct headered .nes and unheadered .unh releases. A launcher hashing NES payload bytes without the iNES header sends the matching unheadered checksum. All eight lists are covered, including C64 tape metadata; catalog coverage does not imply launcher playback support. Public reads receive no file bytes or player filenames. The opt-in validation write flow accepts unknown files into private storage and changes no catalog or verification status. No public file route exists.
+
+          Release screenshots are ordered title then gameplay, empty when absent. Embedded game.screenshot is the picture from the lexicographically smallest stable release.id among that game's releases with screenshots, choosing gameplay then title, or null. This ordering does not recommend a release for playback. Each image exposes exactly kind, url, width, height and licence; licence is an empty string when no image licence is granted. Uploading grants no new rights. URLs use SCREENSHOT_PUBLIC_BASE_URL plus /v1/screenshots/{sha256}.png, with SHA-256 measured from the stored PNG, without signed/expiring parameters. Screenshot changes invalidate release and media validators, including sibling releases when the selected game picture changes.
+
+          Image credits keyed by game.id: ucity — µCity graphics by AntonioND/SkyLyrac (Antonio Niño Díaz), [CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/), [upstream v1.3 notice](https://github.com/AntonioND/ucity/blob/v1.3/readme.rst#license). tobu-tobu-girl — Tobu Tobu Girl assets by Tangram Games, [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/), [upstream notice](https://github.com/SimonLarsen/tobutobugirl/blob/048a22c2d7ebbe25811322e8692803fa86bb643a/README.md#license). Arcadary re-encodes captures as pixel-only PNGs, removing metadata. Launchers can attribute using game.id and the image's public licence value together with these credits.
+
+          Image URLs identify releases; the service and CDN see callers' IP addresses. Reads are anonymous, not private. Uploads and authentication responses are never shared-cacheable. Takedown requests: takedown@arcadary.org. Origin removal cannot erase cached copies. Before public launch the deployment owner must verify CDN purging, delivery-layer access-log suppression, and that the alias accepts mail and forwards to a monitored inbox.
         TEXT
       },
       paths: {},
       components: {
+        securitySchemes: { capture_token: { type: :http, scheme: :bearer } },
         schemas: {
           ValidationReceived: {
             type: :object, required: [ "status" ], additionalProperties: false,
             properties: { status: { type: :string, enum: [ "received" ] } }
           },
+          Screenshot: screenshot_schema,
           Release: {
             type: :object, required: %w[release game media startup], additionalProperties: false,
             properties: {
               release: {
-                type: :object, required: %w[id sha1 system region revision], additionalProperties: false,
+                type: :object, required: %w[id sha1 system region revision screenshots], additionalProperties: false,
                 properties: {
                   id: { type: :string }, sha1: { type: :string, pattern: "^[0-9a-f]{40}$" },
                   system: { type: :string, enum: %w[nes snes gb gbc megadrive pcengine atari2600 c64] },
-                  region: { type: :string, nullable: true }, revision: { type: :string, nullable: true }
+                  region: { type: :string, nullable: true }, revision: { type: :string, nullable: true },
+                  screenshots: { type: :array, items: { "$ref" => "#/components/schemas/Screenshot" } }
                 }
               },
               game: {
-                type: :object, required: %w[id title], additionalProperties: false,
-                properties: { id: { type: :string }, title: { type: :string } }
+                type: :object, required: %w[id title screenshot], additionalProperties: false,
+                properties: { id: { type: :string }, title: { type: :string }, screenshot: screenshot_schema.merge(nullable: true) }
               },
               media: {
                 type: :array, minItems: 1,

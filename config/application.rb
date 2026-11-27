@@ -20,7 +20,9 @@ module ArcadaryService
     config.middleware.insert_before 0, ValidationReceipts
 
     config.middleware.insert_before Rails::Rack::Logger, Rails::Rack::SilenceRequest,
-      path: %r{\A/+v1/+(lookup|releases|media)/+}
+      path: %r{\A/+v1/+(lookup|releases|media|screenshots)/+}
+
+    config.active_storage.draw_routes = false
 
     # Configuration for the application, engines, and railties goes here.
     #

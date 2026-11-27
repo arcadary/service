@@ -52,7 +52,11 @@ env:
     - SECRET_KEY_BASE
     - VALIDATION_REVIEWER_USERNAME
     - VALIDATION_REVIEWER_PASSWORD
+<% %w[R2_BUCKET R2_ENDPOINT R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY SCREENSHOT_CAPTURE_TOKEN].select { |name| ENV[name].present? }.each do |name| %>
+    - <%= name %>
+<% end %>
   clear:
+    SCREENSHOT_PUBLIC_BASE_URL: <%= ENV.fetch("SCREENSHOT_PUBLIC_BASE_URL", "").to_json %>
     # Enable only after the maintainer completes the upload deployment checks in README.md.
     # VALIDATION_UPLOADS_ENABLED: "true"
     # VALIDATION_STORAGE_PATH: /rails/storage/validations

@@ -9,10 +9,12 @@ The Rails 8.1 application behind [Arcadary](https://github.com/arcadary/arcadary
 - `GET /v1/lookup/{sha1}.json`: a known checksum answers `301` to its resource, with `Cache-Control: public` for a day; an unknown one answers `404`. The target is `GET /v1/releases/{sha1}.json` (a release, its game, ordered media and validated startup), or `GET /v1/media/{sha1}.json` when the file is shared by several releases; both are cached for 300 seconds with ETags. See [Ordered media and startup](README.md#ordered-media-and-startup). The `.json` suffix is required. Errors are JSON with `no-store`. `/api-docs` documents the contract.
 - An offline importer for eight pinned No-Intro lists (29,336 distinct checksums) and two bundled homebrew seeds that need no DATs. Commands, identity rules and the CC-BY-SA-4.0 catalog licence: [Catalog data](README.md#catalog-data).
 - Anonymous, cookie-free `POST /v1/validations.json` admission and raw `PUT /v1/validations/{sha1}/file.json` receipt into private host storage, separately from releases. Every response is `no-store`. Production defaults off; receipt needs both reviewer credentials and a valid private storage path. Reviewer access/downloads follow in #27, released together through `milestone/validation-requests`. See [Validation receipts](README.md#validation-receipts).
+- The owner's capture device uploads title/gameplay PNGs per release with a bearer token. The service re-encodes pixels, stores them privately in R2 and serves content-addressed PNG URLs through the Rails API. Screenshots carry their own image licence; the catalog licence excludes images. See [Screenshots](README.md#screenshots).
 
 ## Rules
 
 - **Game files.** Never publicly serve, link to or describe where to get a game file. Identify files by SHA-1 only; never accept a file name from a player's device. The only file-byte exception is the opt-in validation flow: receipt and private storage on the Rails host, downloads only for authenticated reviewers, no public route/link, preview, execution, unpacking or interpretation. Staging is never downloadable. Receipt/download changes no verification status: Verified requires a named reviewer who owns that exact file and has played it. Retention/takedown remain undecided; legal review is deferred.
+- **Screenshot images only.** Title and gameplay screenshots from the capture device are permitted. No clips, box art or manuals. An upload grants no new rights; use the recorded image licence and honour takedown requests at `takedown@arcadary.org`.
 - **Public reads are anonymous and caller-independent.** No account, cookie, session or personalised response on any public read: the same URL returns the same bytes, so a CDN can cache it. Comments, the logging policy and documents never claim reads are private: a read by checksum shows the service and the CDN which file a household has, with its IP address.
 - **Authenticated routes** (reviewer pages, admin tools) send `Cache-Control: no-store` on every response, errors included, and are never covered by a CDN cache rule.
 - **Opt-in writes** are separate from anonymous cacheable reads: receipt admits no known release/media checksum and accepts no filename or caller identifier. Keep `/v1/validations` and `/review/validations` families out of shared caches/Cloudflare rules, including errors and path variants. Receipt gates and silencing run in Rack before Rails parsing/logging; see [middleware guidance](.github/instructions/middleware.instructions.md).
@@ -62,6 +64,8 @@ These are the owner's technical choices. Do not replace them with something else
 
 Tools are managed with [mise](https://mise.jdx.dev): `mise.toml` pins Ruby 3.4.13 and installs fnox. `.ruby-version` and the Dockerfile's `RUBY_VERSION` name the same Ruby for GitHub Actions and the image; change all three together.
 
+Screenshot decoding requires the native libvips library on the normal library search path. On macOS, install it with `brew install vips` before setup or checks. GitHub CI and the Docker image already install libvips.
+
 ```bash
 mise install       # Ruby and fnox, once
 mise run setup     # installs gems and prepares the SQLite databases in storage/
@@ -90,7 +94,7 @@ Work runs through [ub-agents](https://agents.uberblick.ai): `ub-agents.yaml` hol
 
 ## Where things are
 
-- `app/`, `config/`, `db/`, `spec/`: the Rails application, catalog models, seeds and specs.
+- `app/`, `config/`, `db/`, `spec/`: the Rails application, catalog and screenshot models, seeds and specs.
 - `lib/middleware/validation_receipts.rb`: receipt transport/gates, before Rails parsing and logging; services hold persistence, admissions and file integrity.
 - `storage/`: SQLite databases, git-ignored.
 - `swagger/v1/swagger.yaml`: the OpenAPI document, generated from the request specs; never edited by hand.

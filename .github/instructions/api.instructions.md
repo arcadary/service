@@ -4,7 +4,7 @@ applyTo: "app/controllers/v*/**,config/routes.rb,swagger/**"
 
 # API design
 
-- Routes are versioned (`/v1/...`) and end in `.json`. A change to a field's meaning or type is a new version; adding an optional field is not.
+- Routes are versioned (`/v1/...`). JSON routes end in `.json`; content-addressed screenshot delivery ends in `.png`. A change to a field's meaning or type is a new version; adding an optional field is not.
 - Read endpoints are `GET`, anonymous and cacheable: the same URL returns the same bytes for every caller.
 - This public-read rule does not cover writes. Validation admission/upload are anonymous, cookie-free and always `no-store`; reviewer routes are authenticated and always `no-store`. Exclude both validation path families from shared caches.
 - **One entry point per question.** Clients ask `GET /v1/lookup/{sha1}.json` what a file is and follow the `301` to its resource (`/v1/releases/{sha1}.json`, later other kinds). Each kind of resource has its own URL and controller; the lookup only decides where to send the client. A redirect carries a `max-age` (a day), never an unbounded 301, so a wrong answer can be corrected; unknown checksums answer `404` with `no-store`, so a file added later shows up at once.

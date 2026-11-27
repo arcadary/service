@@ -6,8 +6,8 @@ RSpec.describe "Release", type: :request do
   let(:url) { "/v1/releases/#{release.sha1}.json" }
   let(:expected_payload) do
     {
-      "release" => { "id" => release.public_id, "sha1" => release.sha1, "system" => "c64", "region" => nil, "revision" => nil },
-      "game" => { "id" => "lookup-game", "title" => "A game" },
+      "release" => { "id" => release.public_id, "sha1" => release.sha1, "system" => "c64", "region" => nil, "revision" => nil, "screenshots" => [] },
+      "game" => { "id" => "lookup-game", "title" => "A game", "screenshot" => nil },
       "media" => [ { "key" => "main", "position" => 1, "label" => nil, "role" => "game", "sha1" => release.sha1, "size" => nil, "format" => nil } ],
       "startup" => { "schema" => 1, "boot" => "main", "drives" => { "8" => "main" }, "revision" => "20ac504497948774502ee889d50c8b20f4dcb493ee0a66f064e818b91cb8c9ff" }
     }

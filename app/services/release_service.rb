@@ -13,7 +13,9 @@ class ReleaseService
     ids = ReleaseMedium.joins(:media_file).where(media_files: { sha1: checksum }).distinct.pluck(:release_id)
     raise Release::ReleaseNotFound if ids.empty?
 
-    Release.where(id: ids).includes(:game, release_media: :media_file).order(:public_id).to_a
+    releases = Release.where(id: ids).includes(:screenshots, { game: { releases: :screenshots } }, release_media: :media_file).order(:public_id).to_a
+    releases.each { |release| release.game.selected_screenshot = ScreenshotService.selected_for(game: release.game) }
+    releases
   end
 
   def self.resource_for(sha1:)
