@@ -1,3 +1,6 @@
+# A specific edition of a game for one system. Ordered ReleaseMedium rows attach
+# its MediaFile records. A multi-disk run depends on the relevant disks, their
+# order, and the release's startup configuration.
 class Release < ApplicationRecord
   class InvalidSha1 < StandardError; end
   class ReleaseNotFound < StandardError; end
