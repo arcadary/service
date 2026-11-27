@@ -17,13 +17,16 @@ class CatalogImportService
     @rows, @skipped, @mappings = rows, skipped, mappings
     @games = Game.all.index_by(&:public_id)
     @games_by_id = @games.values.index_by(&:id)
-    @releases = Release.all.index_by(&:sha1)
+    @existing_releases = Release.includes(release_media: :media_file).to_a
+    @releases = @existing_releases.index_by(&:sha1)
+    @media_files = MediaFile.all.index_by(&:sha1)
     @aliases = GameIdentity.all.index_by(&:key)
     @new_aliases = {}
     @assignments = {}
   end
 
   def import
+    refuse_set_imports
     assign_curated
     assign_fallback
     prepare_changes
@@ -32,11 +35,24 @@ class CatalogImportService
       write_games
       write_aliases
       write_releases
+      write_media
     end
     @counts.merge(transaction_seconds: Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, skipped_reasons: @skipped[:reasons])
   end
 
   private
+    def refuse_set_imports
+      checksums = @rows.map { |row| row[:sha1] }.to_set
+      memberships = ReleaseMedium.group(:media_file_id).count
+      @existing_releases.each do |release|
+        next unless release.release_media.any? { |medium| checksums.include?(medium.media_file.sha1) }
+
+        if release.release_media.size != 1 || memberships.fetch(release.release_media.first.media_file_id) > 1
+          raise IdentityConflict, "importing media already in a multi-disk or shared release is not supported"
+        end
+      end
+    end
+
     def assign_curated
       @rows.each do |row|
         existing = @releases[row[:sha1]]
@@ -122,6 +138,12 @@ class CatalogImportService
       @changed_titles = @affected_games.select { |game| game.persisted? && game.title_changed? }.map(&:id)
       @release_changes = @rows.map do |row|
         release = @releases[row[:sha1]] || Release.new(sha1: row[:sha1])
+        media_file = @media_files[row[:sha1]] || MediaFile.new(sha1: row[:sha1])
+        media_file.assign_attributes(row.slice(:size, :format, :crc32, :md5))
+        media_file.validate!
+        release.updated_at = Time.current if release.persisted? && media_file.changed?
+        @media_files[row[:sha1]] = media_file
+        release.release_media.build(key: "main", position: 1, role: "game", media_file: media_file) if release.new_record?
         release.assign_attributes(row.slice(:system, :region, :revision, :source_title))
         release.game = @assignments.fetch(row[:sha1])
         release.validate!
@@ -161,8 +183,23 @@ class CatalogImportService
       @release_changes.select { |release| release.new_record? || release.changed? }.each_slice(500) do |releases|
         Release.upsert_all(releases.map do |release|
           release.attributes.except("id").merge("game_id" => @game_ids.fetch(release.game.public_id), "created_at" => release.created_at || now, "updated_at" => now)
-        end, unique_by: :sha1)
+        end, unique_by: :public_id)
       end
       Release.where(game_id: @changed_titles).touch_all(time: now) if @changed_titles.any?
+    end
+
+    def write_media
+      now = Time.current
+      changed = @rows.filter_map { |row| @media_files.fetch(row[:sha1]) }.select { |file| file.new_record? || file.changed? }
+      changed.each_slice(500) do |files|
+        MediaFile.upsert_all(files.map { |file| file.attributes.except("id").merge("created_at" => file.created_at || now, "updated_at" => now) }, unique_by: :sha1)
+      end
+      media_ids = MediaFile.where(sha1: @rows.map { |row| row[:sha1] }).pluck(:sha1, :id).to_h
+      releases = Release.where(public_id: @release_changes.map(&:public_id)).pluck(:sha1, :id).to_h
+      existing = ReleaseMedium.where(release_id: releases.values).pluck(:release_id).to_set
+      @rows.reject { |row| existing.include?(releases.fetch(row[:sha1])) }.each_slice(500) do |rows|
+        ReleaseMedium.insert_all!(rows.map { |row| { release_id: releases.fetch(row[:sha1]), media_file_id: media_ids.fetch(row[:sha1]), key: "main", position: 1, role: "game", created_at: now, updated_at: now } })
+      end
+      Release.joins(:media_files).where(media_files: { sha1: changed.map(&:sha1) }).touch_all(time: now) if changed.any?
     end
 end

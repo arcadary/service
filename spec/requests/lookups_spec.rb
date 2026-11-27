@@ -7,7 +7,7 @@ RSpec.describe "Lookup", type: :request do
   path "/v1/lookup/{sha1}.json" do
     get "Find what a game file is, by its SHA-1" do
       produces "application/json"
-      description "Anonymous lookup. A known checksum answers 301 to its resource (today always a release), cached publicly for a day; follow the Location header. Unknown and malformed checksums are never stored."
+      description "Anonymous lookup. A checksum in one release answers 301 to /v1/releases/{sha1}.json; a file shared by several releases redirects to /v1/media/{sha1}.json. Redirects are public for a day. The service never infers a set from one checksum or from file names. Unknown and malformed checksums are never stored."
       parameter name: :sha1, in: :path, required: true,
         schema: { type: :string, pattern: "^[0-9a-fA-F]{40}$" }
 
@@ -16,6 +16,11 @@ RSpec.describe "Lookup", type: :request do
         header "Cache-Control", schema: { type: :string, enum: [ "max-age=86400, public" ] }
         let(:sha1) { release.sha1.upcase }
         run_test! { expect(response.location).to end_with("/v1/releases/#{release.sha1}.json") }
+
+        context "shared disk" do
+          before { create(:release_medium, media_file: release.media_files.sole) }
+          run_test! { expect(response.location).to end_with("/v1/media/#{release.sha1}.json") }
+        end
       end
 
       response "400", "malformed SHA-1" do

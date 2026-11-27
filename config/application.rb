@@ -17,7 +17,7 @@ module ArcadaryService
     config.autoload_lib(ignore: %w[assets tasks])
 
     config.middleware.insert_before Rails::Rack::Logger, Rails::Rack::SilenceRequest,
-      path: %r{\A/+v1/+(lookup|releases)/+}
+      path: %r{\A/+v1/+(lookup|releases|media)/+}
 
     # Configuration for the application, engines, and railties goes here.
     #

@@ -17,7 +17,7 @@ RSpec.describe "Imported catalog lookups", type: :request do
     response.headers.fetch("ETag")
   end
 
-  it "uses one indexed existence read for populated lookup and follows to the same release/game shape" do
+  it "uses one indexed membership read for populated lookup and follows to the same release/game fields" do
     import_entries(entries: (1..150).map { |number| { title: "Game #{number} (World)", sha1: checksum(number) } })
     queries = []
     subscriber = ->(*args) { payload = args.last; queries << payload[:sql] if payload[:sql].match?(/\ASELECT/i) }
@@ -25,13 +25,14 @@ RSpec.describe "Imported catalog lookups", type: :request do
       get "/v1/lookup/#{checksum(90)}.json", headers: { "User-Agent" => "Arcadary/1.0" }
     end
     expect(queries.size).to eq(1)
-    expect(queries.sole).to match(/SELECT 1 AS one FROM "releases" WHERE "releases"\."sha1" = .* LIMIT/)
-    plan = Release.connection.execute("EXPLAIN QUERY PLAN SELECT 1 FROM releases WHERE sha1 = '#{checksum(90)}' LIMIT 1")
-    expect(plan.first.fetch("detail")).to include("index_releases_on_sha1")
+    expect(queries.sole).to include('"release_media" INNER JOIN "media_files"')
+    plan = Release.connection.execute("EXPLAIN QUERY PLAN SELECT DISTINCT release_id FROM release_media JOIN media_files ON media_files.id = release_media.media_file_id WHERE media_files.sha1 = '#{checksum(90)}' LIMIT 2")
+    expect(plan.map { |row| row.fetch("detail") }.join(" ")).to include("index_media_files_on_sha1", "index_release_media_on_media_file_id")
     expect(response).to have_http_status(:moved_permanently)
     expect(response.headers["Cache-Control"]).to eq("max-age=86400, public")
     follow_redirect!
-    expect(response.parsed_body).to eq("game" => { "id" => Release.find_by!(sha1: checksum(90)).game.public_id, "title" => "Game 90" }, "release" => { "sha1" => checksum(90), "system" => "nes", "region" => "World", "revision" => nil })
+    release = Release.find_by!(sha1: checksum(90))
+    expect(response.parsed_body).to include("game" => { "id" => release.game.public_id, "title" => "Game 90" }, "release" => { "id" => release.public_id, "sha1" => checksum(90), "system" => "nes", "region" => "World", "revision" => nil })
     expect(response.headers["Cache-Control"]).to eq("max-age=300, public")
     expect(response.headers["Set-Cookie"]).to be_nil
   end

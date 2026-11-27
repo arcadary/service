@@ -2,11 +2,32 @@ class ReleaseService
   SHA1 = /\A[0-9a-fA-F]{40}\z/
 
   def self.find_by(sha1:)
-    Release.includes(:game).find_by(sha1: normalize(sha1)) or raise Release::ReleaseNotFound
+    releases = containing(sha1: sha1)
+    raise Release::AmbiguousRelease if releases.size > 1
+
+    releases.first
   end
 
-  def self.exists?(sha1:)
-    Release.exists?(sha1: normalize(sha1))
+  def self.containing(sha1:)
+    checksum = normalize(sha1)
+    ids = ReleaseMedium.joins(:media_file).where(media_files: { sha1: checksum }).distinct.pluck(:release_id)
+    raise Release::ReleaseNotFound if ids.empty?
+
+    Release.where(id: ids).includes(:game, release_media: :media_file).order(:public_id).to_a
+  end
+
+  def self.resource_for(sha1:)
+    checksum = normalize(sha1)
+    ids = ReleaseMedium.joins(:media_file).where(media_files: { sha1: checksum }).distinct.limit(2).pluck(:release_id)
+    raise Release::ReleaseNotFound if ids.empty?
+
+    { sha1: checksum, resource: ids.size == 1 ? :release : :media }
+  end
+
+  def self.synchronize_checksum(release_id:)
+    release = Release.includes(release_media: :media_file).find(release_id)
+    checksum = release.release_media.first&.media_file&.sha1
+    release.update!(sha1: checksum) if checksum && checksum != release.sha1
   end
 
   def self.normalize(sha1)
