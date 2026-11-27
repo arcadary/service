@@ -43,7 +43,11 @@ registry:
 env:
   secret:
     - SECRET_KEY_BASE
+<% %w[R2_BUCKET R2_ENDPOINT R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY SCREENSHOT_CAPTURE_TOKEN].select { |name| ENV[name].present? }.each do |name| %>
+    - <%= name %>
+<% end %>
   clear:
+    SCREENSHOT_PUBLIC_BASE_URL: <%= ENV.fetch("SCREENSHOT_PUBLIC_BASE_URL", "").to_json %>
     # Run the Solid Queue Supervisor inside the web server's Puma process to do jobs.
     # When you start using multiple servers, you should split out job processing to a dedicated machine.
     SOLID_QUEUE_IN_PUMA: true

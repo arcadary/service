@@ -4,11 +4,17 @@ info:
   title: Arcadary service API
   version: v1
   description: |-
-    Public, anonymous JSON API for the Arcadary launcher. Generated from the request specs in spec/requests; do not edit swagger/ by hand.
+    Public, anonymous reads for the Arcadary launcher; authenticated capture-device uploads. JSON routes end in .json; screenshot delivery ends in .png. Generated from the request specs in spec/requests; do not edit swagger/ by hand.
 
-    Catalog data originates from [No-Intro](https://no-intro.org/), sourced through [libretro-database at f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029](https://github.com/libretro/libretro-database/tree/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/metadat/no-intro). Arcadary imports checksum metadata, groups releases into games, normalizes titles/regions/revisions and applies explicit launcher identity mappings. The entire service catalog, including project corrections, additions and later fields, is licensed under [CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/), as is the [upstream source at the pin](https://github.com/libretro/libretro-database/blob/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/LICENSE). Application code remains MIT.
+    Catalog data originates from [No-Intro](https://no-intro.org/), sourced through [libretro-database at f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029](https://github.com/libretro/libretro-database/tree/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/metadat/no-intro). Arcadary imports checksum metadata, groups releases into games, normalizes titles/regions/revisions and applies explicit launcher identity mappings. The entire service catalog, including project corrections, additions and later metadata fields, is licensed under [CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/), as is the [upstream source at the pin](https://github.com/libretro/libretro-database/blob/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/LICENSE). Screenshot images are excluded: their own licence applies. Application code remains MIT.
 
     The pinned NES DAT includes distinct headered .nes and unheadered .unh releases. A launcher hashing NES payload bytes without the iNES header sends the matching unheadered checksum. All eight lists are covered, including C64 tape metadata; catalog coverage does not imply launcher playback support. No game files or player filenames are received, stored or served.
+
+    Release screenshots are ordered title then gameplay, empty when absent. Embedded game.screenshot is the picture from the lexicographically smallest stable release.id among that game's releases with screenshots, choosing gameplay then title, or null. This ordering does not recommend a release for playback. Each image exposes exactly kind, url, width, height and licence; licence is an empty string when no image licence is granted. Uploading grants no new rights. URLs use SCREENSHOT_PUBLIC_BASE_URL plus /v1/screenshots/{sha256}.png, with SHA-256 measured from the stored PNG, without signed/expiring parameters. Screenshot changes invalidate release and media validators, including sibling releases when the selected game picture changes.
+
+    Image credits keyed by game.id: ucity — µCity graphics by AntonioND/SkyLyrac (Antonio Niño Díaz), [CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/), [upstream v1.3 notice](https://github.com/AntonioND/ucity/blob/v1.3/readme.rst#license). tobu-tobu-girl — Tobu Tobu Girl assets by Tangram Games, [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/), [upstream notice](https://github.com/SimonLarsen/tobutobugirl/blob/048a22c2d7ebbe25811322e8692803fa86bb643a/README.md#license). Arcadary re-encodes captures as pixel-only PNGs, removing metadata. Launchers can attribute using game.id and the image's public licence value together with these credits.
+
+    Image URLs identify releases; the service and CDN see callers' IP addresses. Reads are anonymous, not private. Uploads and authentication responses are never shared-cacheable. Takedown requests: takedown@arcadary.org. Origin removal cannot erase cached copies. Before public launch the deployment owner must verify CDN purging, delivery-layer access-log suppression, and that the alias accepts mail and forwards to a monitored inbox.
 paths:
   "/v1/lookup/{sha1}.json":
     get:
@@ -251,8 +257,289 @@ paths:
                     type: string
                     enum:
                     - ambiguous_release
+  "/v1/releases/{sha1}/screenshots/{kind}.json":
+    put:
+      summary: Publish a capture-device screenshot
+      security:
+      - capture_token: []
+      parameters:
+      - name: sha1
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: "^[0-9a-fA-F]{40}$"
+      - name: kind
+        in: path
+        required: true
+        schema:
+          type: string
+          enum:
+          - title
+          - gameplay
+      description: |
+        Raw image/png body, authenticated before decoding or storing. A secondary-disk checksum targets its containing release; shared checksums are ambiguous. Success replaces only this release/kind; failure preserves its previous image. The service copies game screenshot_licence, never a client-supplied licence. Upload grants no rights. All responses are no-store.
+
+        Maximum input: 8 MiB (8,388,608 bytes). PNG only; malformed and animated PNGs are rejected. Dimensions are positive and checked before decoding, followed by full decoding and pixel-only PNG re-encoding. Fixed capture ceilings, independent of crop, overscan, borders or interlace:
+
+        | System | Maximum width | Maximum height |
+        | --- | ---: | ---: |
+        | nes | 1024 | 960 |
+        | snes | 2048 | 1912 |
+        | gb | 640 | 576 |
+        | gbc | 640 | 576 |
+        | megadrive | 1280 | 1920 |
+        | pcengine | 2048 | 960 |
+        | atari2600 | 640 | 768 |
+        | c64 | 1536 | 1088 |
+
+        Unset/empty SCREENSHOT_CAPTURE_TOKEN or incomplete production R2/public-origin configuration disables uploads. URLs use the configured HTTPS origin, never request headers, R2 URLs or signed URLs.
+      responses:
+        '200':
+          description: screenshot published
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Screenshot"
+        '400':
+          description: malformed SHA-1
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - error
+                additionalProperties: false
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - invalid_sha1
+        '401':
+          description: missing or wrong capture token
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - error
+                additionalProperties: false
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - unauthorized
+        '404':
+          description: unknown release
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - error
+                additionalProperties: false
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - release_not_found
+        '409':
+          description: checksum shared by releases
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - error
+                additionalProperties: false
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - ambiguous_release
+        '413':
+          description: input exceeds 8 MiB
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - error
+                additionalProperties: false
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - screenshot_too_large
+        '422':
+          description: invalid kind, PNG, animation or dimensions
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - error
+                additionalProperties: false
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - invalid_screenshot
+        '503':
+          description: uploads disabled or storage unavailable
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - error
+                additionalProperties: false
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - uploads_disabled
+                    - storage_unavailable
+      requestBody:
+        content:
+          image/png:
+            schema:
+              type: string
+              format: binary
+        required: true
+  "/v1/screenshots/{sha256}.png":
+    get:
+      summary: Read a published screenshot
+      description: Anonymous Rails-origin PNG delivery. Content-addressed URLs cache
+        publicly for 31,536,000 seconds. A missing or unreferenced image returns JSON
+        with no-store. Origin removal cannot erase CDN or client cached copies.
+      parameters:
+      - name: sha256
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+      responses:
+        '200':
+          description: stored PNG
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+          headers:
+            Content-Type:
+              schema:
+                type: string
+                enum:
+                - image/png
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - max-age=31536000, public
+        '404':
+          description: missing or unreferenced image
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - error
+                additionalProperties: false
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - screenshot_not_found
 components:
+  securitySchemes:
+    capture_token:
+      type: http
+      scheme: bearer
   schemas:
+    Screenshot:
+      type: object
+      required:
+      - kind
+      - url
+      - width
+      - height
+      - licence
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          enum:
+          - title
+          - gameplay
+        url:
+          type: string
+          format: uri
+          pattern: "^https://"
+        width:
+          type: integer
+          minimum: 1
+        height:
+          type: integer
+          minimum: 1
+        licence:
+          type: string
     Release:
       type: object
       required:
@@ -270,6 +557,7 @@ components:
           - system
           - region
           - revision
+          - screenshots
           additionalProperties: false
           properties:
             id:
@@ -294,17 +582,50 @@ components:
             revision:
               type: string
               nullable: true
+            screenshots:
+              type: array
+              items:
+                "$ref": "#/components/schemas/Screenshot"
         game:
           type: object
           required:
           - id
           - title
+          - screenshot
           additionalProperties: false
           properties:
             id:
               type: string
             title:
               type: string
+            screenshot:
+              type: object
+              required:
+              - kind
+              - url
+              - width
+              - height
+              - licence
+              additionalProperties: false
+              properties:
+                kind:
+                  type: string
+                  enum:
+                  - title
+                  - gameplay
+                url:
+                  type: string
+                  format: uri
+                  pattern: "^https://"
+                width:
+                  type: integer
+                  minimum: 1
+                height:
+                  type: integer
+                  minimum: 1
+                licence:
+                  type: string
+              nullable: true
         media:
           type: array
           minItems: 1

@@ -3,7 +3,9 @@ Rails.application.routes.draw do
     get "lookup/:sha1.json", to: "lookups#show", as: :lookup
     get "releases/:sha1.json", to: "releases#show", as: :release
     get "media/:sha1.json", to: "media#show", as: :media
+    put "releases/:sha1/screenshots/:kind.json", to: "screenshot_uploads#update", constraints: { kind: /[^\/]+/ }
   end
+  get "v1/screenshots/:sha256.png", to: "v1/screenshots#show", format: false, constraints: { sha256: /[^\/]+/ }
 
   mount Rswag::Ui::Engine => "/api-docs"
   mount Rswag::Api::Engine => "/api-docs"

@@ -1,7 +1,7 @@
 Arcadary service catalog data
 
 The entire service catalog, including imported metadata, project corrections,
-additions and later fields, is licensed under Creative Commons Attribution-
+additions and later metadata fields, is licensed under Creative Commons Attribution-
 ShareAlike 4.0 International (CC-BY-SA-4.0):
 https://creativecommons.org/licenses/by-sa/4.0/
 Legal code: https://creativecommons.org/licenses/by-sa/4.0/legalcode
@@ -22,5 +22,8 @@ https://github.com/bk-one/arcadary/blob/9d0760e0ae29fc28508b112893bf1d8aee0f0c25
 
 When sharing or adapting catalog data, provide appropriate attribution, link to
 CC-BY-SA-4.0, indicate changes, and license adaptations under the same licence.
-This notice licenses metadata only. It grants no rights in game files or artwork.
+This notice licenses metadata only. It excludes screenshot images, whose own
+licence applies, and grants no rights in game files or artwork. An empty image
+licence value grants no image licence. See README for seed image credits,
+upstream licence notices and the service's PNG re-encoding notice.
 The application source code remains MIT licensed; see LICENSE.

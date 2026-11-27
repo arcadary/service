@@ -10,7 +10,35 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_26_210000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_27_190001) do
+  create_table "active_storage_attachments", force: :cascade do |t|
+    t.string "name", null: false
+    t.string "record_type", null: false
+    t.bigint "record_id", null: false
+    t.bigint "blob_id", null: false
+    t.datetime "created_at", null: false
+    t.index ["blob_id"], name: "index_active_storage_attachments_on_blob_id"
+    t.index ["record_type", "record_id", "name", "blob_id"], name: "index_active_storage_attachments_uniqueness", unique: true
+  end
+
+  create_table "active_storage_blobs", force: :cascade do |t|
+    t.string "key", null: false
+    t.string "filename", null: false
+    t.string "content_type"
+    t.text "metadata"
+    t.string "service_name", null: false
+    t.bigint "byte_size", null: false
+    t.string "checksum"
+    t.datetime "created_at", null: false
+    t.index ["key"], name: "index_active_storage_blobs_on_key", unique: true
+  end
+
+  create_table "active_storage_variant_records", force: :cascade do |t|
+    t.bigint "blob_id", null: false
+    t.string "variation_digest", null: false
+    t.index ["blob_id", "variation_digest"], name: "index_active_storage_variant_records_uniqueness", unique: true
+  end
+
   create_table "game_identities", force: :cascade do |t|
     t.integer "game_id", null: false
     t.string "key", null: false
@@ -24,6 +52,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_26_210000) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.boolean "catalog_curated", default: false, null: false
+    t.string "screenshot_licence", default: "", null: false
     t.index ["public_id"], name: "index_games_on_public_id", unique: true
   end
 
@@ -69,8 +98,28 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_26_210000) do
     t.index ["sha1"], name: "index_releases_on_sha1"
   end
 
+  create_table "screenshots", force: :cascade do |t|
+    t.integer "release_id", null: false
+    t.integer "blob_id", null: false
+    t.string "kind", null: false
+    t.integer "width", null: false
+    t.integer "height", null: false
+    t.string "sha256", null: false
+    t.string "licence", default: "", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["blob_id"], name: "index_screenshots_on_blob_id"
+    t.index ["release_id", "kind"], name: "index_screenshots_on_release_id_and_kind", unique: true
+    t.index ["release_id"], name: "index_screenshots_on_release_id"
+    t.index ["sha256"], name: "index_screenshots_on_sha256"
+  end
+
+  add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "game_identities", "games"
   add_foreign_key "release_media", "media_files"
   add_foreign_key "release_media", "releases"
   add_foreign_key "releases", "games"
+  add_foreign_key "screenshots", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "screenshots", "releases"
 end
