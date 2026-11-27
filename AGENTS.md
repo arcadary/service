@@ -12,13 +12,15 @@ One Rails application serves two things: the project's **homepage** (server-rend
 - **Implemented:** `GET /v1/lookup/{sha1}.json` is the entry point for any game file: a known checksum answers `301` to its resource, cached publicly for a day (`GET /v1/releases/{sha1}.json`, or `/v1/media/{sha1}.json` for a shared file, cached for 300 seconds with ETags); an unknown one answers `404`. Releases include ordered media and validated startup; see [Ordered media and startup](README.md#ordered-media-and-startup). Errors are JSON with `no-store`. The `.json` suffix is required. `/api-docs` documents the contract.
 - **One opt-in write path** takes run reports from devices. A report is triage and supporting evidence; it never changes a game's status by itself.
 - **Reviewer and admin pages** are authenticated and never served from a shared cache. A game becomes Verified only when a named reviewer who owns that exact file has played it.
-- **Later:** artwork delivery (after a rights review) and a pairing redirect.
+- **Screenshots:** the owner's capture device uploads title/gameplay PNGs per release with a bearer token. The service re-encodes pixels, stores them privately in R2 and serves content-addressed PNG URLs through the Rails API. Screenshots carry their own image licence; the catalog licence excludes images. Hosting commercial-game screenshots is an accepted owner decision. See [Screenshots](README.md#screenshots).
+- **Later:** a pairing redirect. Clips, box art and manuals remain excluded.
 
 The background is the launcher repository's spike report, [docs/spike-174-remote-service.md](https://github.com/arcadary/arcadary/blob/6a8db20ace59afce558a8daa06dfdd84dca48471/docs/spike-174-remote-service.md), and the owner's decisions on [arcadary/arcadary#174](https://github.com/arcadary/arcadary/issues/174).
 
 ## Rules
 
 - **No game files, ever.** The service never receives, stores, serves or links to a ROM, and never describes where to get one. A file is identified by its checksum only. No file names from a player's device either.
+- **Screenshot images only.** Title and gameplay screenshots from the capture device are permitted. No clips, box art or manuals. An upload grants no new rights; use the recorded image licence and honour takedown requests at `takedown@arcadary.org`.
 - **No player accounts.** A read by checksum still shows the service and the CDN which file a household has, together with its IP address. Say so honestly in code comments, the logging policy and documents; never claim reads are private.
 - **Telemetry is for internal use only, and anonymised.** It exists to run and improve the service, is never shared or sold, and holds nothing that identifies a person, a household or a device: no IP address, no stable device ID, no file names.
 - **Nothing is logged that is not needed.** No IP addresses in application logs or telemetry, and no checksum next to anything that could tie it to a household, unless an issue decides otherwise. See [Privacy and logging](README.md#privacy-and-logging) for the lookup's protections and deployment checks still outstanding.
@@ -95,7 +97,7 @@ Work runs through [ub-agents](https://agents.uberblick.ai): `ub-agents.yaml` hol
 
 ## Where things are
 
-- `app/`, `config/`, `db/`, `spec/`: the Rails application, catalog models, seeds and specs.
+- `app/`, `config/`, `db/`, `spec/`: the Rails application, catalog and screenshot models, seeds and specs.
 - `storage/`: SQLite databases, git-ignored.
 - `swagger/v1/swagger.yaml`: the OpenAPI document, generated from the request specs; never edited by hand.
 - `Dockerfile`: production image with Thruster request logging disabled.

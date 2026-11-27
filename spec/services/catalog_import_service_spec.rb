@@ -127,6 +127,7 @@ RSpec.describe CatalogImportService do
     load Rails.root.join("db/seeds.rb")
     expect(snapshot).to eq(before)
     expect(Release.includes(:game).order(:system).map { |release| [ release.game.public_id, release.game.title, release.system, release.region, release.revision ] }).to eq([ [ "tobu-tobu-girl", "Tobu Tobu Girl", "gb", "World", nil ], [ "ucity", "uCity", "gbc", "World", "v1.3" ] ])
+    expect(Game.order(:public_id).pluck(:screenshot_licence)).to eq([ "CC-BY-4.0", "CC-BY-SA-4.0" ])
   end
 
   it "assigns the same fixed seed IDs when importing into an empty database" do

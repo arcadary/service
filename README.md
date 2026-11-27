@@ -13,7 +13,7 @@ What it is for, the rules and the setup are in [AGENTS.md](AGENTS.md).
 
 ## Catalog data
 
-The catalog originates from [No-Intro](https://no-intro.org/), sourced through [libretro-database at f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029](https://github.com/libretro/libretro-database/tree/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/metadat/no-intro). We import checksum metadata, group releases into games, normalize titles/regions/revisions and apply the launcher's explicit identity mappings. The entire service catalog, including project corrections, additions and later fields, is licensed under [CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/); see [LICENSE-DATA](LICENSE-DATA). The source's [licence at the pin](https://github.com/libretro/libretro-database/blob/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/LICENSE) is CC-BY-SA-4.0. Code remains MIT.
+The catalog originates from [No-Intro](https://no-intro.org/), sourced through [libretro-database at f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029](https://github.com/libretro/libretro-database/tree/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/metadat/no-intro). We import checksum metadata, group releases into games, normalize titles/regions/revisions and apply the launcher's explicit identity mappings. The entire service catalog, including project corrections, additions and later metadata fields, is licensed under [CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/); see [LICENSE-DATA](LICENSE-DATA). Screenshot images are excluded: their own licence applies. The source's [licence at the pin](https://github.com/libretro/libretro-database/blob/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/LICENSE) is CC-BY-SA-4.0. Code remains MIT.
 
 ### Fetch and import
 
@@ -52,11 +52,57 @@ The nullable `releases.startup` JSON uses schema 1: `{"schema":1,"boot":"disk-1"
 
 `startup.revision` is lower-case SHA-256 of compact UTF-8 JSON with no whitespace: `{"startup":{"schema":1,"boot":"<effective key>","drives":{...}},"media":["<first sha1>","<second sha1>"]}`. Object keys appear in the order shown, drive slots sort lexicographically and media checksums follow position order. Explicit defaults produce the same revision as null startup. Labels, size and format do not affect it; effective startup and ordered checksums do. The launcher can bind resume states to this revision. Media/startup changes also invalidate response ETags.
 
+## Screenshots
+
+The owner's capture device sends a raw `image/png` body to `PUT /v1/releases/{sha1}/screenshots/{kind}.json` with `Authorization: Bearer <token>`, where kind is `title` or `gameplay`. A secondary-medium checksum targets its containing release. A shared checksum returns `409 ambiguous_release` without changing an image. Authentication runs before decoding or storage. Unset/empty token or incomplete production configuration returns `503`; missing/wrong credentials when enabled return `401`. Unknown releases return `404`, malformed SHA-1 `400`, input over 8 MiB (8,388,608 bytes) `413`, and invalid kinds, malformed/non-PNG/animated input or excessive dimensions `422`. All upload responses are `no-store`. `/api-docs` specifies the route and schemas.
+
+Dimensions must be positive and within these fixed capture ceilings, regardless of crop, overscan, borders or interlace. Byte and dimension checks happen before decoded pixels are allocated, then the image is fully decoded and re-encoded as a pixel-only PNG. Stored dimensions and SHA-256 are measured from that image.
+
+| System | Maximum width | Maximum height |
+| --- | ---: | ---: |
+| nes | 1024 | 960 |
+| snes | 2048 | 1912 |
+| gb | 640 | 576 |
+| gbc | 640 | 576 |
+| megadrive | 1280 | 1920 |
+| pcengine | 2048 | 960 |
+| atari2600 | 640 | 768 |
+| c64 | 1536 | 1088 |
+
+Each release has at most one screenshot per kind. Successful uploads replace it; rejected or failed uploads retain the previous record, stored bytes and API references. Release JSON, including each release inside a media response, has `release.screenshots` ordered title then gameplay, empty when absent. Its embedded `game.screenshot` chooses the lexicographically smallest stable release `public_id` (the API's `release.id`) among that game's releases with screenshots, preferring that release's gameplay then title image, or `null`. This is a stable total order even when first checksums are equal or media are reordered; it does not recommend a release for playback. Changes invalidate affected release/media ETags, including sibling responses when the selected game picture changes.
+
+Every screenshot is exactly `{kind, url, width, height, licence}`. `url` is absolute HTTPS, built from `SCREENSHOT_PUBLIC_BASE_URL` plus `/v1/screenshots/{sha256}.png`, independent of request headers, without expiring/signed parameters. The anonymous Rails-origin route serves stored PNG bytes with `Content-Type: image/png` and `Cache-Control: public, max-age=31536000`. Missing or unreferenced images return `404` with `no-store`. Images are in private R2 storage through Active Storage's S3 adapter; JSON never exposes bucket URLs or Active Storage signed URLs, and Active Storage's built-in delivery/upload routes are disabled.
+
+Remove a screenshot by stable release public ID and kind, never by a possibly shared checksum:
+
+```bash
+mise exec -- bin/rails 'screenshots:remove[RELEASE_PUBLIC_ID,gameplay]'
+```
+
+Removal and replacement stop origin delivery at the old URL as soon as the last screenshot with those bytes is unreferenced. Active Storage purge jobs then delete the old blobs; Solid Queue must run to complete storage cleanup. Identical bytes referenced by another screenshot remain available. For takedown requests contact **takedown@arcadary.org**. Origin deletion cannot erase CDN or client cached copies; the deployment owner must purge the affected content-addressed URL at Cloudflare.
+
+`Game.screenshot_licence` defaults to `""` for imported/commercial games and survives catalog reimports. Seeds set the following image licences, including on existing games/releases. Uploads copy the game value and cannot supply a licence. An upload grants no new rights; an empty string grants no image licence. Launchers can attribute using `game.id` and the image's public `licence`, together with these image credits:
+
+| Game ID | Image credit | Image licence and source |
+| --- | --- | --- |
+| `ucity` | µCity graphics by AntonioND/SkyLyrac (Antonio Niño Díaz) | [CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/), [upstream v1.3 notice](https://github.com/AntonioND/ucity/blob/v1.3/readme.rst#license) |
+| `tobu-tobu-girl` | Tobu Tobu Girl assets by Tangram Games | [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/), [upstream notice](https://github.com/SimonLarsen/tobutobugirl/blob/048a22c2d7ebbe25811322e8692803fa86bb643a/README.md#license) |
+
+Arcadary re-encodes captures of both games as pixel-only PNGs and removes metadata. Tobu Tobu Girl's asset licence applies to its screenshots; its source code's MIT licence does not license the images.
+
+### Screenshot configuration
+
+Infrastructure supplies the private R2 bucket and credentials through fnox; this application never provisions them. Supply `R2_BUCKET`, `R2_ENDPOINT` (the S3-compatible endpoint), `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `SCREENSHOT_CAPTURE_TOKEN` and `SCREENSHOT_PUBLIC_BASE_URL` (an HTTPS origin without a path, query, fragment or credentials). The R2 region is `auto`.
+
+Configured nonempty R2 names and the capture token pass through Kamal `env.secret` and `.kamal/secrets`; the public origin passes through `env.clear`. No values are committed. Absent/empty secret names are omitted from resolved container declarations and values; an absent public base URL is empty. Production boots, answers `/up` and serves existing lookups without these six variables. Incomplete production configuration disables uploads with `503`, with no local-storage fallback. Specs use local test storage, never R2. Local decoder checks require libvips; CI and Docker install it.
+
+Before public launch the deployment owner must verify Cloudflare CDN purging, access-log suppression at every delivery layer for both image reads and uploads, and that `takedown@arcadary.org` accepts mail and forwards to a monitored inbox. These are launch prerequisites, not claims that provisioning or verification has happened.
+
 ## Privacy and logging
 
-Checksum reads are anonymous, but they reveal which file a household has and the caller's IP address to the service and CDN. No player account or session is required; the endpoint sets no cookie. This does not make reads private.
+Checksum reads are anonymous, but they reveal which file a household has and the caller's IP address to the service and CDN. Screenshot URLs likewise identify releases, and the service/CDN see image callers' IPs. No player account or session is required; the endpoints set no cookie. This does not make reads private. Authentication and upload responses are never shared-cacheable.
 
-Rails silences lookup requests before request-start logging, covering parameter, controller and SQL logs as well, including paths with repeated slashes. SHA-1 parameters are also filtered defensively. Routing errors (for example, a missing `.json` suffix) can still log the checksum URL at error level, without the client IP. The endpoint adds no telemetry or request-specific log lines. The production image sets `LOG_REQUESTS=false` to disable Thruster's access logs, which otherwise pair checksum URLs with client IPs. Keep that setting disabled, including any `THRUSTER_LOG_REQUESTS` override.
+Rails silences lookup, release/media, screenshot-read and capture-upload requests before request-start logging, covering parameter, controller and SQL logs, including paths with repeated slashes and handled failures. SHA-1, SHA-256 and authorization parameters are filtered defensively. Captured application-log specs cover token, client IP, release SHA-1, PNG SHA-256 and body bytes. Routing errors (for example, a missing suffix) can still log the identifying URL at error level, without the client IP. These routes add no telemetry or request-specific log lines. The production image sets `LOG_REQUESTS=false` to disable Thruster's access logs, which otherwise pair identifying URLs with client IPs. Keep that setting disabled, including any `THRUSTER_LOG_REQUESTS` override.
 
 The specs check Rails logs only; the rest was checked on the deployed host. kamal-proxy runs with Docker's `none` log driver and keeps no request log, because that log records `X-Forwarded-For`, which Cloudflare always fills with the visitor's IP, next to each path and so each checksum. Cloudflare's "Remove visitor IP headers" transform does not change that header for ordinary visitors. `cloudflared` logs no per-request lines at its default level. Check these again whenever the proxy, the tunnel or the image changes. Cloudflare itself still sees every visitor's IP.
 
@@ -73,4 +119,4 @@ Cloudflare terminates TLS. It reaches the origin only through a Cloudflare Tunne
 
 ## Licence
 
-Code: MIT, see [LICENSE](LICENSE). Catalog data: CC-BY-SA-4.0, see [LICENSE-DATA](LICENSE-DATA).
+Code: MIT, see [LICENSE](LICENSE). Catalog metadata: CC-BY-SA-4.0, see [LICENSE-DATA](LICENSE-DATA). Screenshot images are excluded from that licence; their own licence applies. Image credits and upstream notices are in [Screenshots](#screenshots).
