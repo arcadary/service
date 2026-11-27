@@ -82,6 +82,116 @@ paths:
                     type: string
                     enum:
                     - not_found
+  "/mcp":
+    post:
+      summary: Authenticated stateless MCP Streamable HTTP
+      security:
+      - private_service_basic: []
+      description: Read-only catalog tools over MCP 1.11.0; see https://github.com/arcadary/service/blob/main/docs/mcp.md
+        for schemas, pagination, protocol versions, client setup and deployment exclusions.
+        Every method and subtree authenticates before parsing and sends no-store.
+        No OAuth discovery or login. POST bodies are limited to 65536 bytes and JSON
+        nesting to 64; finite JSON replies only, without SSE subscriptions or persistent
+        sessions.
+      parameters:
+      - name: Authorization
+        in: header
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: JSON-RPC result or protocol error
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - jsonrpc
+                - id
+                properties:
+                  jsonrpc:
+                    type: string
+                    enum:
+                    - '2.0'
+                  id:
+                    type: integer
+                    nullable: true
+                  result:
+                    type: object
+                  error:
+                    type: object
+        '401':
+          description: missing or invalid credentials
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+            WWW-Authenticate:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - error
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - unauthorized
+        '503':
+          description: configured credentials absent or blank
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - error
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - authentication_unavailable
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+              - jsonrpc
+              - id
+              - method
+              properties:
+                jsonrpc:
+                  type: string
+                  enum:
+                  - '2.0'
+                id:
+                  type: integer
+                method:
+                  type: string
+                params:
+                  type: object
   "/v1/media/{sha1}.json":
     get:
       summary: Every release containing an exact file
@@ -522,6 +632,9 @@ components:
     capture_token:
       type: http
       scheme: bearer
+    private_service_basic:
+      type: http
+      scheme: basic
   schemas:
     Screenshot:
       type: object
