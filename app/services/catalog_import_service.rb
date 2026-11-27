@@ -133,6 +133,7 @@ class CatalogImportService
       end
       @affected_games.each do |game|
         game.title = titles[game.public_id].values.min_by(&:b) unless game.catalog_curated
+        game.source_title = game.title
         game.validate!
       end
       @changed_titles = @affected_games.select { |game| game.persisted? && game.title_changed? }.map(&:id)
@@ -145,6 +146,7 @@ class CatalogImportService
         @media_files[row[:sha1]] = media_file
         release.release_media.build(key: "main", position: 1, role: "game", media_file: media_file) if release.new_record?
         release.assign_attributes(row.slice(:system, :region, :revision, :source_title))
+        release.assign_attributes(source_system: row[:system], source_region: row[:region], source_revision: row[:revision])
         release.game = @assignments.fetch(row[:sha1])
         release.validate!
         release
