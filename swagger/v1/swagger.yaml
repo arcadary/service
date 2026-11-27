@@ -88,8 +88,10 @@ paths:
       description: 'Lists releases in stable public-ID order, each in the release
         response shape with release.sha1 equal to the asked file. A checksum identifies
         membership only: the service never infers a set from one checksum or from
-        file names. Successes are public for 300 seconds with an ETag; errors are
-        never stored.'
+        file names. Successes are public for 300 seconds with ETag and Last-Modified
+        validators; corrections refresh both, while cached responses may remain until
+        their existing TTL expires. Last-Modified is the latest containing release
+        timestamp. Current conditional requests return 304. Errors are never stored.'
       parameters:
       - name: sha1
         in: path
@@ -107,6 +109,9 @@ paths:
                 enum:
                 - max-age=300, public
             ETag:
+              schema:
+                type: string
+            Last-Modified:
               schema:
                 type: string
           content:
@@ -170,7 +175,9 @@ paths:
         Media are in position order. Startup applies defaults and includes a SHA-256
         revision over effective startup and ordered checksums. C64 slots are 8 and
         9; other systems have no drives. The service never infers a set from one checksum
-        or from file names. Successes are public for 300 seconds with an ETag; errors
+        or from file names. Successes are public for 300 seconds with ETag and Last-Modified
+        validators; corrections refresh both, while cached responses may remain until
+        their existing TTL expires. Current conditional requests return 304. Errors
         are never stored.
       parameters:
       - name: sha1
@@ -191,6 +198,9 @@ paths:
                 enum:
                 - max-age=300, public
             ETag:
+              schema:
+                type: string
+            Last-Modified:
               schema:
                 type: string
           content:
