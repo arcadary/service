@@ -18,7 +18,7 @@ module V1
 
       def answer_current_collection
         expires_in 5.minutes, public: true
-        fresh_when(etag: [ MediaDecorator.version, @sha1, *@releases ], public: true)
+        fresh_when(etag: [ MediaDecorator.version, @sha1, *@releases ], last_modified: @releases.map(&:updated_at).max, public: true)
       end
 
       def invalid_sha1
