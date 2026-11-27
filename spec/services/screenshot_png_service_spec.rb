@@ -48,4 +48,17 @@ RSpec.describe ScreenshotPngService do
     zero_dimensions[8, 25] = png_chunk("IHDR", [ 0, 2, 8, 6, 0, 0, 0 ].pack("NNC5"))
     expect { decode(zero_dimensions) }.to raise_error(Screenshot::InvalidImage)
   end
+
+  it "rejects PNGs libvips warns about without writing to stderr" do
+    header = png_chunk("IHDR", [ 2, 2, 8, 6, 0, 0, 0 ].pack("NNC5"))
+    rows = ("\0".b + "\x12\x34\x56\xff".b * 2) * 2
+    compressed = Zlib.deflate(rows)
+    corrupt = [ Zlib.deflate(rows.byteslice(0, 5)), compressed.byteslice(0...-6), compressed.byteslice(0...-4) + "\0\0\0\0".b ].map do |data|
+      ScreenshotPngService::SIGNATURE + header + png_chunk("IDAT", data) + png_chunk("IEND", "")
+    end
+
+    expect do
+      corrupt.each { |bytes| expect { decode(bytes) }.to raise_error(Screenshot::InvalidImage) }
+    end.not_to output.to_stderr_from_any_process
+  end
 end
