@@ -15,6 +15,8 @@ RSpec.describe CatalogImportService do
     entries = [ { title: "Example (USA)", sha1: checksum(1), filename: "example.NES", size: 16384, crc: "ABCDEF12", md5: "A" * 32 } ]
     import_entries(entries: entries)
     release = Release.sole
+    expect(release.attributes.slice("source_title", "source_system", "source_region", "source_revision")).to eq("source_title" => "Example (USA)", "source_system" => "nes", "source_region" => "USA", "source_revision" => nil)
+    expect(release.game.source_title).to eq("Example")
     expect(release.release_media.sole.attributes.slice("key", "position", "label", "role")).to eq("key" => "main", "position" => 1, "label" => nil, "role" => "game")
     expect(MediaFile.sole.attributes.slice("sha1", "size", "format", "crc32", "md5")).to eq("sha1" => checksum(1), "size" => 16384, "format" => "nes", "crc32" => "abcdef12", "md5" => "a" * 32)
     before = snapshot

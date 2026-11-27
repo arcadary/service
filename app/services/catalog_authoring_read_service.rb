@@ -14,6 +14,11 @@ class CatalogAuthoringReadService
     record(MediaFile.find_by!(sha1: sha1))
   end
 
+  def self.scope(game_id:)
+    game = Game.find_by!(public_id: game_id)
+    [ game, *game.releases.includes(release_media: :media_file).order(:public_id) ].map { |record| self.record(record) }
+  end
+
   def self.search(query:, limit: 25)
     bounded_limit!(limit: limit, maximum: MAX_SEARCH)
     pattern = "%#{Game.sanitize_sql_like(query.to_s.downcase)}%"

@@ -11,6 +11,14 @@ RSpec.describe CatalogAuthoringService do
     described_class.call(operation: operation, attributes: attributes, expected_revisions: expected_revisions, reason: reason, idempotency_key: key)
   end
 
+  def revisions_for(record:)
+    game = record.is_a?(Game) ? record : record.game
+    [ game, *game.releases ].to_h do |affected|
+      type = affected.is_a?(Game) ? "game" : "release"
+      [ "#{type}:#{affected.public_id}", affected.reload.authoring_revision ]
+    end
+  end
+
   it "creates authored games and checksum-only media with committed revisions" do
     game_result = author(operation: :create_game, attributes: { id: "synthetic", title: "Synthetic", title_aliases: [ "Alternate" ] })
     expect(game_result.fetch("records").sole).to include("type" => "game", "id" => "synthetic", "authoring_revision" => 1, "authored_fields" => %w[title title_aliases], "source" => { "source_title" => nil })
@@ -45,7 +53,7 @@ RSpec.describe CatalogAuthoringService do
   it "corrects effective metadata and retains source values and identities" do
     original_id = release.public_id
     original_sha1 = release.sha1
-    author(operation: :correct_release, attributes: { id: original_id, system: "gb", region: "Europe", revision: "Rev B", startup: { schema: 1, boot: "main", drives: {} } }, expected_revisions: { "release:#{original_id}" => 0 })
+    author(operation: :correct_release, attributes: { id: original_id, system: "gb", region: "Europe", revision: "Rev B", startup: { schema: 1, boot: "main", drives: {} } }, expected_revisions: revisions_for(record: release))
     state = CatalogAuthoringReadService.release(id: original_id)
     expect(state).to include("authoring_revision" => 1, "authored_fields" => %w[region revision startup system], "source" => { "source_title" => "Original (World)", "source_system" => "c64", "source_region" => "World", "source_revision" => "Rev A" })
     expect(state.fetch("canonical")).to include("system" => "gb", "region" => "Europe", "revision" => "Rev B")
@@ -54,8 +62,8 @@ RSpec.describe CatalogAuthoringService do
 
   it "validates system and startup together against existing keys without partial writes" do
     release.update!(startup: { schema: 1, boot: "main", drives: { "8" => "main" } })
-    expect { author(operation: :correct_release, attributes: { id: release.public_id, system: "gb" }, expected_revisions: { "release:#{release.public_id}" => 0 }) }.to raise_error(ActiveRecord::RecordInvalid, /unknown drive slot/)
-    expect { author(operation: :correct_release, attributes: { id: release.public_id, startup: { schema: 1, boot: "missing", drives: { "8" => "missing" } } }, expected_revisions: { "release:#{release.public_id}" => 0 }) }.to raise_error(ActiveRecord::RecordInvalid, /unknown medium key/)
+    expect { author(operation: :correct_release, attributes: { id: release.public_id, system: "gb" }, expected_revisions: revisions_for(record: release)) }.to raise_error(ActiveRecord::RecordInvalid, /unknown drive slot/)
+    expect { author(operation: :correct_release, attributes: { id: release.public_id, startup: { schema: 1, boot: "missing", drives: { "8" => "missing" } } }, expected_revisions: revisions_for(record: release)) }.to raise_error(ActiveRecord::RecordInvalid, /unknown medium key/)
     expect(release.reload.system).to eq("c64")
     expect(release.authoring_revision).to eq(0)
     expect(CatalogMutation.count).to eq(0)
@@ -97,6 +105,25 @@ RSpec.describe CatalogAuthoringService do
     expect { author(operation: :create_game, attributes: { id: "bad", title: "Bad", source_title: "Untrusted" }) }.to raise_error(described_class::InvalidInput)
     expect(game.reload.title).to eq("Current")
     expect(CatalogMutation.count).to eq(1)
+  end
+
+  it "requires current revisions for every affected release and advances the complete game scope" do
+    release
+    sibling = create(:release, game: game)
+    states = CatalogAuthoringReadService.scope(game_id: game.public_id)
+    expect(states.map { |state| state.fetch("id") }).to match_array([ game.public_id, release.public_id, sibling.public_id ])
+    revisions = revisions_for(record: game)
+    expect { author(operation: :correct_game, attributes: { id: game.public_id, title: "Corrected" }, expected_revisions: revisions.except("release:#{sibling.public_id}")) }.to raise_error(described_class::Conflict)
+    result = author(operation: :correct_game, attributes: { id: game.public_id, title: "Corrected" }, expected_revisions: revisions)
+    expect(result.fetch("records").map { |state| state.fetch("id") }).to match_array(states.map { |state| state.fetch("id") })
+    expect(result.fetch("records").map { |state| state.fetch("authoring_revision") }).to eq([ 1, 1, 1 ])
+    expect(CatalogMutation.count).to eq(1)
+  end
+
+  it "rolls invalid release creation back without creating files or advancing the game" do
+    attributes = { game_id: game.public_id, system: "c64", startup: { schema: 1, boot: "missing", drives: { "8" => "missing" } }, media: [ { key: "main", position: 1, role: "game", sha1: "a" * 40 } ] }
+    expect { author(operation: :create_release, attributes: attributes, expected_revisions: revisions_for(record: game)) }.to raise_error(ActiveRecord::RecordInvalid)
+    expect([ Release.count, MediaFile.count, CatalogMutation.count, game.reload.authoring_revision ]).to eq([ 0, 0, 0, 0 ])
   end
 
   it "fails closed for blank admin name, reason or retry key" do

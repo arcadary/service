@@ -73,7 +73,7 @@ class CatalogAuthoringService
     def create_release
       allow!(attributes: @attributes, fields: RELEASE_FIELDS + %w[game_id media])
       game = Game.find_by!(public_id: @attributes.fetch("game_id"))
-      expect_current!(record: game)
+      existing = prepare_existing!(game: game)
       media = @attributes.fetch("media")
       raise InvalidInput, "media must be a nonempty ordered array" unless media.is_a?(Array) && media.any?
 
@@ -87,10 +87,9 @@ class CatalogAuthoringService
         file.authored_fields = attributes.keys & MEDIA_FIELDS
         release.release_media.build(attributes.except(*MEDIA_FIELDS).merge("media_file" => file))
       end
-      no_extra_revisions!(references: [ "game:#{game.public_id}" ])
       save_authored(record: release, fields: @attributes.keys & RELEASE_FIELDS)
       release.release_media.each { |medium| @affected << medium.media_file }
-      save_authored(record: game, fields: [])
+      existing.each { |record| save_authored(record: record, fields: []) }
     end
 
     def correct(record:, fields:)
@@ -98,11 +97,17 @@ class CatalogAuthoringService
       changes = @attributes.except("id")
       raise InvalidInput, "a correction needs at least one field" if changes.empty?
 
-      expect_current!(record: record)
-      state = CatalogAuthoringReadService.record(record)
-      no_extra_revisions!(references: [ reference(state: state) ])
+      existing = prepare_existing!(game: record.is_a?(Game) ? record : record.game)
       record.assign_attributes(changes)
       save_authored(record: record, fields: changes.keys)
+      existing.reject { |affected| affected == record }.each { |affected| save_authored(record: affected, fields: []) }
+    end
+
+    def prepare_existing!(game:)
+      records = [ game, *game.releases.includes(release_media: :media_file).order(:public_id) ]
+      records.each { |record| expect_current!(record: record) }
+      no_extra_revisions!(references: records.map { |record| reference(state: CatalogAuthoringReadService.record(record)) })
+      records
     end
 
     def expect_current!(record:)
