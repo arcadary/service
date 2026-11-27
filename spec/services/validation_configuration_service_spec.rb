@@ -49,6 +49,11 @@ RSpec.describe ValidationConfigurationService, type: :request do
     File.symlink(@root.join("public"), @root.join("storage/escape"))
     expect { configuration(env: production_env.merge("VALIDATION_STORAGE_PATH" => @root.join("storage/escape/validations").to_s)).check! }.to raise_error(ValidationSubmission::Unavailable)
     expect(@root.join("public/validations")).not_to exist
+
+    FileUtils.mkdir_p(@root.join("storage/validations"))
+    Dir.rmdir(@root.join("public"))
+    File.symlink(@root.join("storage/validations"), @root.join("public"))
+    expect { configuration(env: production_env).check! }.to raise_error(ValidationSubmission::Unavailable)
   end
 
   it "fails closed for an unusable storage path" do

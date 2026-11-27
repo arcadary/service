@@ -35,7 +35,8 @@ class ValidationConfigurationService
         volume = @root.join("storage").realpath
         raise ValidationSubmission::Unavailable unless descendant?(resolved, volume)
       end
-      raise ValidationSubmission::Unavailable if resolved == @root.join("public") || descendant?(resolved, @root.join("public").realpath)
+      public_path = @root.join("public").realpath
+      raise ValidationSubmission::Unavailable if resolved == public_path || descendant?(resolved, public_path)
 
       FileUtils.mkdir_p(path, mode: 0o700)
       @storage_path = path.realpath
