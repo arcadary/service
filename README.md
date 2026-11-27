@@ -9,7 +9,7 @@ mise run dev
 mise run ci
 ```
 
-What it is for, the rules and the setup are in [AGENTS.md](AGENTS.md).
+What it is for and its product rules are in the project's Uberblick workspace (bound in `.uberblick.json`); the technical rules and setup are in [AGENTS.md](AGENTS.md).
 
 ## Catalog data
 
