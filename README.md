@@ -2,6 +2,10 @@
 
 The remote service for [Arcadary](https://github.com/arcadary/arcadary): a Rails 8.1 application for the project's homepage and launcher JSON API. `GET /v1/lookup/{sha1}.json` identifies a game file and redirects to its release and game, or to all containing releases for a shared file. The offline catalog importer covers eight pinned No-Intro lists (29,336 distinct checksums); two optional homebrew seeds work without those lists. Compatibility, controller-profile and page features are still to be built. Nothing is deployed.
 
+## Setup
+
+Screenshot decoding requires native libvips on the normal library search path. On macOS, install it with `brew install vips` before running setup or checks. GitHub CI and the Docker image already install libvips.
+
 ```bash
 mise install
 mise run setup
@@ -9,7 +13,7 @@ mise run dev
 mise run ci
 ```
 
-What it is for, the rules and the setup are in [AGENTS.md](AGENTS.md).
+What it is for and its product rules are in the project's Uberblick workspace (bound in `.uberblick.json`); the technical rules and setup are in [AGENTS.md](AGENTS.md).
 
 ## Catalog data
 

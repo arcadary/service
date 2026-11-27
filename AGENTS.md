@@ -1,30 +1,23 @@
 # Arcadary service
 
-The remote service for [Arcadary](https://github.com/arcadary/arcadary), a retro game launcher for Steam Machine and Steam Deck. The launcher works without it. When a device is online, the service gives it what cannot ship inside the app: catalog updates, compatibility records per device class and controller profiles.
+The Rails 8.1 application behind [Arcadary](https://github.com/arcadary/arcadary)'s remote service. It serves server-rendered HTML pages and a versioned JSON API under `/v1` for the launcher. This repository is public.
 
-This repository is public and nothing is deployed yet. The Rails application implements the public game-file lookup and an offline importer for eight pinned No-Intro lists (29,336 distinct checksums), plus two optional bundled-homebrew seeds that need no DATs. See [Catalog data](README.md#catalog-data) for the fetch/import commands, identity rules and CC-BY-SA-4.0 catalog licence. The other features below are still to be built.
+**Product intent lives in the project's Uberblick workspace**, not here: what the service is for, who it serves, the privacy and verification rules and the roadmap. `.uberblick.json` binds this repository to that workspace, and the `uberblick` MCP server (`ub mcp serve`, in `.mcp.json` and `.codex/config.toml`) reads it. Before changing user-facing behaviour, search the workspace, starting with the pages tagged `product-intent` and the decision records. A decision in force wins over anything here; when a change conflicts with one, stop and ask. This file holds the technical and implementation rules.
 
-## What the service is
+## Implemented
 
-One Rails application serves two things: the project's **homepage** (server-rendered HTML for people) and the **JSON API** the launcher talks to.
-
-- **Public API reads** are anonymous: no player account, no cookie, no personalised response. The same URL returns the same bytes, so a CDN can cache them.
-- **Implemented:** `GET /v1/lookup/{sha1}.json` is the entry point for any game file: a known checksum answers `301` to its resource, cached publicly for a day (`GET /v1/releases/{sha1}.json`, or `/v1/media/{sha1}.json` for a shared file, cached for 300 seconds with ETags); an unknown one answers `404`. Releases include ordered media and validated startup; see [Ordered media and startup](README.md#ordered-media-and-startup). Errors are JSON with `no-store`. The `.json` suffix is required. `/api-docs` documents the contract.
-- **One opt-in write path** takes run reports from devices. A report is triage and supporting evidence; it never changes a game's status by itself.
-- **Reviewer and admin pages** are authenticated and never served from a shared cache. A game becomes Verified only when a named reviewer who owns that exact file has played it.
-- **Screenshots:** the owner's capture device uploads title/gameplay PNGs per release with a bearer token. The service re-encodes pixels, stores them privately in R2 and serves content-addressed PNG URLs through the Rails API. Screenshots carry their own image licence; the catalog licence excludes images. Hosting commercial-game screenshots is an accepted owner decision. See [Screenshots](README.md#screenshots).
-- **Later:** a pairing redirect. Clips, box art and manuals remain excluded.
-
-The background is the launcher repository's spike report, [docs/spike-174-remote-service.md](https://github.com/arcadary/arcadary/blob/6a8db20ace59afce558a8daa06dfdd84dca48471/docs/spike-174-remote-service.md), and the owner's decisions on [arcadary/arcadary#174](https://github.com/arcadary/arcadary/issues/174).
+- `GET /v1/lookup/{sha1}.json`: a known checksum answers `301` to its resource, with `Cache-Control: public` for a day; an unknown one answers `404`. The target is `GET /v1/releases/{sha1}.json` (a release, its game, ordered media and validated startup), or `GET /v1/media/{sha1}.json` when the file is shared by several releases; both are cached for 300 seconds with ETags. See [Ordered media and startup](README.md#ordered-media-and-startup). The `.json` suffix is required. Errors are JSON with `no-store`. `/api-docs` documents the contract.
+- An offline importer for eight pinned No-Intro lists (29,336 distinct checksums) and two bundled homebrew seeds that need no DATs. Commands, identity rules and the CC-BY-SA-4.0 catalog licence: [Catalog data](README.md#catalog-data).
+- The owner's capture device uploads title/gameplay PNGs per release with a bearer token. The service re-encodes pixels, stores them privately in R2 and serves content-addressed PNG URLs through the Rails API. Screenshots carry their own image licence; the catalog licence excludes images. See [Screenshots](README.md#screenshots).
 
 ## Rules
 
-- **No game files, ever.** The service never receives, stores, serves or links to a ROM, and never describes where to get one. A file is identified by its checksum only. No file names from a player's device either.
+- **Game files.** Never serve, link to or describe where to get a game file. Identify files by SHA-1 only; never accept a file name from a player's device. The only code path that receives file bytes is the validation-request flow (milestone *Validation requests*): private storage on the service host, downloads only for authenticated reviewers, no public route, preview, execution or unpacking.
 - **Screenshot images only.** Title and gameplay screenshots from the capture device are permitted. No clips, box art or manuals. An upload grants no new rights; use the recorded image licence and honour takedown requests at `takedown@arcadary.org`.
-- **No player accounts.** A read by checksum still shows the service and the CDN which file a household has, together with its IP address. Say so honestly in code comments, the logging policy and documents; never claim reads are private.
-- **Telemetry is for internal use only, and anonymised.** It exists to run and improve the service, is never shared or sold, and holds nothing that identifies a person, a household or a device: no IP address, no stable device ID, no file names.
-- **Nothing is logged that is not needed.** No IP addresses in application logs or telemetry, and no checksum next to anything that could tie it to a household, unless an issue decides otherwise. See [Privacy and logging](README.md#privacy-and-logging) for the lookup's protections and deployment checks still outstanding.
-- **No secrets in git.** Tools come from mise and secrets from fnox, which hands them to the application as environment variables. Rails encrypted credentials are not used: there is no `config/credentials.yml.enc` and no `config/master.key`, and `.env*` files and Kamal secrets stay out of the repository. `fnox.toml` holds the deploy secrets (`DEPLOY_HOST`, `SECRET_KEY_BASE`, `TUNNEL_TOKEN`), encrypted with age, and is committed; the age key is not. Never decrypt, print or copy a value from it. The host's address is one of them because this repository is public: anyone who knows the origin's address can reach it around the cache.
+- **Public reads are anonymous and caller-independent.** No account, cookie, session or personalised response on any public read: the same URL returns the same bytes, so a CDN can cache it. Comments, the logging policy and documents never claim reads are private: a read by checksum shows the service and the CDN which file a household has, with its IP address.
+- **Authenticated routes** (reviewer pages, admin tools) send `Cache-Control: no-store` on every response, errors included, and are never covered by a CDN cache rule.
+- **Logging and telemetry.** No IP address, stable device ID or file name in application logs or telemetry, and no checksum next to anything that could tie it to a household, unless an issue decides otherwise. Telemetry is internal and anonymised. Log nothing that is not needed. The lookup's protections and the deployment checks still outstanding are in [Privacy and logging](README.md#privacy-and-logging).
+- **No secrets in git.** Tools come from mise and secrets from fnox, which hands them to the application as environment variables. Rails encrypted credentials are not used: there is no `config/credentials.yml.enc` and no `config/master.key`, and `.env*` files and Kamal secrets stay out of the repository. `fnox.toml` holds the deploy secrets (`DEPLOY_HOST`, `SECRET_KEY_BASE`, `TUNNEL_TOKEN`), encrypted with age, and is committed; the age key is not. Never decrypt, print or copy a value from it. The host's address is one of them because anyone who knows the origin's address can reach it around the cache.
 - **Agents deploy only when the owner confirms, and never provision or spend.** An agent may run `fnox exec -- bin/kamal setup` or `fnox exec -- bin/kamal deploy` after the owner has explicitly confirmed that deploy in the conversation; a confirmation covers one deploy, not the next. No push to an outside registry, no server, domain or account. `config/deploy.yml` deploys to the host the infrastructure repository creates (see [Deployment](README.md#deployment)). Kamal's output names the host's address: filter it out, and never copy it into an issue, pull request or commit.
 - **Ask before downloading anything** other than the tools in `mise.toml` and the gems in `Gemfile.lock`.
 - **Keep it simple.** A normal Rails application: server-rendered HTML for the homepage and the reviewer pages, a versioned JSON API under `/v1`, no separate JavaScript frontend.
@@ -57,7 +50,7 @@ When a change does not fit them, say why in the pull request rather than working
 
 ## Decided, not built yet
 
-These are the owner's choices. Do not replace them with something else, and do not build them outside an issue that asks for it.
+These are the owner's technical choices. Do not replace them with something else, and do not build them outside an issue that asks for it.
 
 - **Server:** Falcon with the official `falcon-rails` integration. The generated application still runs Puma behind Thruster; an issue will swap it, with evidence that slow outbound requests do not hold up unrelated ones.
 - **Database:** SQLite, with short transactions and bounded writes. Reconsider only after measured contention.
@@ -67,7 +60,9 @@ These are the owner's choices. Do not replace them with something else, and do n
 
 ## Setup
 
-Tools are managed with [mise](https://mise.jdx.dev): `mise.toml` pins Ruby 3.4.13 and installs fnox. `.ruby-version` and the Dockerfile's `RUBY_VERSION` name the same Ruby for GitHub Actions and the image; change all three together. Rails is 8.1.
+Tools are managed with [mise](https://mise.jdx.dev): `mise.toml` pins Ruby 3.4.13 and installs fnox. `.ruby-version` and the Dockerfile's `RUBY_VERSION` name the same Ruby for GitHub Actions and the image; change all three together.
+
+Screenshot decoding requires the native libvips library on the normal library search path. On macOS, install it with `brew install vips` before setup or checks. GitHub CI and the Docker image already install libvips.
 
 ```bash
 mise install       # Ruby and fnox, once
@@ -103,3 +98,4 @@ Work runs through [ub-agents](https://agents.uberblick.ai): `ub-agents.yaml` hol
 - `Dockerfile`: production image with Thruster request logging disabled.
 - `config/deploy.yml`, `.kamal/secrets`: the Kamal deploy to production, on `api.arcadary.org`, behind the Cloudflare Tunnel that the `cloudflared` accessory runs.
 - `fnox.toml`: the deploy secrets, encrypted with age.
+- `.uberblick.json`: the binding to the project's Uberblick workspace, where product intent is written down.
