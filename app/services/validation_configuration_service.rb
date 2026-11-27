@@ -24,7 +24,7 @@ class ValidationConfigurationService
   private
     def configure_path!
       default_path = @environment == "test" ? @root.join("tmp/validations-#{Process.pid}") : @root.join("storage/validations")
-      path = Pathname.new(@env.fetch("VALIDATION_STORAGE_PATH", @environment == "production" ? "" : default_path.to_s))
+      path = Pathname.new(@env.fetch("VALIDATION_STORAGE_PATH", @environment == "production" ? "" : default_path.to_s).to_s)
       raise ValidationSubmission::Unavailable unless path.absolute?
 
       path = path.cleanpath

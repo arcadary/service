@@ -69,7 +69,13 @@ class ValidationReceipts
       length = env["CONTENT_LENGTH"]
       raise MetadataTooLarge if length.to_s.match?(/\A[0-9]+\z/) && length.to_i > 1024
 
-      json = env.fetch("rack.input").read(1025).to_s
+      json = +"".b
+      while json.bytesize < 1025
+        chunk = env.fetch("rack.input").read(1025 - json.bytesize)
+        break if chunk.nil? || chunk.empty?
+
+        json << chunk
+      end
       raise MetadataTooLarge if json.bytesize > 1024
       metadata = JSON.parse(json)
       raise ValidationSubmission::InvalidMetadata unless metadata.is_a?(Hash) && metadata.keys.sort == %w[byte_size sha1 system]

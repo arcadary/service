@@ -32,6 +32,7 @@ class ValidationSubmissionService
     raise ValidationSubmission::InvalidAdmission unless facts.is_a?(Hash) && facts["sha1"] == checksum
 
     @storage.synchronize(sha1: checksum) do
+      raise ValidationSubmission::InvalidAdmission unless verifier.verified(admission.to_s, purpose: PURPOSE) == facts
       submission = ValidationSubmission.find_by(sha1: checksum)
       raise ValidationSubmission::InvalidAdmission unless submission && submission.slice(:sha1, :byte_size, :system) == facts.slice("sha1", "byte_size", "system")
       reject_known!(sha1: checksum)

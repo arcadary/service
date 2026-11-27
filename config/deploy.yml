@@ -21,6 +21,13 @@ proxy:
   ssl: false
   forward_headers: false
   host: api.arcadary.org
+  response_timeout: 300
+  buffering:
+    requests: true
+    responses: true
+    max_request_body: 134217728
+    max_response_body: 0
+    memory: 1048576
   run:
     publish: false
     log_max_size: ""
@@ -43,7 +50,12 @@ registry:
 env:
   secret:
     - SECRET_KEY_BASE
+    - VALIDATION_REVIEWER_USERNAME
+    - VALIDATION_REVIEWER_PASSWORD
   clear:
+    # Enable only after the maintainer completes the upload deployment checks in README.md.
+    # VALIDATION_UPLOADS_ENABLED: "true"
+    # VALIDATION_STORAGE_PATH: /rails/storage/validations
     # Run the Solid Queue Supervisor inside the web server's Puma process to do jobs.
     # When you start using multiple servers, you should split out job processing to a dedicated machine.
     SOLID_QUEUE_IN_PUMA: true
@@ -91,7 +103,6 @@ builder:
   #   RUBY_VERSION: ruby-3.4.8
   # secrets:
   #   - GITHUB_TOKEN
-  #   - RAILS_MASTER_KEY
 
 # Use a different ssh user than root
 # ssh:

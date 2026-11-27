@@ -22,7 +22,7 @@ module ValidationHelpers
   end
 
   def rack_receipt(method:, path: "/v1/validations.json", body:, headers: {})
-    env = Rack::MockRequest.env_for(path, method: method)
+    env = Rack::MockRequest.env_for("http://example.org#{path}", method: method)
     env.delete("CONTENT_LENGTH")
     env.merge!("rack.input" => body, "CONTENT_TYPE" => method == "POST" ? "application/json" : "application/octet-stream")
     env.merge!(headers)
