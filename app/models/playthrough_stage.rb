@@ -27,4 +27,20 @@ class PlaythroughStage < ApplicationRecord
   validates :validation_error, inclusion: { in: %w[invalid_hls package_integrity_mismatch] }, allow_nil: true
   validates :validation_result, presence: true, if: -> { validation_state == "validated" }
   validates :validation_error, presence: true, if: -> { validation_state == "validation_failed" }
+  validate :declaration_is_immutable
+  validate :terminal_times_are_ordered
+
+  private
+
+  def declaration_is_immutable
+    return unless persisted? && declaration_changed?
+    return if reclaimed_at && declaration == declaration_in_database.except("manifest")
+
+    errors.add(:declaration, :invalid)
+  end
+
+  def terminal_times_are_ordered
+    errors.add(:expired_at, :invalid) if expired_at && expired_at != declared_at + 24.hours
+    errors.add(:reclaimed_at, :invalid) if reclaimed_at && (!expired_at || reclaimed_at < expired_at)
+  end
 end

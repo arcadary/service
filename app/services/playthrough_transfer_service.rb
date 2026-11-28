@@ -18,6 +18,11 @@ class PlaythroughTransferService
           end
           object
         end
+      rescue StandardError
+        PlaythroughLifecycleService.synchronize(stage_id: stage.id) do |current|
+          PlaythroughAttemptService.require_live!(stage: current, attempt: attempt, allow_finished: true)
+        end
+        raise
       ensure
         PlaythroughAttemptService.relinquish(attempt: attempt)
         PlaythroughReclamationService.discard(attempt: attempt)

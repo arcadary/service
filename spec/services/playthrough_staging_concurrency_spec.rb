@@ -277,6 +277,80 @@ RSpec.describe "Concurrent playthrough staging" do
     cleanup_playthrough(release: release) if release
   end
 
+  it "prevents a stale cleanup owner from committing deletion progress or deleting another key" do
+    freeze_time
+    release = create(:release)
+    files = hls_files
+    stage = declare_hls(release: release, files: files)
+    receive_hls(stage: stage, files: files)
+    travel 24.hours
+    ready, start = Queue.new, Queue.new
+    allow(PlaythroughAttemptService).to receive(:during) { |**_, &block| block.call }
+    blocked = false
+    service = ActiveStorage::Blob.service
+    allow(service).to receive(:delete).and_wrap_original do |method, key|
+      unless blocked
+        blocked = true
+        ready.push(key)
+        start.pop
+      end
+      method.call(key)
+    end
+    thread = Thread.new { ActiveRecord::Base.connection_pool.with_connection { PlaythroughStageCleanupService.call } }
+    deleted_key = Timeout.timeout(10) { ready.pop }
+    claim = stage.attempts.find_by!(kind: "cleanup")
+    travel 15.minutes
+    PlaythroughLifecycleService.synchronize(stage_id: stage.id) { |current| PlaythroughAttemptService.fence_stale(stage: current) }
+    start.push(true)
+    thread.value
+    expect(service).to have_received(:delete).once.with(deleted_key)
+    expect(service).to have_received(:delete).exactly(1).times
+    expect(claim.reload.state).to eq("fenced")
+    expect(stage.reload.reclaimed_at).to be_nil
+    expect(stage.attempts.find_by!(private_key: deleted_key).cleanup_pending).to be(true)
+    PlaythroughStageCleanupService.call
+    expect(stage.reload.reclaimed_at).to be_present
+  ensure
+    start&.push(true)
+    thread&.join
+    travel_back
+    cleanup_playthrough(release: release) if release
+  end
+
+  it "rejects a validation result when a live validator crosses the declaration deadline" do
+    freeze_time
+    release = create(:release)
+    files = hls_files
+    stage = declare_hls(release: release, files: files)
+    receive_hls(stage: stage, files: files)
+    travel 24.hours - 1.minute
+    ready, start = Queue.new, Queue.new
+    allow(PlaythroughAttemptService).to receive(:during) { |**_, &block| block.call }
+    allow(PlaythroughHlsService).to receive(:validate).and_wrap_original do |method, **arguments|
+      ready.push(true)
+      start.pop
+      method.call(**arguments)
+    end
+    thread = Thread.new do
+      ActiveRecord::Base.connection_pool.with_connection do
+        PlaythroughValidationService.validate(staging_id: stage.public_id)
+      rescue PlaythroughStage::Expired => error
+        error
+      end
+    end
+    Timeout.timeout(10) { ready.pop }
+    travel 1.minute
+    start.push(true)
+    expect(thread.value).to be_a(PlaythroughStage::Expired)
+    expect(stage.reload.validation_result).to be_nil
+    expect(stage.attempts.find_by!(kind: "validation").state).to eq("finished")
+  ensure
+    start&.push(true)
+    thread&.join
+    travel_back
+    cleanup_playthrough(release: release) if release
+  end
+
   def cleanup_playthrough(release:)
     stages = PlaythroughStage.where(release: release)
     stages.each do |stage|

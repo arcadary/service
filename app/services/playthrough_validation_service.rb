@@ -6,24 +6,27 @@ class PlaythroughValidationService
 
   def self.validate(staging_id:)
     Rails.logger.silence(Logger::UNKNOWN) do
-      ActiveRecord::Base.uncached do
-        stage = PlaythroughStagingService.find_by(staging_id: staging_id)
-        PlaythroughLifecycleService.require_open!(stage: stage)
-        next replay(stage: stage) if stage.validation_state
+      stage = PlaythroughStagingService.find_by(staging_id: staging_id)
+      PlaythroughLifecycleService.require_open!(stage: stage)
+      next replay(stage: stage) if stage.validation_state
 
-        receipts = stage.objects.index_by(&:path)
-        unless stage.declaration.fetch("manifest").all? { |entry| receipts[entry.fetch("path")]&.received_at }
-          raise PlaythroughStage::StageIncomplete, "stage_incomplete"
-        end
+      receipts = stage.objects.index_by(&:path)
+      unless stage.declaration.fetch("manifest").all? { |entry| receipts[entry.fetch("path")]&.received_at }
+        raise PlaythroughStage::StageIncomplete, "stage_incomplete"
+      end
 
-        attempt = PlaythroughLifecycleService.synchronize(stage_id: stage.id) do |current|
-          PlaythroughAttemptService.register(stage: current, kind: "validation")
+      attempt = PlaythroughLifecycleService.synchronize(stage_id: stage.id) do |current|
+        PlaythroughAttemptService.register(stage: current, kind: "validation")
+      end
+      begin
+        PlaythroughAttemptService.during(attempt: attempt) { new(stage: stage, attempt: attempt).validate }
+      rescue StandardError
+        PlaythroughLifecycleService.synchronize(stage_id: stage.id) do |current|
+          PlaythroughAttemptService.require_live!(stage: current, attempt: attempt, allow_finished: true)
         end
-        begin
-          PlaythroughAttemptService.during(attempt: attempt) { new(stage: stage, attempt: attempt).validate }
-        ensure
-          PlaythroughAttemptService.relinquish(attempt: attempt)
-        end
+        raise
+      ensure
+        PlaythroughAttemptService.relinquish(attempt: attempt)
       end
     end
   end
@@ -118,6 +121,9 @@ class PlaythroughValidationService
       PlaythroughAttemptService.finish(stage: current, attempt: @attempt)
       current
     end
-    self.class.replay(stage: stage)
+    PlaythroughLifecycleService.synchronize(stage_id: stage.id) do |current|
+      PlaythroughAttemptService.require_live!(stage: current, attempt: @attempt, allow_finished: true)
+      self.class.replay(stage: current)
+    end
   end
 end

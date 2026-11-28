@@ -28,11 +28,13 @@ class PlaythroughStagingService
   end
 
   def self.find_by(staging_id:)
-    stage = PlaythroughStage.includes(:objects).find_by(public_id: staging_id)
-    raise PlaythroughStage::NotFound, "not_found" unless stage
+    PlaythroughStage.uncached do
+      stage = PlaythroughStage.find_by(public_id: staging_id)
+      raise PlaythroughStage::NotFound, "not_found" unless stage
 
-    PlaythroughLifecycleService.synchronize(stage_id: stage.id) { |current| current }
-    PlaythroughStage.includes(:objects).find(stage.id)
+      PlaythroughLifecycleService.synchronize(stage_id: stage.id) { |current| current }
+      PlaythroughStage.includes(:objects).find(stage.id)
+    end
   end
 
   def self.replay(stage:, fingerprint:)

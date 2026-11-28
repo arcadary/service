@@ -8,10 +8,11 @@ class PlaythroughAttemptService
       blob_identity: blob&.id, private_key: blob&.key, service_name: blob&.service_name)
   end
 
-  def self.require_live!(stage:, attempt:)
+  def self.require_live!(stage:, attempt:, allow_finished: false)
     PlaythroughLifecycleService.require_open!(stage: stage) unless attempt.kind == "cleanup"
     current = stage.attempts.find(attempt.id)
-    unless current.state == "active" && current.generation == attempt.generation && current.token == attempt.token && Time.current < current.lease_expires_at
+    owned = current.state == "active" || (allow_finished && current.state == "finished")
+    unless owned && current.generation == attempt.generation && current.token == attempt.token && Time.current < current.lease_expires_at
       raise PlaythroughStage::Conflict, "stage_conflict"
     end
     current

@@ -13,4 +13,15 @@ class PlaythroughStageObject < ApplicationRecord
   validates :sha256, format: { with: /\A[0-9a-f]{64}\z/ }, unless: :pruned_at?
   validates :received_at, presence: true, if: :blob_id?
   validates :blob_id, presence: true, if: :received_at?
+  validates :path, :byte_size, :sha256, :content_type, :blob_id, :received_at, absence: true, if: :pruned_at?
+  validate :metadata_is_immutable
+
+  private
+
+  def metadata_is_immutable
+    return unless persisted? && !pruned_at?
+    return unless %w[path byte_size sha256 content_type].any? { |name| will_save_change_to_attribute?(name) }
+
+    errors.add(:base, :invalid)
+  end
 end
