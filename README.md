@@ -260,7 +260,7 @@ The specs check Rails logs only; the rest was checked on the deployed host. kama
 
 ## Deployment
 
-Production is one Hetzner host behind Cloudflare, created by the infrastructure repository, and the service answers on `api.arcadary.org`. Kamal builds the image locally for amd64 and moves it to the host through its local registry, so no registry account is needed. fnox supplies the host's address (`DEPLOY_HOST`), `SECRET_KEY_BASE` and the tunnel's token (`TUNNEL_TOKEN`). The owner deploys, or an agent once the owner has confirmed that deploy:
+Production is one Hetzner host behind Cloudflare, created by the infrastructure repository, and the service answers on `api.arcadary.org`. Kamal builds the image locally for amd64 and moves it to the host through its local registry, so no registry account is needed. fnox supplies the host's address (`DEPLOY_HOST`), `SECRET_KEY_BASE` and the tunnel's token (`TUNNEL_TOKEN`). Every push to `main` deploys itself (see [Automatic deploys](#automatic-deploys)). By hand, the owner deploys, or an agent once the owner has confirmed that deploy:
 
 ```bash
 fnox exec -- bin/kamal setup    # the first time: installs Docker, boots cloudflared and kamal-proxy, then deploys
@@ -268,6 +268,18 @@ fnox exec -- bin/kamal deploy   # every time after
 ```
 
 Cloudflare terminates TLS. It reaches the origin only through a Cloudflare Tunnel, which the infrastructure repository creates: `cloudflared` runs on the host as a Kamal accessory, dials out to Cloudflare and hands each request to kamal-proxy in plain HTTP on Docker's `kamal` network. kamal-proxy publishes no ports on the host, the host's firewall has no web ports open, and the origin holds no certificate. The tunnel's token is a sensitive output of the infrastructure repository; pipe it into fnox without printing it (`fnox set TUNNEL_TOKEN` reads stdin). `bin/kamal accessory reboot cloudflared` picks up a new token or image.
+
+### Automatic deploys
+
+`bin/auto-deploy` runs on the owner's Mac every five minutes as a launchd agent. It fetches `main` into its own clone (`~/.local/state/arcadary-auto-deploy/service`), so the shared checkout's branch never matters. Once the `scan_ruby`, `scan_js`, `lint` and `test` checks, and every other check, have passed at that commit, it runs `fnox exec -- bin/kamal deploy --lock-wait` from the clone. That waits for a deploy already running and stops when someone has locked deploys by hand (`bin/kamal lock acquire`). A commit whose CI or deploy fails is skipped until `main` moves again or `bin/auto-deploy retry` runs. Each deploy or failure posts a macOS notification. The output, with the host's address and the secrets replaced by their names, goes to `~/Library/Logs/arcadary-auto-deploy.log`.
+
+```bash
+bin/auto-deploy install     # once, and again after bin/auto-deploy changes: starts the launchd agent
+bin/auto-deploy retry       # deploys main again after a failure
+bin/auto-deploy uninstall   # stops automatic deploys and removes the clone
+```
+
+It deploys only while the Mac is awake and Docker is running. Anything merged in the meantime goes out at the next check. It runs whatever `main` holds, with the owner's SSH and age keys, including `bin/kamal`, the `.kamal/` hooks and the gems in `Gemfile.lock`, and nobody looks first: a merge into `main` is a release.
 
 ## Licence
 

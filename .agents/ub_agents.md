@@ -14,7 +14,10 @@ your worktree; never install globally.
 
 Only the integrator merges, by squash, once the checks above and every CI check
 pass at the exact head it merges. No agent enables auto-merge, changes branch
-protection or publishes a release. Leave the merge to a maintainer (an admin of this repository) when the PR:
+protection or publishes a release. A merge into `main` reaches production within
+minutes, once CI passes at the merge commit (`bin/auto-deploy`, see
+[Automatic deploys](../README.md#automatic-deploys)); a merge into a milestone branch
+deploys nothing. Leave the merge to a maintainer (an admin of this repository) when the PR:
 
 - changes agent configuration or guidance: `ub-agents.yaml`, `.agents/`, `.claude/`
   and any `AGENTS.md` or `CLAUDE.md`;
