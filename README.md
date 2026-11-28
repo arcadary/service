@@ -193,14 +193,14 @@ Successful apply prints the same committed `{audit_id, records}` result as direc
 
 ## Device compatibility
 
-A known checksum says which release a file is, not whether it plays. After playing a file, the admin records what they saw through the [`record_compatibility_result`](docs/mcp.md#device-compatibility) MCP tool: `works`, `works_with_issues` (plays, with a caveat such as a performance problem, and a required short `reason` sentence), `broken` (optional `reason`), or `unknown` to withdraw an earlier result. Each result names the exact release and file (which the reviewer owns), the device class (`steam_machine` or `steam_deck`), the core and its version, the launch configuration (the release's current `startup.revision`), the test time, what the reviewer saw and the test's limits, the input devices besides the controller that the release needs on that device class (`requires_input`: `keyboard`, `mouse`, or none), and the reviewer's name. Results are append-only in `compatibility_results`; corrections and retests add to that history. `get_compatibility` reads the history back. There are no player run reports and no device upload path.
+A known checksum says which release a file is, not whether it plays. After playing a file, the admin records what they saw through the [`record_compatibility_result`](docs/mcp.md#device-compatibility) MCP tool: `works`, `attention` (a recorded problem, such as performance, explained in a required one-sentence `reason`), `does_not_work` (optional `reason`), or `unknown` to withdraw an earlier result. Each result names the exact release and file (which the reviewer owns), the device class (`steam_machine` or `steam_deck`), the core and its version, the launch configuration (the release's current `startup.revision`), the test time, what the reviewer saw and the test's limits, the input devices besides the controller that the release needs on that device class (`requires_input`: `keyboard`, `mouse`, or none), and the reviewer's name. Results are append-only in `compatibility_results`; corrections and retests add to that history. `get_compatibility` reads the history back. There are no player run reports and no device upload path.
 
 Every release response carries `release.compatibility`:
 
 ```json
 "compatibility": {
   "steam_machine": {
-    "status": "works_with_issues", "reason": "Slows down when many enemies are on screen.",
+    "status": "attention", "reason": "Slows down when many enemies are on screen.",
     "core": "sameboy", "core_version": "1.0.2",
     "startup_revision": "94913af33af735c08211b2d614136735f0f855ec9173709238d451b97cbfed95",
     "tested_at": "2026-11-20T18:00:00Z",
@@ -211,7 +211,7 @@ Every release response carries `release.compatibility`:
 }
 ```
 
-Each device class shows the newest result whose `startup_revision` is still the release's current one, or `{"status":"unknown"}`. A Steam Machine result never fills in for Steam Deck, and a media or startup correction turns both back to unknown until someone plays the file again. The service cannot see a launcher's core version, so it returns the core and version tested; a launcher compares them with its own. Unknown must never stop a player launching a file. `requires_input` is separate from `status`: the launcher compares it with the hardware connected and decides itself whether to warn. The reviewer's name stays internal. Recording a result refreshes the release's and its media's ETag and Last-Modified; reads stay anonymous and cacheable for 300 seconds.
+Each device class shows the newest result whose `startup_revision` is still the release's current one, or `{"status":"unknown"}`. A Steam Machine result never fills in for Steam Deck, and a media or startup correction turns both back to unknown until someone plays the file again. The service cannot see a launcher's core version, so it returns the core and version tested; a launcher compares them with its own. Unknown must never stop a player launching a file. These follow the owner's decision on per-device states (Uberblick, "What can a player be told about a release's support on a device?"): Works, Attention (!), Does not work and Unknown, and no state blocks Play. Attention has two sources. One is a recorded `attention` result. The other is a needed input device that is not connected: `requires_input` is separate from `status`, and only the launcher can see what is connected, so it shows Attention for a missing device. Does not work outranks Attention. The reviewer's name stays internal. Recording a result refreshes the release's and its media's ETag and Last-Modified; reads stay anonymous and cacheable for 300 seconds.
 
 ## Private playthrough staging
 

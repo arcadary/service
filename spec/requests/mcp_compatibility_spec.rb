@@ -64,18 +64,18 @@ RSpec.describe "MCP compatibility recording", type: :request do
   it "keeps corrections as history and reads back exactly what launchers see" do
     record
     record(status: "unknown", observed: "The earlier result was recorded for the wrong device.", limits: "No test.", retry_key: "machine-2")
-    record(device: "steam_deck", status: "works_with_issues", reason: "Audio crackles in busy scenes.", observed: "Plays to the second level; audio crackles when many sprites move.",
+    record(device: "steam_deck", status: "attention", reason: "Audio crackles in busy scenes.", observed: "Plays to the second level; audio crackles when many sprites move.",
       limits: "Only the first two levels tried.", retry_key: "deck-1")
-    expect(record(status: "broken", retry_key: "deck-1")).to include("isError" => true, "structuredContent" => { "error" => { "code" => "retry_conflict" } })
+    expect(record(status: "does_not_work", retry_key: "deck-1")).to include("isError" => true, "structuredContent" => { "error" => { "code" => "retry_conflict" } })
 
     read = tool("get_compatibility", release_id: release.public_id, limit: 2)
     data = read.dig("structuredContent", "data")
     get "/v1/releases/#{release.sha1}.json", headers: launcher
     expect(data.fetch("current")).to eq(response.parsed_body.dig("release", "compatibility"))
     expect(data.fetch("current").fetch("steam_machine")).to eq("status" => "unknown")
-    expect(data.fetch("current").fetch("steam_deck")).to include("status" => "works_with_issues", "reason" => "Audio crackles in busy scenes.")
+    expect(data.fetch("current").fetch("steam_deck")).to include("status" => "attention", "reason" => "Audio crackles in busy scenes.")
     expect(data.fetch("startup_revision")).to eq(response.parsed_body.dig("startup", "revision"))
-    expect(data.dig("history", "items").map { |item| item.values_at("device", "status") }).to eq([ %w[steam_deck works_with_issues], %w[steam_machine unknown] ])
+    expect(data.dig("history", "items").map { |item| item.values_at("device", "status") }).to eq([ %w[steam_deck attention], %w[steam_machine unknown] ])
 
     rest = tool("get_compatibility", cursor: data.dig("history", "next_cursor")).dig("structuredContent", "data")
     expect(rest).to eq("items" => [ CompatibilityResultDecorator.decorate(CompatibilityResult.order(:id).first).history_json ], "next_cursor" => nil)
@@ -88,7 +88,7 @@ RSpec.describe "MCP compatibility recording", type: :request do
     expect(record(release_id: "unknown").dig("structuredContent", "error", "code")).to eq("not_found")
     expect(record(owns_file: false).dig("structuredContent", "error", "code")).to eq("invalid_input")
     expect(record(device: "steam_box").dig("structuredContent", "error", "code")).to eq("invalid_input")
-    expect(record(status: "works_with_issues").dig("structuredContent", "error", "code")).to eq("invalid_input")
+    expect(record(status: "attention").dig("structuredContent", "error", "code")).to eq("invalid_input")
     expect(record(reason: "Fine.").dig("structuredContent", "error", "code")).to eq("invalid_input")
     expect(record(requires_input: [ "light_gun" ]).dig("structuredContent", "error", "code")).to eq("invalid_input")
     expect(tool("get_compatibility", release_id: "unknown").dig("structuredContent", "error", "code")).to eq("not_found")

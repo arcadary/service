@@ -811,15 +811,15 @@ paths:
         release.sha1 is the asked file and release.id identifies the whole release.
         Media are in position order. Startup applies defaults and includes a SHA-256
         revision over effective startup and ordered checksums. C64 slots are 8 and
-        9; other systems have no drives. release.compatibility gives works, works_with_issues
-        (with a reason), broken or unknown for steam_machine and steam_deck separately:
-        the newest recorded result under the current startup revision, with its core,
-        core version, evidence and the input devices besides the controller it needs
-        (requires_input), or unknown. The service never infers a set from one checksum
-        or from file names. Successes are public for 300 seconds with ETag and Last-Modified
-        validators; corrections refresh both, while cached responses may remain until
-        their existing TTL expires. Current conditional requests return 304. Errors
-        are never stored.'
+        9; other systems have no drives. release.compatibility gives works, attention
+        (with a reason), does_not_work or unknown for steam_machine and steam_deck
+        separately: the newest recorded result under the current startup revision,
+        with its core, core version, evidence and the input devices besides the controller
+        it needs (requires_input), or unknown. The service never infers a set from
+        one checksum or from file names. Successes are public for 300 seconds with
+        ETag and Last-Modified validators; corrections refresh both, while cached
+        responses may remain until their existing TTL expires. Current conditional
+        requests return 304. Errors are never stored.'
       parameters:
       - name: sha1
         in: path
@@ -1589,18 +1589,19 @@ components:
                 - bottom
                 - left
     DeviceCompatibility:
-      description: The newest result recorded for this device class under the release's
+      description: 'The newest result recorded for this device class under the release''s
         current startup.revision, or unknown when there is none. unknown carries only
-        status and never stops a launch. works, works_with_issues (plays, with a caveat
-        such as a performance problem) and broken name the core and version tested,
-        the launch configuration (startup_revision) and test time, with a short public
-        reason sentence (required for works_with_issues, optional for broken, null
-        for works), what the reviewer saw (observed) and what the test did not cover
-        (limits). requires_input lists input devices besides the controller (keyboard,
-        mouse) that the release needs to be playable on this device class, empty when
-        none; it is separate from status, and the launcher decides from connected
-        hardware whether to warn. Compare core and core_version with your own before
-        treating a result as yours.
+        status and never stops a launch. works, attention (a recorded problem, such
+        as performance, explained in one sentence) and does_not_work name the core
+        and version tested, the launch configuration (startup_revision) and test time,
+        with a short public reason sentence (required for attention, optional for
+        does_not_work, null for works), what the reviewer saw (observed) and what
+        the test did not cover (limits). requires_input lists input devices besides
+        the controller (keyboard, mouse) that the release needs to be playable on
+        this device class, empty when none; it is separate from status: the launcher
+        shows attention while a listed device is not connected, and does_not_work
+        outranks attention. No state blocks Play. Compare core and core_version with
+        your own before treating a result as yours.'
       oneOf:
       - type: object
         required:
@@ -1628,8 +1629,8 @@ components:
             type: string
             enum:
             - works
-            - works_with_issues
-            - broken
+            - attention
+            - does_not_work
           reason:
             type: string
             nullable: true

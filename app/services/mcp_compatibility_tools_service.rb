@@ -5,9 +5,9 @@ class McpCompatibilityToolsService
   }.freeze
   DESCRIPTION = "Record what a named reviewer saw after playing one exact file of one stable release on one device class " \
     "(steam_machine or steam_deck) with one core and version, under the release's current startup_revision (from get_release or get_compatibility). " \
-    "status is works, works_with_issues (plays with a caveat; reason required), broken (reason optional), or unknown to withdraw an earlier result for that device without claiming the opposite. " \
+    "status is works, attention (a recorded problem such as performance, explained in a required one-sentence reason), does_not_work (reason optional), or unknown to withdraw an earlier result for that device without claiming the opposite. " \
     "owns_file must be true: the reviewer owns that exact file. Optional requires_input lists input devices besides the controller " \
-    "(keyboard, mouse) the release needs to be playable on that device class; it is separate from status. Results are append-only history; the newest result per device " \
+    "(keyboard, mouse) the release needs to be playable on that device class; it is separate from status, and the launcher shows attention while one is not connected. Results are append-only history; the newest result per device " \
     "whose startup_revision is still current is what the public release JSON shows as release.compatibility, and anything else is unknown. " \
     "A result never applies to the other device class. Recording refreshes the release's public ETag. Identical retries with the same " \
     "retry_key return the original result; changed arguments with a used key return retry_conflict. A file outside the release or a stale " \
@@ -49,7 +49,7 @@ class McpCompatibilityToolsService
         limits: text.(CompatibilityResult::TEXT_LENGTH).merge(description: "What the test did not cover. Public."),
         reviewer: text.(CompatibilityResult::SHORT_LENGTH).merge(description: "The reviewer's display name. Internal, never public."),
         owns_file: { type: "boolean", enum: [ true ], description: "The reviewer owns this exact file." },
-        reason: text.(CompatibilityResult::REASON_LENGTH).merge(description: "One short public sentence on why: required for works_with_issues (for example a performance problem), optional for broken, absent for works and unknown."),
+        reason: text.(CompatibilityResult::REASON_LENGTH).merge(description: "One short public sentence on why: required for attention (for example a performance problem), optional for does_not_work, absent for works and unknown."),
         requires_input: { type: "array", uniqueItems: true, maxItems: CompatibilityResult::INPUTS.size, items: { type: "string", enum: CompatibilityResult::INPUTS },
           description: "Optional, default none: input devices besides the controller that the release needs to be playable on this device class. Public." },
         retry_key: text.(200)
@@ -70,7 +70,7 @@ class McpCompatibilityToolsService
 
   def self.current_schema
     result = object_schema(properties: {
-      status: { type: "string", enum: %w[works works_with_issues broken] }, reason: { type: [ "string", "null" ] }, core: { type: "string" }, core_version: { type: "string" },
+      status: { type: "string", enum: %w[works attention does_not_work] }, reason: { type: [ "string", "null" ] }, core: { type: "string" }, core_version: { type: "string" },
       startup_revision: { type: "string" }, tested_at: { type: "string", format: "date-time" }, observed: { type: "string" }, limits: { type: "string" },
       requires_input: inputs_schema
     })

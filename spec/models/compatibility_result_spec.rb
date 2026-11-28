@@ -13,6 +13,6 @@ RSpec.describe CompatibilityResult, type: :model do
 
   it "keeps a recorded result unchanged" do
     result = create(:compatibility_result)
-    expect { result.update!(status: "broken") }.to raise_error(ActiveRecord::ReadOnlyRecord)
+    expect { result.update!(status: "does_not_work") }.to raise_error(ActiveRecord::ReadOnlyRecord)
   end
 end

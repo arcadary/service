@@ -25,9 +25,9 @@ RSpec.describe CompatibilityService do
       end
     end
 
-    it "keeps a caveat's reason and an optional reason for a broken result" do
-      expect(described_class.record(**arguments(status: "works_with_issues", reason: "Slows down when many enemies appear."))).to have_attributes(reason: "Slows down when many enemies appear.")
-      expect(described_class.record(**arguments(status: "broken", retry_key: "machine-2"))).to have_attributes(reason: nil)
+    it "requires a reason for attention and allows one for does_not_work" do
+      expect(described_class.record(**arguments(status: "attention", reason: "Slows down when many enemies appear."))).to have_attributes(reason: "Slows down when many enemies appear.")
+      expect(described_class.record(**arguments(status: "does_not_work", retry_key: "machine-2"))).to have_attributes(reason: nil)
     end
 
     it "keeps an input-device requirement separate from the status, in a fixed order" do
@@ -38,7 +38,7 @@ RSpec.describe CompatibilityService do
     it "returns the original result for an identical retry and refuses a changed one with the same key" do
       first = described_class.record(**arguments)
       expect(described_class.record(**arguments)).to eq(first)
-      expect { described_class.record(**arguments(status: "broken")) }.to raise_error(CompatibilityResult::RetryConflict)
+      expect { described_class.record(**arguments(status: "does_not_work")) }.to raise_error(CompatibilityResult::RetryConflict)
       expect(CompatibilityResult.count).to eq(1)
     end
 
@@ -54,8 +54,8 @@ RSpec.describe CompatibilityService do
       [
         arguments(owns_file: false), arguments(tested_at: "2026-11-28T18:00:00"), arguments(tested_at: 1.hour.from_now.iso8601),
         arguments(observed: "Line one\nLine two"), arguments(limits: " "), arguments(device: "steam_box"), arguments.except(:reviewer),
-        arguments(status: "works_with_issues"), arguments(status: "works_with_issues", reason: "Slow\tdown."), arguments(reason: "Plays fine."),
-        arguments(status: "broken", reason: "x" * 201), arguments(requires_input: [ "light_gun" ]), arguments(requires_input: %w[keyboard keyboard])
+        arguments(status: "attention"), arguments(status: "attention", reason: "Slow\tdown."), arguments(reason: "Plays fine."),
+        arguments(status: "does_not_work", reason: "x" * 201), arguments(requires_input: [ "light_gun" ]), arguments(requires_input: %w[keyboard keyboard])
       ].each do |invalid|
         expect { described_class.record(**invalid) }.to raise_error(CompatibilityResult::InvalidInput)
       end
@@ -65,7 +65,7 @@ RSpec.describe CompatibilityService do
 
   describe ".current" do
     it "keeps each device class apart and takes the newest result for the current launch configuration" do
-      old = create(:compatibility_result, release: release, status: "broken")
+      old = create(:compatibility_result, release: release, status: "does_not_work")
       newer = create(:compatibility_result, release: release, status: "works")
       expect(described_class.current(release: release.reload)).to eq("steam_machine" => newer, "steam_deck" => nil)
       expect(old.reload).to be_present
