@@ -89,9 +89,11 @@ paths:
       summary: Authenticated stateless MCP Streamable HTTP
       security:
       - private_service_basic: []
-      description: Read-only catalog tools over MCP 1.11.0; see https://github.com/arcadary/service/blob/main/docs/mcp.md
-        for schemas, pagination, protocol versions, client setup and deployment exclusions.
-        Every method and subtree authenticates before parsing and sends no-store.
+      description: Catalog read tools and staged screenshot publication over MCP 1.11.0;
+        see https://github.com/arcadary/service/blob/main/docs/mcp.md for schemas,
+        targeting, expiry, retries, pagination, protocol versions, client setup and
+        deployment exclusions. PNG bytes use the separate authenticated HTTP staging
+        route. Every method and subtree authenticates before parsing and sends no-store.
         No OAuth discovery or login. POST bodies are limited to 65536 bytes and JSON
         nesting to 64; finite JSON replies only, without SSE subscriptions or persistent
         sessions.
@@ -379,6 +381,209 @@ paths:
                     type: string
                     enum:
                     - ambiguous_release
+  "/v1/screenshot-stages/{release_id}/{source_sha1}/{kind}.json":
+    post:
+      summary: Stage a private screenshot for MCP publication
+      security:
+      - private_service_basic: []
+      parameters:
+      - name: release_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: source_sha1
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: "^[0-9a-fA-F]{40}$"
+      - name: kind
+        in: path
+        required: true
+        schema:
+          type: string
+          enum:
+          - title
+          - gameplay
+      description: |
+        Raw PNG bytes, protected by shared single-admin HTTP Basic before parsing, logging or mutation; no capture token required. The stable release public ID, exact source-medium SHA-1 and kind are bound before decoding. Secondary and shared media are accepted only for the explicit containing release. Uses capture's 8 MiB input ceiling, system dimension ceilings, full PNG validation and pixel-only re-encoding.
+
+        Returns only an opaque staging_id and expires_at, exactly 24 hours after successful ingest. Staging never changes public JSON, validators or PNG delivery and exposes no anonymous stage/read/redirect route. Missing or malformed public-base configuration or incomplete production R2 configuration disables ingest before PNG processing. All responses and the complete staging subtree are no-store and excluded from application logs; hosted proxy/CDN cache, access-log, body/header and tracing exclusions are required too.
+
+        Call MCP publish_screenshot with staging_id and the same release_id, source_sha1 and kind. It rechecks membership, adopts the canonical blob without copying, uses the game image licence at publication and atomically consumes the ID. Before expiry a repeated successful-target call returns staged_image_consumed, even after replacement/removal; at expiry it returns staged_image_unavailable. Failed attempts leave the stage retryable and do not extend expiry. The hourly cleanup job processes bounded batches of expired stages/receipts and purges unconsumed blobs, never transferred screenshot blobs. Solid Queue workers and its recurring scheduler must run. No explicit discard API exists. Publication errors: invalid_input, not_found, target_mismatch, staged_image_unavailable, staged_image_consumed, uploads_disabled, storage_unavailable.
+      responses:
+        '201':
+          description: private stage created
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - staging_id
+                - expires_at
+                properties:
+                  staging_id:
+                    type: string
+                  expires_at:
+                    type: string
+                    format: date-time
+        '400':
+          description: malformed target
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - error
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - invalid_input
+        '401':
+          description: missing or wrong shared credentials
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - error
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - unauthorized
+        '404':
+          description: unknown release public ID
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - error
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - not_found
+        '409':
+          description: checksum outside this release
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - error
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - target_mismatch
+        '413':
+          description: input exceeds 8 MiB
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - error
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - screenshot_too_large
+        '422':
+          description: invalid PNG, animation, content type or dimensions
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - error
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - invalid_screenshot
+        '503':
+          description: authentication, uploads or storage unavailable
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - error
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - authentication_unavailable
+                    - uploads_disabled
+                    - storage_unavailable
+      requestBody:
+        content:
+          image/png:
+            schema:
+              type: string
+              format: binary
+        required: true
   "/v1/releases/{sha1}/screenshots/{kind}.json":
     put:
       summary: Publish a capture-device screenshot

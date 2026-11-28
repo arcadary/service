@@ -18,11 +18,14 @@ class ScreenshotConfigurationService
 
   def self.authenticate!(authorization:)
     token = ENV["SCREENSHOT_CAPTURE_TOKEN"]
-    unless token.present? && valid_public_base_url? && (!Rails.env.production? || r2_configured?)
-      raise Screenshot::UploadsDisabled
-    end
+    require_uploads!
+    raise Screenshot::UploadsDisabled unless token.present?
     unless ActiveSupport::SecurityUtils.secure_compare(authorization.to_s, "Bearer #{token}")
       raise Screenshot::Unauthorized
     end
+  end
+
+  def self.require_uploads!
+    raise Screenshot::UploadsDisabled unless valid_public_base_url? && (!Rails.env.production? || r2_configured?)
   end
 end

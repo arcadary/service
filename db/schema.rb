@@ -124,6 +124,24 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_28_020000) do
     t.index ["sha1"], name: "index_releases_on_sha1"
   end
 
+  create_table "screenshot_stages", force: :cascade do |t|
+    t.string "public_id", null: false
+    t.string "release_public_id", null: false
+    t.string "source_sha1", null: false
+    t.string "kind", null: false
+    t.integer "blob_id"
+    t.string "sha256", null: false
+    t.integer "width", null: false
+    t.integer "height", null: false
+    t.datetime "expires_at", null: false
+    t.datetime "consumed_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["blob_id"], name: "index_screenshot_stages_on_blob_id"
+    t.index ["expires_at"], name: "index_screenshot_stages_on_expires_at"
+    t.index ["public_id"], name: "index_screenshot_stages_on_public_id", unique: true
+  end
+
   create_table "screenshots", force: :cascade do |t|
     t.integer "release_id", null: false
     t.integer "blob_id", null: false
@@ -147,6 +165,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_28_020000) do
   add_foreign_key "release_media", "media_files"
   add_foreign_key "release_media", "releases"
   add_foreign_key "releases", "games"
+  add_foreign_key "screenshot_stages", "active_storage_blobs", column: "blob_id"
   add_foreign_key "screenshots", "active_storage_blobs", column: "blob_id"
   add_foreign_key "screenshots", "releases"
 end

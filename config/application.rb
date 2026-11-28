@@ -17,7 +17,7 @@ module ArcadaryService
     # Common ones are `templates`, `generators`, or `middleware`, for example.
     config.autoload_lib(ignore: %w[assets tasks middleware])
 
-    config.x.private_service_paths = [ %r{\A/mcp(?:/|\z)} ]
+    config.x.private_service_paths = [ %r{\A/mcp(?:/|\z)}, %r{\A/v1/screenshot-stages(?:[/.]|\z)} ]
     config.middleware.insert_before 0, PrivateServiceAuthentication,
       paths: -> { Rails.application.config.x.private_service_paths }
 

@@ -15,7 +15,7 @@ class McpCatalogToolsService
         annotations: { read_only_hint: true, destructive_hint: false, idempotent_hint: true, open_world_hint: false }) do |server_context: nil, **arguments|
         McpCatalogToolsService.call(tool: name, arguments: arguments)
       end
-    end
+    end + McpScreenshotToolsService.tools
   end
 
   def self.call(tool:, arguments:)
