@@ -1,5 +1,5 @@
 class PlaythroughStageDecorator
-  VERSION = 4
+  VERSION = 5
 
   def self.version
     [ VERSION ]
@@ -23,6 +23,7 @@ class PlaythroughStageDecorator
 
     summary.merge(declaration: @stage.declaration).tap do |result|
       result[:state] = @stage.validation_state if @stage.validation_state
+      result[:state] = @stage.promotion_state if @stage.promotion_state
       result[:validation_result] = @stage.validation_result if @stage.validation_result
       result[:validation_error] = @stage.validation_error if @stage.validation_error
     end

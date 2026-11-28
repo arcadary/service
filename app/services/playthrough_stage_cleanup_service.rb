@@ -7,6 +7,7 @@ class PlaythroughStageCleanupService
       remaining = BLOB_LIMIT
       failed = false
       stages = PlaythroughStage.where(declared_at: ..(Time.current - PlaythroughLifecycleService::LIFETIME))
+        .where(promotion_state: nil)
         .order(:cleanup_visits, :id).limit(STAGE_LIMIT).pluck(:id)
       stages.each do |id|
         break if remaining.zero?
@@ -45,6 +46,8 @@ class PlaythroughStageCleanupService
 
   def self.claim(stage_id:, limit:)
     PlaythroughLifecycleService.synchronize(stage_id: stage_id) do |stage|
+      next if stage.promotion_state
+
       stage.update!(cleanup_visits: stage.cleanup_visits + 1)
       next unless stage.expired_at
 

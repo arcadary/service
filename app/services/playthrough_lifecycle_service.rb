@@ -16,7 +16,7 @@ class PlaythroughLifecycleService
 
   def self.expire(stage:)
     deadline = stage.declared_at + LIFETIME
-    stage.update!(expired_at: deadline) if Time.current >= deadline && !stage.expired_at
+    stage.update!(expired_at: deadline) if Time.current >= deadline && !stage.expired_at && !stage.promotion_state
     stage
   end
 
