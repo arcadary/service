@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_28_023000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_28_030000) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.string "name", null: false
     t.string "record_type", null: false
@@ -85,6 +85,37 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_28_023000) do
     t.integer "authoring_revision", default: 0, null: false
     t.json "authored_fields", default: [], null: false
     t.index ["sha1"], name: "index_media_files_on_sha1", unique: true
+  end
+
+  create_table "playthrough_stage_objects", force: :cascade do |t|
+    t.integer "playthrough_stage_id", null: false
+    t.string "public_id", null: false
+    t.string "path", null: false
+    t.bigint "byte_size", null: false
+    t.string "sha256", null: false
+    t.string "content_type", null: false
+    t.integer "blob_id"
+    t.datetime "received_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["blob_id"], name: "index_playthrough_stage_objects_on_blob_id"
+    t.index ["playthrough_stage_id", "path"], name: "idx_on_playthrough_stage_id_path_e253008c66", unique: true
+    t.index ["playthrough_stage_id"], name: "index_playthrough_stage_objects_on_playthrough_stage_id"
+    t.index ["public_id"], name: "index_playthrough_stage_objects_on_public_id", unique: true
+  end
+
+  create_table "playthrough_stages", force: :cascade do |t|
+    t.string "public_id", null: false
+    t.integer "release_id", null: false
+    t.string "retry_key", null: false
+    t.string "declaration_sha256", null: false
+    t.string "package_sha256", null: false
+    t.json "declaration", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["public_id"], name: "index_playthrough_stages_on_public_id", unique: true
+    t.index ["release_id"], name: "index_playthrough_stages_on_release_id"
+    t.index ["retry_key"], name: "index_playthrough_stages_on_retry_key", unique: true
   end
 
   create_table "release_media", force: :cascade do |t|
@@ -162,6 +193,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_28_023000) do
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "game_identities", "games"
   add_foreign_key "games", "games", column: "retired_into_game_id"
+  add_foreign_key "playthrough_stage_objects", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "playthrough_stage_objects", "playthrough_stages"
+  add_foreign_key "playthrough_stages", "releases"
   add_foreign_key "release_media", "media_files"
   add_foreign_key "release_media", "releases"
   add_foreign_key "releases", "games"
