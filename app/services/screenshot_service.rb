@@ -100,7 +100,7 @@ class ScreenshotService
 
   def self.create_blob(key:, bytes:)
     ActiveStorage::Blob.build_after_unfurling(key: key, io: StringIO.new(bytes), filename: "screenshot.png",
-      content_type: "image/png", identify: false, service_name: StorageConfigurationService.media_service_name).tap(&:save!)
+      content_type: "image/png", identify: false).tap(&:save!)
   end
   private_class_method :create_blob
 end

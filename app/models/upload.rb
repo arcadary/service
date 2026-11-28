@@ -17,7 +17,7 @@ class Upload < ApplicationRecord
   LIMITS = {
     "screenshot" => { file_bytes: 1.megabyte, upload_bytes: 1.megabyte, files: 1, content_types: %w[image/png] },
     "video" => { file_bytes: 8.megabytes, upload_bytes: 2.gigabytes, files: 4096,
-                 content_types: %w[application/vnd.apple.mpegurl video/mp2t text/vtt] }
+                 content_types: %w[application/vnd.apple.mpegurl video/mp2t video/mp4 text/vtt] }
   }.freeze
 
   has_many :files, -> { order(:name) }, class_name: "UploadFile", dependent: :delete_all, inverse_of: :upload

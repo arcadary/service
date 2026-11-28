@@ -45,7 +45,7 @@ env:
     - SECRET_KEY_BASE
     - VALIDATION_REVIEWER_USERNAME
     - VALIDATION_REVIEWER_PASSWORD
-<% %w[R2_BUCKET R2_PUBLIC_BUCKET R2_ENDPOINT R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY].select { |name| ENV[name].present? }.each do |name| %>
+<% %w[R2_PUBLIC_BUCKET R2_ENDPOINT R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY].select { |name| ENV[name].present? }.each do |name| %>
     - <%= name %>
 <% end %>
   clear:

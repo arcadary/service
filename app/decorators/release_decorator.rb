@@ -1,12 +1,12 @@
 class ReleaseDecorator
-  VERSION = 5
+  VERSION = 6
 
   def self.decorate(release, sha1: release.sha1)
     new(release, sha1: sha1)
   end
 
   def self.version
-    [ VERSION, *GameDecorator.version, *ReleaseMediumDecorator.version, *ScreenshotDecorator.version, *ReleaseControllerProfileDecorator.version, *CompatibilityResultDecorator.version ]
+    [ VERSION, *GameDecorator.version, *ReleaseMediumDecorator.version, *ScreenshotDecorator.version, *ReleaseControllerProfileDecorator.version, *CompatibilityResultDecorator.version, *VideoDecorator.version ]
   end
 
   def initialize(release, sha1:)
@@ -20,7 +20,7 @@ class ReleaseDecorator
       release: @release.slice(:system, :region, :revision).merge("id" => @release.public_id, "sha1" => @sha1,
         "screenshots" => @release.screenshots.sort_by { |screenshot| Screenshot::KINDS.index(screenshot.kind) }.map { |screenshot| ScreenshotDecorator.decorate(screenshot).as_json })
         .merge(@release.controller_profile ? { "controller_profile" => ReleaseControllerProfileDecorator.decorate(@release.controller_profile).as_json } : {})
-        .merge("compatibility" => @compatibility),
+        .merge("compatibility" => @compatibility, "videos" => @release.videos.map { |video| VideoDecorator.decorate(video).as_json }),
       game: GameDecorator.decorate(@release.game).as_json,
       media: @release.release_media.map { |medium| ReleaseMediumDecorator.decorate(medium).as_json },
       startup: @startup

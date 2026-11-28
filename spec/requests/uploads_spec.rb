@@ -21,7 +21,7 @@ RSpec.describe "Uploads", type: :request do
 
   path "/v1/uploads/{upload_id}/files/{name}" do
     put "Store one file of an upload" do
-      consumes "image/png", "application/vnd.apple.mpegurl", "video/mp2t", "text/vtt"
+      consumes "image/png", "application/vnd.apple.mpegurl", "video/mp2t", "video/mp4", "text/vtt"
       produces "application/json"
       security [ private_service_basic: [] ]
       description "Stores one file, exactly as sent, on the service host's own disk until the upload is confirmed, used or expires 24 hours after request_upload. The upload_id comes from the MCP tool request_upload, whose limits apply; name is the file's package-relative path. Send the file's Content-Type and its SHA-256 in Content-Digest (sha-256=:BASE64:). Each file is checked on arrival: digest, size and file type. Sending the same name with the same digest again changes nothing."

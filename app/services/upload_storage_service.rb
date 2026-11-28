@@ -7,9 +7,10 @@ class UploadStorageService
     raise Upload::StorageUnavailable
   end
 
-  def self.read(upload:, name:)
-    path(upload: upload, name: name).binread
-  rescue SystemCallError
+  def self.read(upload:, name:, range: nil)
+    path = path(upload: upload, name: name)
+    range ? path.open("rb") { |file| file.pread(range.size, range.begin) } : path.binread
+  rescue SystemCallError, EOFError
     raise Upload::StorageUnavailable
   end
 

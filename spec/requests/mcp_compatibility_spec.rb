@@ -79,15 +79,15 @@ RSpec.describe "MCP compatibility recording", type: :request do
     expect(CompatibilityResult.count).to eq(0)
   end
 
-  it "attaches the release's own playthroughs as internal evidence and refuses another release's" do
-    playthrough = create(:playthrough, release: release)
-    result = record(playthrough_ids: [ playthrough.public_id ]).dig("structuredContent", "data", "result")
-    expect(result.fetch("playthrough_ids")).to eq([ playthrough.public_id ])
+  it "attaches the release's own videos as internal evidence and refuses another release's" do
+    video = create(:video, release: release)
+    result = record(video_ids: [ video.public_id ]).dig("structuredContent", "data", "result")
+    expect(result.fetch("video_ids")).to eq([ video.public_id ])
     get "/v1/releases/#{release.sha1}.json", headers: launcher
-    expect(response.body).not_to include(playthrough.public_id)
+    expect(response.parsed_body.dig("release", "compatibility", "steam_machine")).not_to have_key("video_ids")
 
-    other = create(:playthrough)
-    refused = record(playthrough_ids: [ other.public_id ], retry_key: "machine-2")
+    other = create(:video)
+    refused = record(video_ids: [ other.public_id ], retry_key: "machine-2")
     expect(refused.dig("structuredContent", "error", "code")).to eq("target_mismatch")
   end
 end

@@ -167,7 +167,7 @@ RSpec.describe "Authored catalog output", type: :request do
       bodies.each do |body|
         expect(body.keys).to match_array(%w[release game media startup])
         expect(body.fetch("game").keys).to match_array(%w[id title screenshot])
-        expect(body.fetch("release").keys).to match_array(%w[id sha1 system region revision screenshots compatibility])
+        expect(body.fetch("release").keys).to match_array(%w[id sha1 system region revision screenshots compatibility videos])
       end
       expect(response.body).to include("Authored title")
       expect(response.body).not_to include("Internal alias", "source_title", "authoring_revision", "authored_fields", "audit_id")

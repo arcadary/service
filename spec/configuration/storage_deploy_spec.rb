@@ -21,10 +21,9 @@ RSpec.describe "Storage container configuration" do
     )
   end
 
-  it "passes both buckets' configuration to the app container and keeps uploads off the database volume" do
+  it "passes the media bucket's configuration to the app container and keeps uploads off the database volume" do
     r2_values = {
-      "R2_BUCKET" => "test-private", "R2_PUBLIC_BUCKET" => "test-media", "R2_ENDPOINT" => "https://r2.example",
-      "R2_ACCESS_KEY_ID" => "test-key", "R2_SECRET_ACCESS_KEY" => "test-secret"
+      "R2_PUBLIC_BUCKET" => "test-media", "R2_ENDPOINT" => "https://r2.example", "R2_ACCESS_KEY_ID" => "test-key", "R2_SECRET_ACCESS_KEY" => "test-secret"
     }
     fake_environment.merge!(r2_values)
     config = configuration
@@ -32,18 +31,18 @@ RSpec.describe "Storage container configuration" do
     expect(config.env.to_h).to include(r2_values)
     expect(config.volume_args).to include("--volume", "/mnt/storage/arcadary_service:/rails/storage", "arcadary_service_uploads:/rails/uploads")
     storage = YAML.safe_load(ERB.new(Rails.root.join("config/storage.yml").read).result)
-    expect(storage.fetch("r2")).to include("bucket" => "test-private", "public" => false)
-    expect(storage.fetch("r2_media")).to include("bucket" => "test-media", "upload" => { "cache_control" => "public, max-age=31536000, immutable" })
-    %w[r2 r2_media].each do |name|
-      client = ActiveStorage::Service.configure(name, storage).client.client
-      expect([ client.config.request_checksum_calculation, client.config.response_checksum_validation ]).to eq(%w[when_required when_required])
-    end
+    expect(storage.keys).to contain_exactly("test_media", "local_media", "r2_media")
+    expect(storage.fetch("r2_media")).to include("bucket" => "test-media")
+    media = ActiveStorage::Service.configure("r2_media", storage)
+    expect([ media.client.client.config.request_checksum_calculation, media.client.client.config.response_checksum_validation ]).to eq(%w[when_required when_required])
+    expect(media.multipart_upload_threshold).to eq(512.megabytes)
+    expect(media.upload_options).to eq(cache_control: "public, max-age=31536000, immutable")
   end
 
   it "omits empty optional secrets from both declarations and container values" do
-    fake_environment.merge!("R2_BUCKET" => "test-private", "R2_ACCESS_KEY_ID" => "")
+    fake_environment.merge!("R2_PUBLIC_BUCKET" => "test-media", "R2_ACCESS_KEY_ID" => "")
     config = configuration
-    expect(config.env.secret_keys).to eq([ "SECRET_KEY_BASE", "VALIDATION_REVIEWER_USERNAME", "VALIDATION_REVIEWER_PASSWORD", "R2_BUCKET" ])
+    expect(config.env.secret_keys).to eq([ "SECRET_KEY_BASE", "VALIDATION_REVIEWER_USERNAME", "VALIDATION_REVIEWER_PASSWORD", "R2_PUBLIC_BUCKET" ])
     expect(config.env.to_h).not_to have_key("R2_ACCESS_KEY_ID")
   end
 end

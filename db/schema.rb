@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_28_170000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_28_183000) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.string "name", null: false
     t.string "record_type", null: false
@@ -51,11 +51,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_28_170000) do
     t.index ["idempotency_key"], name: "index_catalog_mutations_on_idempotency_key", unique: true
   end
 
-  create_table "compatibility_result_playthroughs", id: false, force: :cascade do |t|
+  create_table "compatibility_result_videos", id: false, force: :cascade do |t|
     t.integer "compatibility_result_id", null: false
-    t.integer "playthrough_id", null: false
-    t.index ["compatibility_result_id", "playthrough_id"], name: "index_compatibility_result_playthroughs_unique", unique: true
-    t.index ["playthrough_id"], name: "index_compatibility_result_playthroughs_on_playthrough_id"
+    t.integer "video_id", null: false
+    t.index ["compatibility_result_id", "video_id"], name: "index_compatibility_result_videos_unique", unique: true
+    t.index ["video_id"], name: "index_compatibility_result_videos_on_video_id"
   end
 
   create_table "compatibility_results", force: :cascade do |t|
@@ -117,20 +117,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_28_170000) do
     t.string "source_crc32"
     t.string "source_md5"
     t.index ["sha1"], name: "index_media_files_on_sha1", unique: true
-  end
-
-  create_table "playthroughs", force: :cascade do |t|
-    t.string "public_id", null: false
-    t.integer "release_id", null: false
-    t.string "source_sha1", null: false
-    t.json "capture", null: false
-    t.json "verification"
-    t.json "files", null: false
-    t.json "media", null: false
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["public_id"], name: "index_playthroughs_on_public_id", unique: true
-    t.index ["release_id"], name: "index_playthroughs_on_release_id"
   end
 
   create_table "release_media", force: :cascade do |t|
@@ -212,12 +198,27 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_28_170000) do
     t.index ["public_id"], name: "index_uploads_on_public_id", unique: true
   end
 
+  create_table "videos", force: :cascade do |t|
+    t.string "public_id", null: false
+    t.integer "release_id", null: false
+    t.string "kind", null: false
+    t.string "source_sha1", null: false
+    t.json "capture", null: false
+    t.json "verification"
+    t.json "files", null: false
+    t.json "media", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["public_id"], name: "index_videos_on_public_id", unique: true
+    t.index ["release_id", "kind"], name: "index_videos_on_release_id_and_kind", unique: true
+    t.index ["release_id"], name: "index_videos_on_release_id"
+  end
+
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "compatibility_results", "releases"
   add_foreign_key "game_identities", "games"
   add_foreign_key "games", "games", column: "retired_into_game_id"
-  add_foreign_key "playthroughs", "releases"
   add_foreign_key "release_media", "media_files"
   add_foreign_key "release_media", "releases"
   add_foreign_key "releases", "games"
@@ -225,4 +226,5 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_28_170000) do
   add_foreign_key "screenshots", "active_storage_blobs", column: "blob_id"
   add_foreign_key "screenshots", "releases"
   add_foreign_key "upload_files", "uploads"
+  add_foreign_key "videos", "releases"
 end

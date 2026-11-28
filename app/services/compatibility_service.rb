@@ -1,14 +1,14 @@
 class CompatibilityService
   FIELDS = %w[release_id sha1 device status core core_version startup_revision tested_at observed limits reviewer owns_file retry_key].freeze
-  OPTIONAL = %w[requires_input reason playthrough_ids].freeze
-  LISTS = %w[requires_input playthrough_ids].freeze
-  REFERENCES = %w[release_id playthrough_ids].freeze
+  OPTIONAL = %w[requires_input reason video_ids].freeze
+  LISTS = %w[requires_input video_ids].freeze
+  REFERENCES = %w[release_id video_ids].freeze
   ZONED = /(?:Z|[+-]\d{2}:\d{2})\z/
   PRINTABLE = /\A[^\p{Cc}]*\z/
 
   def self.record(**arguments)
     attributes = normalize(arguments: arguments.stringify_keys)
-    fingerprint_attributes = attributes.fetch("playthrough_ids").empty? ? attributes.except("playthrough_ids") : attributes
+    fingerprint_attributes = attributes.fetch("video_ids").empty? ? attributes.except("video_ids") : attributes
     fingerprint = Digest::SHA256.hexdigest(JSON.generate(fingerprint_attributes.sort.to_h))
     CompatibilityResult.transaction do
       existing = CompatibilityResult.find_by(retry_key: attributes.fetch("retry_key"))
@@ -18,10 +18,10 @@ class CompatibilityService
       raise CompatibilityResult::TargetMismatch unless release.release_media.any? { |medium| medium.media_file.sha1 == attributes.fetch("sha1") }
       raise CompatibilityResult::TargetMismatch unless ReleaseStartupService.revision(release: release) == attributes.fetch("startup_revision")
 
-      playthroughs = release.playthroughs.where(public_id: attributes.fetch("playthrough_ids")).to_a
-      raise CompatibilityResult::TargetMismatch unless playthroughs.size == attributes.fetch("playthrough_ids").size
+      video_ids = release.videos.where(public_id: attributes.fetch("video_ids")).pluck(:id)
+      raise CompatibilityResult::TargetMismatch unless video_ids.size == attributes.fetch("video_ids").size
 
-      release.compatibility_results.create!(attributes.except(*REFERENCES).merge("fingerprint" => fingerprint, "playthroughs" => playthroughs))
+      release.compatibility_results.create!(attributes.except(*REFERENCES).merge("fingerprint" => fingerprint, "video_ids" => video_ids))
     end
   rescue ActiveRecord::RecordNotUnique
     replay(result: CompatibilityResult.find_by!(retry_key: attributes.fetch("retry_key")), fingerprint: fingerprint)

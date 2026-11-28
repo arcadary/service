@@ -1,8 +1,8 @@
 require "rails_helper"
-require_relative "../support/playthrough_hls_helpers"
+require_relative "../support/video_hls_helpers"
 
-RSpec.describe PlaythroughTransportService do
-  include PlaythroughHlsHelpers
+RSpec.describe VideoTransportService do
+  include VideoHlsHelpers
 
   it "classifies H.264/AAC and silent H.264 from PMTs" do
     expect(described_class.validate(bytes: hls_transport)).to be(true)
@@ -45,7 +45,7 @@ RSpec.describe PlaythroughTransportService do
     "absent declared audio payload" => ->(bytes) { bytes.byteslice(0, 564) }
   }.each do |name, corrupt|
     it "rejects #{name}" do
-      expect { described_class.validate(bytes: corrupt.call(hls_transport)) }.to raise_error(Playthrough::InvalidHls)
+      expect { described_class.validate(bytes: corrupt.call(hls_transport)) }.to raise_error(Video::InvalidHls)
     end
   end
 
@@ -53,18 +53,18 @@ RSpec.describe PlaythroughTransportService do
     [ [ 0x1b, 0x101 ], [ 0x1b, 0x102 ] ], [ [ 0x0f, 0x102 ] ],
     [ [ 0x1b, 0x101 ], [ 0x0f, 0x102 ], [ 0x0f, 0x103 ] ] ].each do |streams|
     it "rejects unsupported stream types or counts #{streams.inspect}" do
-      expect { described_class.validate(bytes: hls_transport(streams: streams)) }.to raise_error(Playthrough::InvalidHls)
+      expect { described_class.validate(bytes: hls_transport(streams: streams)) }.to raise_error(Video::InvalidHls)
     end
   end
 
   it "rejects a second program even with a valid PAT CRC" do
-    expect { described_class.validate(bytes: hls_transport(programs: [ [ 1, 0x100 ], [ 2, 0x200 ] ])) }.to raise_error(Playthrough::InvalidHls)
+    expect { described_class.validate(bytes: hls_transport(programs: [ [ 1, 0x100 ], [ 2, 0x200 ] ])) }.to raise_error(Video::InvalidHls)
   end
 
   it "rejects malformed PMT descriptor lengths even with a valid CRC" do
     data = [ 1, 0xc1, 0, 0, 0xe101, 0xf003, 0x52, 8, 0 ].pack("nC3n2C3") + [ 0x1b, 0xe101, 0xf000 ].pack("Cnn")
     bytes = hls_transport(audio: false)
     bytes[188, 188] = hls_packet(pid: 0x100, payload: "\x00".b + hls_psi(table: 2, data: data), start: true)
-    expect { described_class.validate(bytes: bytes) }.to raise_error(Playthrough::InvalidHls)
+    expect { described_class.validate(bytes: bytes) }.to raise_error(Video::InvalidHls)
   end
 end

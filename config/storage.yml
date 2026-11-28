@@ -1,31 +1,12 @@
-test:
-  service: Disk
-  root: <%= Rails.root.join("tmp/storage") %>
-
 test_media:
   service: Disk
   root: <%= Rails.root.join("tmp/media") %>
-
-local:
-  service: Disk
-  root: <%= Rails.root.join("storage") %>
 
 local_media:
   service: Disk
   root: <%= Rails.root.join("tmp/media") %>
 
-<% if %w[R2_BUCKET R2_PUBLIC_BUCKET R2_ENDPOINT R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY].all? { |name| ENV[name].present? } %>
-r2:
-  service: S3
-  region: auto
-  bucket: <%= ENV.fetch("R2_BUCKET").to_json %>
-  endpoint: <%= ENV.fetch("R2_ENDPOINT").to_json %>
-  access_key_id: <%= ENV.fetch("R2_ACCESS_KEY_ID").to_json %>
-  secret_access_key: <%= ENV.fetch("R2_SECRET_ACCESS_KEY").to_json %>
-  public: false
-  request_checksum_calculation: when_required
-  response_checksum_validation: when_required
-
+<% if %w[R2_PUBLIC_BUCKET R2_ENDPOINT R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY].all? { |name| ENV[name].present? } %>
 r2_media:
   service: S3
   region: auto
@@ -38,4 +19,5 @@ r2_media:
   response_checksum_validation: when_required
   upload:
     cache_control: "public, max-age=31536000, immutable"
+    multipart_threshold: 536870912
 <% end %>

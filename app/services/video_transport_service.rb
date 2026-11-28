@@ -1,4 +1,4 @@
-class PlaythroughTransportService
+class VideoTransportService
   def self.validate(bytes:)
     new.validate(bytes: bytes)
   end
@@ -184,6 +184,6 @@ class PlaythroughTransportService
   end
 
   def invalid!
-    raise Playthrough::InvalidHls, "invalid_hls"
+    raise Video::InvalidHls, "invalid_hls"
   end
 end

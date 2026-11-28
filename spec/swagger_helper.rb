@@ -32,7 +32,7 @@ RSpec.configure do |config|
         description: <<~TEXT.strip
           Public, anonymous reads for the Arcadary launcher, and authenticated admin uploads. JSON routes end in .json. Generated from the request specs in spec/requests; do not edit swagger/ by hand.
 
-          Catalog data originates from [No-Intro](https://no-intro.org/), sourced through [libretro-database at f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029](https://github.com/libretro/libretro-database/tree/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/metadat/no-intro). Arcadary imports checksum metadata, groups releases into games, normalizes titles/regions/revisions and applies explicit launcher identity mappings. The entire service catalog, including project corrections, additions and later metadata fields, is licensed under [CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/), as is the [upstream source at the pin](https://github.com/libretro/libretro-database/blob/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/LICENSE). Screenshot images and all video are excluded: each medium's own rights apply. Catalog and screenshot licences grant no video rights. The owner-approved exception permits authenticated private HLS uploads, including the private Donkey Kong trial, without public commercial-footage distribution or anonymous playthrough metadata; uploaded playthroughs stay private. Application code remains MIT.
+          Catalog data originates from [No-Intro](https://no-intro.org/), sourced through [libretro-database at f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029](https://github.com/libretro/libretro-database/tree/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/metadat/no-intro). Arcadary imports checksum metadata, groups releases into games, normalizes titles/regions/revisions and applies explicit launcher identity mappings. The entire service catalog, including project corrections, additions and later metadata fields, is licensed under [CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/), as is the [upstream source at the pin](https://github.com/libretro/libretro-database/blob/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/LICENSE). Screenshot images and all video are excluded: each medium's own rights apply. Catalog and screenshot licences grant no video rights. Application code remains MIT.
 
           The pinned NES DAT includes distinct headered .nes and unheadered .unh releases. A launcher hashing NES payload bytes without the iNES header sends the matching unheadered checksum. All eight lists are covered, including C64 tape metadata; catalog coverage does not imply launcher playback support. No game files or player filenames are received, stored or served.
 
@@ -40,9 +40,11 @@ RSpec.configure do |config|
 
           Release screenshots are ordered title then gameplay, empty when absent. Embedded game.screenshot is the picture from the lexicographically smallest stable release.id among that game's releases with screenshots, choosing gameplay then title, or null. This ordering does not recommend a release for playback. Each image exposes exactly kind, url, width, height and licence; licence is an empty string when no image licence is granted. Uploading grants no new rights. URLs are the public media host (https://media.arcadary.org in production) plus /screenshots/{sha256}.png, with SHA-256 measured from the stored PNG, without signed/expiring parameters. Screenshot changes invalidate release and media validators, including sibling releases when the selected game picture changes.
 
+          Release videos hold the release's video of each kind (playthrough: a complete playthrough), at most one per kind, empty when there is none. Each exposes exactly kind, url, duration and chapters: url is the public media host plus /videos/{id}/index.m3u8, an HLS playlist anyone can play without signing in, new for every upload, replaced when a newer one of its kind is uploaded; duration and each chapter's start and end are seconds. Who captured or verified a video stays internal. Adding or removing a video invalidates release and media validators.
+
           Image credits keyed by game.id: ucity — µCity graphics by AntonioND/SkyLyrac (Antonio Niño Díaz), [CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/), [upstream v1.3 notice](https://github.com/AntonioND/ucity/blob/v1.3/readme.rst#license). tobu-tobu-girl — Tobu Tobu Girl assets by Tangram Games, [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/), [upstream notice](https://github.com/SimonLarsen/tobutobugirl/blob/048a22c2d7ebbe25811322e8692803fa86bb643a/README.md#license). Arcadary re-encodes captures as pixel-only PNGs, removing metadata. Launchers can attribute using game.id and the image's public licence value together with these credits.
 
-          Image URLs identify releases; the service and CDN see callers' IP addresses. Reads are anonymous, not private. Uploads and authentication responses are never shared-cacheable. Takedown requests: takedown@arcadary.org. Origin removal cannot erase cached copies. Before public launch the deployment owner must verify CDN purging, delivery-layer access-log suppression, and that the alias accepts mail and forwards to a monitored inbox.
+          Image and video URLs identify releases; the service and CDN see callers' IP addresses. Reads are anonymous, not private. Uploads and authentication responses are never shared-cacheable. Takedown requests: takedown@arcadary.org. Origin removal cannot erase cached copies. Before public launch the deployment owner must verify CDN purging, delivery-layer access-log suppression, and that the alias accepts mail and forwards to a monitored inbox.
         TEXT
       },
       paths: {},
@@ -50,6 +52,7 @@ RSpec.configure do |config|
         securitySchemes: { private_service_basic: { type: :http, scheme: :basic } },
         schemas: {
           Screenshot: screenshot_schema,
+          Video: McpVideoToolsService::PUBLIC_VIDEO,
           Upload: McpUploadToolsService::UPLOAD,
           UploadFile: McpUploadToolsService::FILE,
           ControllerProfile: {
@@ -99,14 +102,15 @@ RSpec.configure do |config|
             type: :object, required: %w[release game media startup], additionalProperties: false,
             properties: {
               release: {
-                type: :object, required: %w[id sha1 system region revision screenshots compatibility], additionalProperties: false,
+                type: :object, required: %w[id sha1 system region revision screenshots compatibility videos], additionalProperties: false,
                 properties: {
                   id: { type: :string }, sha1: { type: :string, pattern: "^[0-9a-f]{40}$" },
                   system: { type: :string, enum: %w[nes snes gb gbc megadrive pcengine atari2600 c64] },
                   region: { type: :string, nullable: true }, revision: { type: :string, nullable: true },
                   controller_profile: { "$ref" => "#/components/schemas/ControllerProfile" },
                   screenshots: { type: :array, items: { "$ref" => "#/components/schemas/Screenshot" } },
-                  compatibility: { "$ref" => "#/components/schemas/Compatibility" }
+                  compatibility: { "$ref" => "#/components/schemas/Compatibility" },
+                  videos: { type: :array, items: { "$ref" => "#/components/schemas/Video" } }
                 }
               },
               game: {

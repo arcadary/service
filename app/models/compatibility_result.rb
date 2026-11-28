@@ -12,7 +12,7 @@ class CompatibilityResult < ApplicationRecord
   SHORT_LENGTH = 100
 
   belongs_to :release, touch: true
-  has_and_belongs_to_many :playthroughs, join_table: :compatibility_result_playthroughs
+  has_and_belongs_to_many :videos, -> { select(:id, :public_id) }, join_table: :compatibility_result_videos
 
   validates :device, inclusion: { in: DEVICES }
   validates :status, inclusion: { in: STATUSES }
