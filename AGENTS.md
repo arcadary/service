@@ -2,7 +2,7 @@
 
 The Rails 8.1 application behind [Arcadary](https://github.com/arcadary/arcadary)'s remote service. It serves server-rendered HTML pages and a versioned JSON API under `/v1` for the launcher. This repository is public.
 
-**Product intent lives in the project's Uberblick workspace**, not here: what the service is for, who it serves, the privacy and verification rules and the roadmap. `.uberblick.json` binds this repository to that workspace, and the `uberblick` MCP server (`ub mcp serve`, in `.mcp.json` and `.codex/config.toml`) reads it. Before changing user-facing behaviour, search the workspace, starting with the pages tagged `product-intent` and the decision records. A decision in force wins over anything here; when a change conflicts with one, stop and ask. This file holds the technical and implementation rules.
+**Product intent lives in the project's Uberblick workspace**, not here: what the service is for, who it serves, the privacy and verification rules and the roadmap. `.uberblick.json` binds this repository to that workspace, and the `arcadary-corpus` MCP server (`ub mcp serve`, in `.mcp.json` and `.codex/config.toml`) reads it; the Codex workers in `ub-agents.yaml` start it as `uberblick`, limited to read tools. Before changing user-facing behaviour, search the workspace, starting with the pages tagged `product-intent` and the decision records. A decision in force wins over anything here; when a change conflicts with one, stop and ask. This file holds the technical and implementation rules.
 
 ## Implemented
 

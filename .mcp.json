@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "uberblick": {
+    "arcadary-corpus": {
       "type": "stdio",
       "command": "ub",
       "args": [
