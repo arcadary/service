@@ -1,4 +1,6 @@
 Rails.application.routes.draw do
+  mount ->(env) { McpTransportService.call(env: env) }, at: "/mcp"
+
   scope "v1", module: "v1", format: false, defaults: { format: :json }, constraints: { sha1: /[^\/]+/ } do
     get "lookup/:sha1.json", to: "lookups#show", as: :lookup
     get "releases/:sha1.json", to: "releases#show", as: :release
