@@ -35,6 +35,11 @@ class ScreenshotStagingService
     end
     old_blob&.purge_later
     screenshot
+  rescue ScreenshotStage::Unavailable
+    ScreenshotStage.uncached do
+      available(staging_id: staging_id, release_id: release_id, source_sha1: source_sha1, kind: kind)
+    end
+    raise
   end
 
   def self.target(release_id:, source_sha1:, kind:)

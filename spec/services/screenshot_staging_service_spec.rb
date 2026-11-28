@@ -3,6 +3,7 @@ require_relative "../support/screenshot_helpers"
 
 RSpec.describe ScreenshotStagingService do
   include ScreenshotHelpers
+  include ActiveJob::TestHelper
 
   let(:release) { create(:release) }
 
@@ -34,5 +35,22 @@ RSpec.describe ScreenshotStagingService do
     expect(previous.blob.download).to eq(bytes)
     expect(stage.reload).to have_attributes(consumed_at: nil)
     expect(stage.blob.download).to eq(bytes)
+  end
+
+  it "returns consumed when another publisher transfers and removes the blob during a pending read" do
+    stage = stage_image
+    arguments = { staging_id: stage.public_id, release_id: release.public_id, source_sha1: release.sha1, kind: "title" }
+    published = false
+    allow(described_class).to receive(:validated_png).and_wrap_original do |method, **attributes|
+      unless published
+        published = true
+        described_class.publish(**arguments)
+        perform_enqueued_jobs { ScreenshotService.remove(public_id: release.public_id, kind: "title") }
+      end
+      method.call(**attributes)
+    end
+    expect { described_class.publish(**arguments) }.to raise_error(ScreenshotStage::Consumed)
+    expect(Screenshot.count).to eq(0)
+    expect(stage.reload.consumed_at).to be_present
   end
 end
