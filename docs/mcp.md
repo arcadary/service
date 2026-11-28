@@ -107,13 +107,17 @@ Duplicate JSON keys, including repeated release selectors, return HTTP `400` wit
 
 ## Codex configured-header connection
 
-Placeholder-only configuration, following [Codex MCP configuration](https://developers.openai.com/codex/mcp/):
+`.codex/config.toml` carries the server for Codex, following [Codex MCP configuration](https://developers.openai.com/codex/mcp/):
 
 ```toml
 [mcp_servers.arcadary_catalog]
-url = "https://SERVICE_HOST_PLACEHOLDER/mcp"
+url = "https://api.arcadary.org/mcp"
 env_http_headers = { Authorization = "ARCADARY_CATALOG_AUTHORIZATION" }
 ```
+
+`.mcp.json` carries the same server for Claude Code, with `headers.Authorization` set to `${ARCADARY_CATALOG_AUTHORIZATION:-}`. Without the variable, both clients reach only the `401` challenge.
+
+The owner keeps the header in its own fnox file, `~/.config/fnox/arcadary-mcp.toml`, outside every project, so fnox's shell hook never exports it. Clients started through it are the only processes that get it: `fnox -c ~/.config/fnox/arcadary-mcp.toml exec -- claude`, or `-- codex`. The agent loop never has it.
 
 Provision `ARCADARY_CATALOG_AUTHORIZATION` in the **intended Codex process's environment** through a secure secret manager or launcher. Its complete value must be the Basic scheme plus the base64 encoding of the configured username, a colon and password. Base64 is reversible. Do not print the value, put it in shell history, commit it, store it in a URL, or paste it into this TOML. Restart the intended client with its refreshed environment after rotation. Configuring a terminal environment alone does not configure a separately launched app. Do not use `codex mcp login`: there is no OAuth login here.
 
