@@ -7,7 +7,7 @@ RSpec.describe "Media", type: :request do
   path "/v1/media/{sha1}.json" do
     get "Every release containing an exact file" do
       produces "application/json"
-      description "Lists releases in stable public-ID order, each in the release response shape with release.sha1 equal to the asked file. A checksum identifies membership only: the service never infers a set from one checksum or from file names. Successes are public for 300 seconds with an ETag; errors are never stored."
+      description "Lists releases in stable public-ID order, each in the release response shape with release.sha1 equal to the asked file. A checksum identifies membership only: the service never infers a set from one checksum or from file names. Successes are public for 300 seconds with ETag and Last-Modified validators; corrections refresh both, while cached responses may remain until their existing TTL expires. Last-Modified is the latest containing release timestamp. Current conditional requests return 304. Errors are never stored."
       parameter name: :sha1, in: :path, required: true,
         schema: { type: :string, pattern: "^[0-9a-fA-F]{40}$" }
 
@@ -16,6 +16,7 @@ RSpec.describe "Media", type: :request do
           properties: { releases: { type: :array, minItems: 1, items: { "$ref" => "#/components/schemas/Release" } } }
         header "Cache-Control", schema: { type: :string, enum: [ "max-age=300, public" ] }
         header "ETag", schema: { type: :string }
+        header "Last-Modified", schema: { type: :string }
         let(:sha1) { release.sha1.upcase }
         run_test! do
           releases = response.parsed_body.fetch("releases")

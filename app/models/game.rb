@@ -8,10 +8,17 @@ class Game < ApplicationRecord
   validates :public_id, uniqueness: true
   validates :screenshot_licence, exclusion: { in: [ nil ] }
   validate :public_id_is_stable, on: :update
+  validate :valid_title_aliases
 
   after_update :touch_releases
 
   private
+    def valid_title_aliases
+      unless title_aliases.is_a?(Array) && title_aliases.all? { |title| title.is_a?(String) && title.present? } && title_aliases.uniq == title_aliases
+        errors.add(:title_aliases, "must be distinct nonblank titles")
+      end
+    end
+
     def touch_releases
       releases.touch_all
     end

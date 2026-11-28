@@ -82,14 +82,126 @@ paths:
                     type: string
                     enum:
                     - not_found
+  "/mcp":
+    post:
+      summary: Authenticated stateless MCP Streamable HTTP
+      security:
+      - private_service_basic: []
+      description: Read-only catalog tools over MCP 1.11.0; see https://github.com/arcadary/service/blob/main/docs/mcp.md
+        for schemas, pagination, protocol versions, client setup and deployment exclusions.
+        Every method and subtree authenticates before parsing and sends no-store.
+        No OAuth discovery or login. POST bodies are limited to 65536 bytes and JSON
+        nesting to 64; finite JSON replies only, without SSE subscriptions or persistent
+        sessions.
+      parameters:
+      - name: Authorization
+        in: header
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: JSON-RPC result or protocol error
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - jsonrpc
+                - id
+                properties:
+                  jsonrpc:
+                    type: string
+                    enum:
+                    - '2.0'
+                  id:
+                    type: integer
+                    nullable: true
+                  result:
+                    type: object
+                  error:
+                    type: object
+        '401':
+          description: missing or invalid credentials
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+            WWW-Authenticate:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - error
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - unauthorized
+        '503':
+          description: configured credentials absent or blank
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - error
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - authentication_unavailable
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+              - jsonrpc
+              - id
+              - method
+              properties:
+                jsonrpc:
+                  type: string
+                  enum:
+                  - '2.0'
+                id:
+                  type: integer
+                method:
+                  type: string
+                params:
+                  type: object
   "/v1/media/{sha1}.json":
     get:
       summary: Every release containing an exact file
       description: 'Lists releases in stable public-ID order, each in the release
         response shape with release.sha1 equal to the asked file. A checksum identifies
         membership only: the service never infers a set from one checksum or from
-        file names. Successes are public for 300 seconds with an ETag; errors are
-        never stored.'
+        file names. Successes are public for 300 seconds with ETag and Last-Modified
+        validators; corrections refresh both, while cached responses may remain until
+        their existing TTL expires. Last-Modified is the latest containing release
+        timestamp. Current conditional requests return 304. Errors are never stored.'
       parameters:
       - name: sha1
         in: path
@@ -107,6 +219,9 @@ paths:
                 enum:
                 - max-age=300, public
             ETag:
+              schema:
+                type: string
+            Last-Modified:
               schema:
                 type: string
           content:
@@ -170,7 +285,9 @@ paths:
         Media are in position order. Startup applies defaults and includes a SHA-256
         revision over effective startup and ordered checksums. C64 slots are 8 and
         9; other systems have no drives. The service never infers a set from one checksum
-        or from file names. Successes are public for 300 seconds with an ETag; errors
+        or from file names. Successes are public for 300 seconds with ETag and Last-Modified
+        validators; corrections refresh both, while cached responses may remain until
+        their existing TTL expires. Current conditional requests return 304. Errors
         are never stored.
       parameters:
       - name: sha1
@@ -191,6 +308,9 @@ paths:
                 enum:
                 - max-age=300, public
             ETag:
+              schema:
+                type: string
+            Last-Modified:
               schema:
                 type: string
           content:
@@ -512,6 +632,9 @@ components:
     capture_token:
       type: http
       scheme: bearer
+    private_service_basic:
+      type: http
+      scheme: basic
   schemas:
     Screenshot:
       type: object

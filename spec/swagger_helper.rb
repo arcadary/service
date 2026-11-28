@@ -45,7 +45,7 @@ RSpec.configure do |config|
       },
       paths: {},
       components: {
-        securitySchemes: { capture_token: { type: :http, scheme: :bearer } },
+        securitySchemes: { capture_token: { type: :http, scheme: :bearer }, private_service_basic: { type: :http, scheme: :basic } },
         schemas: {
           Screenshot: screenshot_schema,
           Release: {

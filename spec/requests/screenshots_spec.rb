@@ -152,6 +152,16 @@ RSpec.describe "Screenshots", type: :request do
     expect(Screenshot.sole.attributes).to eq(previous)
   end
 
+  it "answers 422 to corrupt compressed pixels without writing to stderr" do
+    header = png_chunk("IHDR", [ 2, 2, 8, 6, 0, 0, 0 ].pack("NNC5"))
+    pixels = png_chunk("IDAT", Zlib.deflate("\0".b))
+    bytes = ScreenshotPngService::SIGNATURE + header + pixels + png_chunk("IEND", "")
+
+    expect { put upload_url, params: bytes, headers: capture_headers }.not_to output.to_stderr_from_any_process
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(Screenshot.count).to eq(0)
+  end
+
   it "rejects invalid kinds and non-PNG content types without storing" do
     put "/v1/releases/#{sha1}/screenshots/box-art.json", params: png, headers: capture_headers
     expect(response).to have_http_status(:unprocessable_content)
