@@ -21,8 +21,7 @@ class PlaythroughService
   def self.create(upload_id:, release_id:, source_sha1:, capture:, verifier:, verification: nil)
     capture = capture.to_h.stringify_keys
     verification = verification!(verification.to_h.stringify_keys, source_sha1: source_sha1, verifier: verifier) if verification
-    release = Release.find_by(public_id: release_id)
-    raise Release::ReleaseNotFound unless release
+    release = ReleaseService.find(public_id: release_id)
     raise Playthrough::TargetMismatch unless member?(release: release, source_sha1: source_sha1, verification: verification)
 
     UploadService.use(upload_id: upload_id, kind: "video") do |upload|

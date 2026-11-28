@@ -17,7 +17,7 @@ RSpec.describe "Storage container configuration" do
     expect(config.env.secret_keys).to eq([ "SECRET_KEY_BASE", "VALIDATION_REVIEWER_USERNAME", "VALIDATION_REVIEWER_PASSWORD" ])
     expect(config.env.to_h).to eq(
       "SECRET_KEY_BASE" => "test-rails-key", "VALIDATION_REVIEWER_USERNAME" => "", "VALIDATION_REVIEWER_PASSWORD" => "",
-      "SOLID_QUEUE_IN_PUMA" => true
+      "CATALOG_ADMIN_NAME" => "Admin", "SOLID_QUEUE_IN_PUMA" => true
     )
   end
 

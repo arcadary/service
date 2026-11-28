@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_28_140000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_28_150000) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.string "name", null: false
     t.string "record_type", null: false
@@ -49,6 +49,29 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_28_140000) do
     t.json "result", default: {}, null: false
     t.datetime "created_at", null: false
     t.index ["idempotency_key"], name: "index_catalog_mutations_on_idempotency_key", unique: true
+  end
+
+  create_table "compatibility_verdict_playthroughs", id: false, force: :cascade do |t|
+    t.integer "compatibility_verdict_id", null: false
+    t.integer "playthrough_id", null: false
+    t.index ["compatibility_verdict_id", "playthrough_id"], name: "index_compatibility_verdict_playthroughs_unique", unique: true
+    t.index ["playthrough_id"], name: "index_compatibility_verdict_playthroughs_on_playthrough_id"
+  end
+
+  create_table "compatibility_verdicts", force: :cascade do |t|
+    t.integer "release_id", null: false
+    t.string "device_class", null: false
+    t.string "core", null: false
+    t.string "core_version", null: false
+    t.string "startup_revision", null: false
+    t.string "state", null: false
+    t.datetime "tested_at", null: false
+    t.text "evidence"
+    t.text "limitations"
+    t.string "reviewer", null: false
+    t.text "reason", null: false
+    t.datetime "created_at", null: false
+    t.index ["release_id"], name: "index_compatibility_verdicts_on_release_id"
   end
 
   create_table "game_identities", force: :cascade do |t|
@@ -186,6 +209,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_28_140000) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "compatibility_verdicts", "releases"
   add_foreign_key "game_identities", "games"
   add_foreign_key "games", "games", column: "retired_into_game_id"
   add_foreign_key "playthroughs", "releases"

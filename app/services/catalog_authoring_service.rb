@@ -15,6 +15,13 @@ class CatalogAuthoringService
     new(operation: operation, attributes: attributes, expected_revisions: expected_revisions, reason: reason, idempotency_key: idempotency_key, preview: preview).call
   end
 
+  def self.admin_name
+    name = ENV["CATALOG_ADMIN_NAME"].to_s.strip
+    raise MissingAdminName, "CATALOG_ADMIN_NAME must be configured" if name.empty?
+
+    name
+  end
+
   def self.preview(operation:, attributes:)
     raise InvalidInput, "attributes must be an object" unless attributes.is_a?(Hash)
 
@@ -24,11 +31,12 @@ class CatalogAuthoringService
   end
 
   def initialize(operation:, attributes:, expected_revisions:, reason:, idempotency_key:, preview:)
-    raise InvalidInput, "attributes and expected revisions must be objects" unless attributes.is_a?(Hash) && expected_revisions.is_a?(Hash)
+    current = expected_revisions == :current && operation.to_s == "create_release"
+    raise InvalidInput, "attributes and expected revisions must be objects" unless attributes.is_a?(Hash) && (expected_revisions.is_a?(Hash) || current)
 
     @operation = operation.to_s
     @attributes = attributes.deep_stringify_keys
-    @expected = expected_revisions.deep_stringify_keys
+    @expected = current ? :current : expected_revisions.deep_stringify_keys
     @reason = reason
     @key = idempotency_key
     @supplied_preview = preview.is_a?(Hash) ? preview.deep_stringify_keys : preview
@@ -37,8 +45,7 @@ class CatalogAuthoringService
   end
 
   def call
-    admin_name = ENV["CATALOG_ADMIN_NAME"].to_s.strip
-    raise MissingAdminName, "CATALOG_ADMIN_NAME must be configured" if admin_name.empty?
+    admin_name = self.class.admin_name
     raise InvalidInput, "unknown operation" unless OPERATIONS.include?(@operation)
     raise InvalidInput, "reason and idempotency key are required" unless @reason.is_a?(String) && @reason.present? && @key.is_a?(String) && @key.present?
 
@@ -151,8 +158,9 @@ class CatalogAuthoringService
     def expect_current!(record:)
       state = CatalogAuthoringReadService.record(record)
       key = reference(state: state)
-      expected = @expected[key]
-      raise Conflict, "missing or stale authoring revision for #{key}" unless expected.is_a?(Integer) && expected == record.authoring_revision
+      unless @expected == :current || (@expected[key].is_a?(Integer) && @expected[key] == record.authoring_revision)
+        raise Conflict, "missing or stale authoring revision for #{key}"
+      end
 
       @before[key] = state
     end
@@ -165,7 +173,7 @@ class CatalogAuthoringService
     end
 
     def no_extra_revisions!(references:)
-      raise InvalidInput, "unexpected revision targets" unless (@expected.keys - references).empty?
+      raise InvalidInput, "unexpected revision targets" unless @expected == :current || (@expected.keys - references).empty?
     end
 
     def allow!(attributes:, fields:)

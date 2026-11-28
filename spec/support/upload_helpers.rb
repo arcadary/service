@@ -1,4 +1,8 @@
+require_relative "mcp_helpers"
+
 module UploadHelpers
+  include McpHelpers
+
   def content_digest(bytes)
     "sha-256=:#{Base64.strict_encode64(Digest::SHA256.digest(bytes))}:"
   end
@@ -14,16 +18,6 @@ module UploadHelpers
     UploadService.confirm(upload_id: upload.public_id)
     UploadCheckJob.perform_now(upload.id)
     upload.reload
-  end
-
-  def stub_admin_credentials
-    allow(ENV).to receive(:[]).and_call_original
-    allow(ENV).to receive(:[]).with("VALIDATION_REVIEWER_USERNAME").and_return("synthetic-admin")
-    allow(ENV).to receive(:[]).with("VALIDATION_REVIEWER_PASSWORD").and_return("synthetic-password")
-  end
-
-  def admin_authorization
-    ActionController::HttpAuthentication::Basic.encode_credentials("synthetic-admin", "synthetic-password")
   end
 
   def put_upload_file(path, bytes:, content_type:, authorization: admin_authorization, digest: content_digest(bytes))

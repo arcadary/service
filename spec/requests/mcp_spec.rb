@@ -91,7 +91,7 @@ RSpec.describe "Authenticated catalog MCP", type: :request do
   end
 
   it "requires the current configured pair on every reconnect" do
-    expect(rpc(method: "tools/list").dig("result", "tools").size).to eq(8)
+    expect(rpc(method: "tools/list").dig("result", "tools").size).to eq(11)
     allow(ENV).to receive(:[]).with("VALIDATION_REVIEWER_PASSWORD").and_return("rotated-synthetic")
     rpc(method: "tools/list")
     expect(response).to have_http_status(:unauthorized)
@@ -99,9 +99,9 @@ RSpec.describe "Authenticated catalog MCP", type: :request do
     expect(response).to have_http_status(:ok)
   end
 
-  it "advertises read tools and the upload tools with schemas and preserves SDK version negotiation" do
+  it "advertises read tools, the upload tools and the release tools with schemas and preserves SDK version negotiation" do
     discovered = rpc(method: "tools/list").dig("result", "tools")
-    expect(discovered.map { |entry| entry.fetch("name") }).to eq(%w[search_games get_game get_release get_catalog_history request_upload confirm_upload upload_screenshot upload_video])
+    expect(discovered.map { |entry| entry.fetch("name") }).to eq(%w[search_games get_game get_release get_catalog_history request_upload confirm_upload upload_screenshot upload_video register_release record_verdict get_compatibility])
     discovered.first(4).each do |entry|
       expect(entry.dig("annotations", "readOnlyHint")).to be(true)
       expect(entry.fetch("inputSchema")).to include("additionalProperties" => false)
@@ -157,7 +157,7 @@ RSpec.describe "Authenticated catalog MCP", type: :request do
     expect(response).to have_http_status(:forbidden)
     rpc(method: "tools/list", extra_headers: { "Host" => "api.arcadary.org", "Origin" => "https://api.arcadary.org" })
     expect(response).to have_http_status(:ok)
-    expect(rpc(method: "tools/list").dig("result", "tools").size).to eq(8)
+    expect(rpc(method: "tools/list").dig("result", "tools").size).to eq(11)
   end
 
   it "keeps unsupported methods, missing subpaths and application failures private" do
@@ -177,7 +177,7 @@ RSpec.describe "Authenticated catalog MCP", type: :request do
   end
 
   it "returns a domain failure rather than partial data when a catalog result exceeds the byte bound" do
-    game = create(:game, title: "x" * McpCatalogToolsService::MAX_RESULT_BYTES)
+    game = create(:game, title: "x" * McpToolService::MAX_RESULT_BYTES)
     result = tool(name: "get_game", id: game.public_id)
     expect(result.dig("structuredContent", "error", "code")).to eq("invalid_input")
     expect(response.body.bytesize).to be < 1000

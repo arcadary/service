@@ -1,5 +1,4 @@
 class McpCatalogToolsService
-  MAX_RESULT_BYTES = 1024 * 1024
   HELP = "Every collection is {items, next_cursor}; default 20, maximum 50. Pass only cursor to this same tool to read that collection's next page. Cursors expire after one hour; changed nested records require a fresh read."
   DESCRIPTIONS = {
     "search_games" => "Find games by case-insensitive title or alias substring and optional system. Returns game summaries with stable id, title and authoring_revision.",
@@ -15,34 +14,19 @@ class McpCatalogToolsService
         annotations: { read_only_hint: true, destructive_hint: false, idempotent_hint: true, open_world_hint: false }) do |server_context: nil, **arguments|
         McpCatalogToolsService.call(tool: name, arguments: arguments)
       end
-    end + McpUploadToolsService.tools
+    end
   end
 
   def self.call(tool:, arguments:)
     raise McpCatalogReadService::InvalidInput unless JSONSchemer.schema(input_schema(name: tool)).valid?(arguments.stringify_keys)
 
-    result = { "data" => McpCatalogReadService.call(tool: tool, **arguments) }
-    response(result: result)
+    McpToolService.response(result: { "data" => McpCatalogReadService.call(tool: tool, **arguments) })
   rescue McpCatalogReadService::InvalidInput
-    failure(code: "invalid_input")
+    McpToolService.failure(code: "invalid_input")
   rescue McpCatalogReadService::NotFound
-    failure(code: "not_found")
+    McpToolService.failure(code: "not_found")
   rescue McpCatalogReadService::AmbiguousRelease => error
-    failure(code: "ambiguous_release", candidates: error.candidates)
-  end
-
-  def self.failure(code:, candidates: nil)
-    error = { "code" => code }
-    error["candidates"] = candidates if candidates
-    response(result: { "error" => error }, error: true)
-  end
-  private_class_method :failure
-
-  def self.response(result:, error: false)
-    serialized = JSON.generate(result)
-    return failure(code: "invalid_input") if serialized.bytesize > MAX_RESULT_BYTES
-
-    MCP::Tool::Response.new([ { type: "text", text: serialized } ], error: error, structured_content: result)
+    McpToolService.failure(code: "ambiguous_release", candidates: error.candidates)
   end
 
   def self.input_schema(name:)
@@ -88,12 +72,8 @@ class McpCatalogToolsService
     }
   end
 
-  def self.object_schema(properties:)
-    { type: "object", additionalProperties: false, required: properties.keys.map(&:to_s), properties: properties }
-  end
-
   def self.page_schema(items:)
-    object_schema(properties: {
+    McpToolService.object_schema(properties: {
       items: { type: "array", maxItems: 50, items: items },
       next_cursor: { type: [ "string", "null" ], description: "Pass only this opaque cursor to the same tool; null means complete." }
     })
@@ -101,7 +81,7 @@ class McpCatalogToolsService
   private_class_method :page_schema
 
   def self.release_summary_schema
-    object_schema(properties: {
+    McpToolService.object_schema(properties: {
       id: { type: "string" }, game_id: { type: "string" }, system: { type: "string", enum: Release::SYSTEMS },
       region: { type: [ "string", "null" ] }, revision: { type: [ "string", "null" ] }, authoring_revision: { type: "integer" }
     })
@@ -111,31 +91,31 @@ class McpCatalogToolsService
   def self.result_schema(name:)
     case name
     when "search_games"
-      page_schema(items: object_schema(properties: { id: { type: "string" }, title: { type: "string" }, authoring_revision: { type: "integer" } }))
+      page_schema(items: McpToolService.object_schema(properties: { id: { type: "string" }, title: { type: "string" }, authoring_revision: { type: "integer" } }))
     when "get_game"
-      object_schema(properties: record_properties(type: "game").merge(
-        canonical: object_schema(properties: { title: { type: "string" }, title_aliases: page_schema(items: { type: "string" }) }),
-        source: object_schema(properties: { source_title: { type: [ "string", "null" ] } }),
+      McpToolService.object_schema(properties: record_properties(type: "game").merge(
+        canonical: McpToolService.object_schema(properties: { title: { type: "string" }, title_aliases: page_schema(items: { type: "string" }) }),
+        source: McpToolService.object_schema(properties: { source_title: { type: [ "string", "null" ] } }),
         releases: page_schema(items: release_summary_schema)))
     when "get_release"
-      object_schema(properties: record_properties(type: "release").merge(
-        canonical: object_schema(properties: {
+      McpToolService.object_schema(properties: record_properties(type: "release").merge(
+        canonical: McpToolService.object_schema(properties: {
           game_id: { type: "string" }, system: { type: "string", enum: Release::SYSTEMS },
           region: { type: [ "string", "null" ] }, revision: { type: [ "string", "null" ] },
           controller_profile: { anyOf: [ { type: "null" }, controller_profile_schema ] },
-          startup: object_schema(properties: {
+          startup: McpToolService.object_schema(properties: {
             schema: { type: "integer", const: 1 }, boot: { type: "string" }, revision: { type: "string" },
             drives: { type: "object", additionalProperties: false, properties: { "8" => { type: "string" }, "9" => { type: "string" } } }
           }),
-          media: page_schema(items: object_schema(properties: {
+          media: page_schema(items: McpToolService.object_schema(properties: {
             key: { type: "string" }, position: { type: "integer" }, role: { type: "string", enum: %w[game save] },
             label: { type: [ "string", "null" ] }, sha1: { type: "string" }, size: { type: [ "integer", "null" ] },
             format: { type: [ "string", "null" ] }, crc32: { type: [ "string", "null" ] }, md5: { type: [ "string", "null" ] }
           }))
         }),
-        source: object_schema(properties: %w[source_title source_system source_region source_revision].index_with { { type: [ "string", "null" ] } })))
+        source: McpToolService.object_schema(properties: %w[source_title source_system source_region source_revision].index_with { { type: [ "string", "null" ] } })))
     when "get_catalog_history"
-      page_schema(items: object_schema(properties: {
+      page_schema(items: McpToolService.object_schema(properties: {
         id: { type: "integer" }, operation: { type: "string" }, admin_name: { type: "string" },
         created_at: { type: "string" }, reason: { type: "string" }, record_changes: { "$ref" => "#/$defs/page" }
       }))
@@ -147,13 +127,13 @@ class McpCatalogToolsService
     position = { type: "string", enum: ReleaseControllerProfileService::POSITIONS }
     evidence = page_schema(items: { type: "string", minLength: 1, maxLength: ReleaseControllerProfileService::MAX_CITATION_LENGTH })
     edition = { type: [ "string", "null" ], maxLength: ReleaseControllerProfileService::MAX_EDITION_LENGTH }
-    object_schema(properties: {
+    McpToolService.object_schema(properties: {
       version: { type: "integer", const: 1 },
-      binding: object_schema(properties: { system: { type: "string", const: "snes" }, region: edition, revision: edition }),
-      layout: page_schema(items: object_schema(properties: {
+      binding: McpToolService.object_schema(properties: { system: { type: "string", const: "snes" }, region: edition, revision: edition }),
+      layout: page_schema(items: McpToolService.object_schema(properties: {
         position: position, label: { type: "string", enum: ReleaseControllerProfileService::LABELS }, evidence: evidence
       })),
-      prompts: page_schema(items: object_schema(properties: {
+      prompts: page_schema(items: McpToolService.object_schema(properties: {
         letter: { type: "string", pattern: "^[A-Za-z]$", minLength: 1, maxLength: 1 }, position: position, evidence: evidence
       }))
     })

@@ -8,12 +8,19 @@ class ReleaseService
     releases.first
   end
 
+  def self.find(public_id:, includes: [])
+    release = Release.includes(includes).find_by(public_id: public_id)
+    raise Release::ReleaseNotFound unless release
+
+    release
+  end
+
   def self.containing(sha1:)
     checksum = normalize(sha1)
     ids = ReleaseMedium.joins(:media_file).where(media_files: { sha1: checksum }).distinct.pluck(:release_id)
     raise Release::ReleaseNotFound if ids.empty?
 
-    releases = Release.where(id: ids).includes(:screenshots, { game: { releases: :screenshots } }, release_media: :media_file).order(:public_id).to_a
+    releases = Release.where(id: ids).includes(:screenshots, :compatibility_verdicts, { game: { releases: :screenshots } }, release_media: :media_file).order(:public_id).to_a
     releases.each { |release| release.game.selected_screenshot = ScreenshotService.selected_for(game: release.game) }
     releases
   end
