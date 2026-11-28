@@ -20,6 +20,6 @@ class ScreenshotDecorator
   end
 
   def admin_json
-    as_json.merge(@screenshot.slice(:position, :sha256)).merge("id" => @screenshot.public_id, "created_at" => @screenshot.created_at.utc.iso8601(6))
+    as_json.merge("id" => @screenshot.public_id, "sha256" => @screenshot.sha256, "created_at" => @screenshot.created_at.utc.iso8601(6))
   end
 end

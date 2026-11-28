@@ -2,7 +2,6 @@ FactoryBot.define do
   factory :screenshot do
     release
     kind { "gameplay" }
-    position { 1 }
     width { 2 }
     height { 2 }
     sequence(:sha256) { |n| Digest::SHA256.hexdigest("screenshot-#{n}") }

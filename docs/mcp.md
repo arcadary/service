@@ -51,22 +51,24 @@ Four tools carry an upload; file bytes go over HTTP, never through MCP. The [upl
 | `upload_screenshot` | `upload_id`, `release_id`, `kind` (`title` or `gameplay`) | `release_id` and the `screenshot` as `list_screenshots` shows it |
 | `upload_video` | `upload_id`, `release_id`, `source_sha1`, `capture` (`tool`, `version`, `captured_at`), optional `verification` | The private `playthrough`: id, release, source, file count, duration, codecs and chapters |
 
-After `request_upload`, PUT each file to `upload_url` followed by its package-relative name, with the same Basic credentials, the file's `Content-Type` and `Content-Digest: sha-256=:BASE64:`. `GET /v1/uploads/{upload_id}.json` lists what has arrived. `release_id` is the release's stable id, never its title or a checksum. `upload_url` is built from the MCP request's own origin. `confirm_upload` answers at once; call it again until the state is `confirmed` or `rejected`. `upload_video`'s verification must name the authenticated admin as `verifier`.
-
-`upload_screenshot` with `kind` `title` replaces the release's title screenshot with a new one, under a new id; `gameplay` adds the image after the release's last gameplay screenshot, up to 50. An image the release already has (the same SHA-256 of the stored PNG), of either kind, returns that screenshot unchanged and still uses the upload up; to change an image's kind, remove it first.
+After `request_upload`, PUT each file to `upload_url` followed by its package-relative name, with the same Basic credentials, the file's `Content-Type` and `Content-Digest: sha-256=:BASE64:`. `GET /v1/uploads/{upload_id}.json` lists what has arrived. `release_id` is the release's stable id, never its title or a checksum. `upload_url` is built from the MCP request's own origin. `confirm_upload` answers at once; call it again until the state is `confirmed` or `rejected`. `upload_video`'s verification must name the authenticated admin as `verifier`. [Screenshots](#screenshots) has what `upload_screenshot` does to a release's screenshots.
 
 Tool errors use `isError: true` and `structuredContent: {"error":{"code":"..."}}`: `invalid_input`, `not_found` (upload or release), `upload_expired`, `upload_conflict` (the upload is in the wrong state or of the other type, or was already used), `upload_rejected` (the PNG exceeds the release system's limits), `screenshot_limit_reached` (the release already has 50 gameplay screenshots), `target_mismatch` (`source_sha1` is not the release's and no verification explains it), `uploads_disabled` (`request_upload` before storage is configured) and `storage_unavailable`. A failed `upload_screenshot` or `upload_video` leaves the upload confirmed, so retry with the same `upload_id` before it expires.
 
 ## Screenshots
 
+A release has at most one `title` screenshot and up to 50 `gameplay` screenshots, each image once.
+
 | Tool | Arguments | Result |
 | --- | --- | --- |
-| `list_screenshots` | `release_id` | `release_id` and `screenshots`: every screenshot of the release in order, the title first (`position` 0), then gameplay by `position` (1 to 50) |
+| `list_screenshots` | `release_id` | `release_id` and `screenshots`: every screenshot of the release, the title first, then gameplay in the order it was added |
 | `remove_screenshot` | `screenshot_id`, from `list_screenshots` or `upload_screenshot` | `release_id` and the release's remaining `screenshots`, as `list_screenshots` returns them |
 
-Each screenshot is `{id, kind, position, url, width, height, licence, sha256, created_at}`: the public release JSON's fields plus the stable `id`, its `position`, the SHA-256 of the stored PNG and when it was added. `screenshots` holds at most 51 entries and is never paginated; public release JSON lists them in the same order.
+Each screenshot is `{id, kind, url, width, height, licence, sha256, created_at}`: the public release JSON's fields plus the stable `id`, the SHA-256 of the stored PNG and when it was added. `screenshots` holds at most 51 entries and is never paginated; public release JSON lists them in the same order. Screenshots cannot be reordered.
 
-`remove_screenshot` deletes the screenshot and moves every later gameplay screenshot up one position. It touches the release, and every release of its game when the game's selected picture changes, so their ETags change at once. The image leaves the public media bucket once no screenshot uses it; copies the CDN already holds are not purged. `list_screenshots` is read-only; `remove_screenshot` is destructive and idempotent. Errors are `invalid_input` and `not_found` (unknown release or screenshot). There is no reordering tool.
+`upload_screenshot` with `kind` `title` replaces the release's title screenshot with a new one, under a new id; `gameplay` adds the image after the release's last gameplay screenshot, and the 51st is refused with `screenshot_limit_reached`. An image the release already has (the same SHA-256 of the stored PNG), of either kind, returns that screenshot unchanged and still uses the upload up; to change an image's kind, remove it first.
+
+`remove_screenshot` deletes the screenshot. It touches the release, and every release of its game when the game's selected picture changes, so their ETags change at once. The image leaves the public media bucket once no screenshot uses it; copies the CDN already holds are not purged. `list_screenshots` is read-only; `remove_screenshot` is destructive and idempotent. Errors are `invalid_input` and `not_found` (unknown release or screenshot).
 
 ## Device compatibility
 

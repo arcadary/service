@@ -183,11 +183,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_28_180000) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.string "public_id", null: false
-    t.integer "position", null: false
     t.index ["blob_id"], name: "index_screenshots_on_blob_id"
     t.index ["public_id"], name: "index_screenshots_on_public_id", unique: true
-    t.index ["release_id", "position"], name: "index_screenshots_on_release_id_and_position", unique: true
+    t.index ["release_id", "sha256"], name: "index_screenshots_on_release_id_and_sha256", unique: true
     t.index ["release_id"], name: "index_screenshots_on_release_id"
+    t.index ["release_id"], name: "index_screenshots_on_release_id_title", unique: true, where: "kind = 'title'"
     t.index ["sha256"], name: "index_screenshots_on_sha256"
   end
 

@@ -20,8 +20,11 @@ class ReleaseService
     ids = ReleaseMedium.joins(:media_file).where(media_files: { sha1: checksum }).distinct.pluck(:release_id)
     raise Release::ReleaseNotFound if ids.empty?
 
-    releases = Release.where(id: ids).includes(:screenshots, :compatibility_results, { game: { releases: :screenshots } }, release_media: :media_file).order(:public_id).to_a
-    releases.each { |release| release.game.selected_screenshot = ScreenshotService.selected_for(game: release.game) }
+    releases = Release.where(id: ids).includes(:game, :screenshots, :compatibility_results, release_media: :media_file).order(:public_id).to_a
+    releases.group_by(&:game_id).each do |game_id, siblings|
+      screenshot = ScreenshotService.selected_for(game_id: game_id)
+      siblings.each { |release| release.game.selected_screenshot = screenshot }
+    end
     releases
   end
 

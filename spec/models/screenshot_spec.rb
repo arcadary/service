@@ -5,13 +5,12 @@ RSpec.describe Screenshot, type: :model do
 
   it { is_expected.to belong_to(:release).touch(true) }
   it { is_expected.to validate_inclusion_of(:kind).in_array(Screenshot::KINDS) }
-  it { is_expected.to validate_uniqueness_of(:position).scoped_to(:release_id) }
-  it { is_expected.to validate_uniqueness_of(:sha256).scoped_to(:release_id).on(:create) }
-  it { is_expected.to validate_numericality_of(:position).only_integer.is_in(1..Screenshot::GAMEPLAY_LIMIT) }
+  it { is_expected.to validate_uniqueness_of(:public_id) }
 
-  it "keeps the title screenshot at position 0, before every gameplay screenshot" do
-    expect(build(:screenshot, kind: "title", position: 0)).to be_valid
-    expect(build(:screenshot, kind: "title", position: 1)).not_to be_valid
-    expect(build(:screenshot, kind: "gameplay", position: 0)).not_to be_valid
+  it "allows one title and each image once per release" do
+    title = create(:screenshot, kind: "title")
+    expect { create(:screenshot, release: title.release, kind: "title") }.to raise_error(ActiveRecord::RecordNotUnique)
+    expect { create(:screenshot, release: title.release, sha256: title.sha256, blob: title.blob) }.to raise_error(ActiveRecord::RecordNotUnique)
+    expect(create(:screenshot, sha256: title.sha256, blob: title.blob)).to be_persisted
   end
 end

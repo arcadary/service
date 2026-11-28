@@ -39,7 +39,7 @@ class McpUploadToolsService
     },
     "upload_screenshot" => {
       description: "Add a confirmed screenshot upload to the release. kind title replaces the release's title screenshot; " \
-        "gameplay goes after its last gameplay screenshot, at most 50 (screenshot_limit_reached). An image the release " \
+        "gameplay goes after its last gameplay screenshot, at most #{Screenshot::GAMEPLAY_LIMIT} (screenshot_limit_reached). An image the release " \
         "already has, of either kind, returns that screenshot unchanged. The PNG must decode within the release system's " \
         "size limits. Uses the game's image licence; grants no new rights.",
       input: { upload_id: UPLOAD_ID, release_id: McpToolService::RELEASE_ID, kind: { type: "string", enum: Screenshot::KINDS } },

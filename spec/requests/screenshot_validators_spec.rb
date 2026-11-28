@@ -4,14 +4,11 @@ require_relative "../support/screenshot_helpers"
 RSpec.describe "Screenshot response validators", type: :request do
   include ScreenshotHelpers
 
-  let(:red) { png(pixel: "\xff\0\0\xff".b) }
-  let(:green) { png(pixel: "\0\xff\0\xff".b) }
-
-  it "publishes exact release/game objects with the title first, then gameplay in position order" do
+  it "publishes exact release/game objects with the title first, then gameplay in the order it was added" do
     release = create(:release, system: "gb")
     first = upload_screenshot(release: release)
-    title = upload_screenshot(release: release, kind: "title", bytes: red)
-    second = upload_screenshot(release: release, bytes: green)
+    title = upload_screenshot(release: release, kind: "title", bytes: red_png)
+    second = upload_screenshot(release: release, bytes: green_png)
     get "/v1/releases/#{release.sha1}.json"
     objects = [ title, first, second ].map do |screenshot|
       { "kind" => screenshot.kind, "url" => "https://media.example/screenshots/#{screenshot.sha256}.png", "width" => 2, "height" => 2, "licence" => "" }
@@ -29,16 +26,16 @@ RSpec.describe "Screenshot response validators", type: :request do
       get url, headers: { "User-Agent" => "Arcadary/1.0" }
       response.headers.fetch("ETag")
     end
-    screenshots = []
+    title = first = second = nil
     [
-      -> { screenshots << upload_screenshot(release: selected, kind: "title") },
-      -> { screenshots << upload_screenshot(release: selected, bytes: red) },
+      -> { title = upload_screenshot(release: selected, kind: "title") },
+      -> { first = upload_screenshot(release: selected, bytes: red_png) },
       lambda do
-        screenshots << upload_screenshot(release: selected, bytes: green)
-        ScreenshotService.remove(screenshot_id: screenshots.delete_at(1).public_id)
+        second = upload_screenshot(release: selected, bytes: green_png)
+        ScreenshotService.remove(screenshot_id: first.public_id)
       end,
-      -> { ScreenshotService.remove(screenshot_id: screenshots.pop.public_id) },
-      -> { ScreenshotService.remove(screenshot_id: screenshots.pop.public_id) }
+      -> { ScreenshotService.remove(screenshot_id: second.public_id) },
+      -> { ScreenshotService.remove(screenshot_id: title.public_id) }
     ].each do |change|
       change.call
       urls.each_with_index do |url, index|
@@ -57,7 +54,7 @@ RSpec.describe "Screenshot response validators", type: :request do
     upload_screenshot(release: selected)
     [
       [ selected, -> { upload_screenshot(release: other, kind: "title") } ],
-      [ other, -> { upload_screenshot(release: selected, bytes: red) } ]
+      [ other, -> { upload_screenshot(release: selected, bytes: red_png) } ]
     ].each do |unchanged, change|
       get "/v1/releases/#{unchanged.sha1}.json"
       etag = response.headers.fetch("ETag")
