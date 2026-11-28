@@ -1,5 +1,16 @@
 # Project loop policy
 
+## Work arrives as pull requests
+
+There are no GitHub issues. The owner builds each change as a pull request and adds
+`needs-review`; its description states the intent and the acceptance criteria.
+Wherever these instructions or a role's instructions name the issue, its requirements
+or its scope, read the PR's description. Never file an issue: put follow-ups, flaky
+checks and shared base failures in a PR comment, and name it in your report.
+
+Check the corpus as `AGENTS.md` describes before you implement or review: the product
+intent, decision records and technical references the change touches.
+
 ## Checks
 
 Project checks are documented in `AGENTS.md` ("Checks"): `mise run ci` runs all of them.
@@ -16,8 +27,7 @@ Only the integrator merges, by squash, once the checks above and every CI check
 pass at the exact head it merges. No agent enables auto-merge, changes branch
 protection or publishes a release. A merge into `main` reaches production within
 minutes, once CI passes at the merge commit (`bin/auto-deploy`, see
-[Automatic deploys](../README.md#automatic-deploys)); a merge into a milestone branch
-deploys nothing. Leave the merge to a maintainer (an admin of this repository) when the PR:
+[Automatic deploys](../README.md#automatic-deploys)). Leave the merge to a maintainer (an admin of this repository) when the PR:
 
 - changes agent configuration or guidance: `ub-agents.yaml`, `.agents/`, `.claude/`
   and any `AGENTS.md` or `CLAUDE.md`;
@@ -27,10 +37,10 @@ deploys nothing. Leave the merge to a maintainer (an admin of this repository) w
   SQLite database paths or migration mappings in `config/database.yml`, or the
   persistent `storage/` volume shared with Active Storage in `config/deploy.yml`;
 - changes what users rely on, such as commands, options, public APIs or output,
-  beyond what the closing issue asks for.
+  beyond what the PR's description states.
 
 Judge each rule by what the diff does; the paths are where such changes usually
-live. A maintainer's answer on the issue or PR that covers this diff lets the
+live. A maintainer's answer on the PR that covers this diff lets the
 integrator merge it; an answer covers what it names, and anything beyond it is a
 new question.
 
@@ -71,59 +81,22 @@ The integrator handles it on every run like this:
 Runtimes Dependabot does not see, such as the Ruby version in `mise.toml`,
 `.ruby-version` and the Dockerfile, stay manual.
 
-## Milestone branches
-
-A milestone is a feature that reaches `main` in one piece. Every issue in a milestone
-merges into the milestone's own branch, and a maintainer merges that branch into `main`
-when the team decides to release it. An issue without a milestone, and every Dependabot
-PR, targets `main` as before.
-
-- **The branch.** The milestone's description names it on a line of its own:
-  `Branch: milestone/SLUG`, where SLUG is the milestone's title in lower case with
-  every run of other characters replaced by `-` (for example `milestone/catalog-api`).
-  There is no `Preview:` line: no host deploys every branch, so the team tries a
-  milestone by deploying its branch to staging.
-- **First issue.** When the description has no `Branch:` line yet, the implementer
-  creates `milestone/SLUG` from current `main`, pushes it, and adds the line to the
-  description (`gh api -X PATCH repos/{owner}/{repo}/milestones/NUMBER -f
-  description=...`, keeping the text already there).
-- **Issue PRs** target the milestone branch (`gh pr create --base milestone/SLUG`). For
-  such a PR the integrator's check that the base is the default branch becomes: the base
-  is the `Branch:` line of the closing issue's milestone. Any other base is blocked.
-- **Keeping it on current main.** Whenever `main` has moved, the agent working on the
-  branch merges `main` into it before it builds (implementer) or before it merges
-  (integrator): by merge, never by rebase or force push. It fixes a trivial conflict on
-  the spot, such as a lockfile or a small hotfix line. Anything harder goes to a
-  maintainer (`needs-human`), with concrete suggestions for resolving it.
-- **Closing issues.** GitHub closes issues only on merges into the default branch. After
-  a merge into a milestone branch the integrator checks that the closing issue is
-  closed, and closes it if not.
-- **The milestone PR.** Once the milestone's first issue has landed, the integrator opens
-  one PR from `milestone/SLUG` into `main`, titled `Milestone: TITLE`, whose body lists
-  the issues that have landed. After every later merge into the branch it updates that
-  list. Agents never add workflow labels to this PR and never merge it: merging it is
-  the maintainer's release decision.
-
 ## Human decisions
 
-A maintainer (an admin of this repository) answers scope and policy questions. An issue's author may answer only if they have write
-access.
-
-## New issues
-
-When the project uses milestones, give every issue you file one: the assignment's own
-when the new issue blocks it or follows from it, otherwise the earliest open milestone
-whose goal it fits. Leave it out only when none fits, and say so in your report.
+A maintainer (an admin of this repository) answers scope and policy questions on the PR.
 
 ## Review focus
 
-- The change stays within the issue's scope; other ideas become follow-up issues.
+- The change stays within the scope its description states; other ideas go in the
+  review as notes.
+- The change agrees with the corpus: its product intent, decisions in force and
+  technical references. A page the change makes untrue is updated in step.
 - New behavior has tests that fail without the change, and only for real cases: no specs for inputs no caller sends, permutations of one case, or framework behaviour (see `.github/instructions/specs.instructions.md`). Overtesting is a finding.
 - Callers of changed behavior still work; a finding names a concrete input that goes
   wrong.
 - No secrets, and no untrusted text reaching commands or output.
 - Changed behavior is documented where users and agents read it; search the docs for
-  the old wording, not only the pages the issue names.
+  the old wording, not only the pages the description names.
 - The simplest working change wins; no dead code or speculative options.
 
 Repository-specific focus:
