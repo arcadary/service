@@ -6,7 +6,7 @@ class CatalogAuthoringService
   class MissingAdminName < StandardError; end
 
   GAME_FIELDS = %w[title title_aliases].freeze
-  RELEASE_FIELDS = %w[system region revision startup].freeze
+  RELEASE_FIELDS = %w[system region revision startup controller_profile].freeze
   MEDIA_FIELDS = %w[sha1 size format crc32 md5].freeze
   MEDIUM_FIELDS = (MEDIA_FIELDS + %w[key position label role]).freeze
   OPERATIONS = (%w[create_game create_media create_release correct_game correct_release] + CatalogRelationshipService::OPERATIONS).freeze

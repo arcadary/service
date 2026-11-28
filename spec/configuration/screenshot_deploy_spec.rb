@@ -14,9 +14,10 @@ RSpec.describe "Screenshot container configuration" do
 
   it "resolves valid Kamal declarations and values without any screenshot configuration" do
     config = configuration
-    expect(config.env.secret_keys).to eq([ "SECRET_KEY_BASE" ])
+    expect(config.env.secret_keys).to eq([ "SECRET_KEY_BASE", "VALIDATION_REVIEWER_USERNAME", "VALIDATION_REVIEWER_PASSWORD" ])
     expect(config.env.to_h).to eq(
-      "SECRET_KEY_BASE" => "test-rails-key", "SCREENSHOT_PUBLIC_BASE_URL" => "", "SOLID_QUEUE_IN_PUMA" => true
+      "SECRET_KEY_BASE" => "test-rails-key", "VALIDATION_REVIEWER_USERNAME" => "", "VALIDATION_REVIEWER_PASSWORD" => "",
+      "SCREENSHOT_PUBLIC_BASE_URL" => "", "SOLID_QUEUE_IN_PUMA" => true
     )
   end
 
@@ -28,7 +29,7 @@ RSpec.describe "Screenshot container configuration" do
     }
     fake_environment.merge!(screenshot_values)
     config = configuration
-    expect(config.env.secret_keys).to eq([ "SECRET_KEY_BASE", "R2_BUCKET", "R2_ENDPOINT", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "SCREENSHOT_CAPTURE_TOKEN" ])
+    expect(config.env.secret_keys).to eq([ "SECRET_KEY_BASE", "VALIDATION_REVIEWER_USERNAME", "VALIDATION_REVIEWER_PASSWORD", "R2_BUCKET", "R2_ENDPOINT", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "SCREENSHOT_CAPTURE_TOKEN" ])
     expect(config.env.to_h).to include(screenshot_values)
     storage = YAML.safe_load(ERB.new(Rails.root.join("config/storage.yml").read).result).fetch("r2")
     expect(storage).to include("service" => "S3", "region" => "auto", "bucket" => "test-bucket", "public" => false)
@@ -37,7 +38,7 @@ RSpec.describe "Screenshot container configuration" do
   it "omits empty optional secrets from both declarations and container values" do
     fake_environment.merge!("R2_BUCKET" => "test-bucket", "R2_ACCESS_KEY_ID" => "", "SCREENSHOT_CAPTURE_TOKEN" => "")
     config = configuration
-    expect(config.env.secret_keys).to eq([ "SECRET_KEY_BASE", "R2_BUCKET" ])
+    expect(config.env.secret_keys).to eq([ "SECRET_KEY_BASE", "VALIDATION_REVIEWER_USERNAME", "VALIDATION_REVIEWER_PASSWORD", "R2_BUCKET" ])
     expect(config.env.to_h).not_to have_key("R2_ACCESS_KEY_ID")
     expect(config.env.to_h).not_to have_key("SCREENSHOT_CAPTURE_TOKEN")
   end

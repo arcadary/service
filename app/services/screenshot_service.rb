@@ -8,11 +8,7 @@ class ScreenshotService
     begin
       old_blob = nil
       screenshot = Screenshot.transaction do
-        selected = selected_attributes(game_id: release.game_id)
-        record = Screenshot.find_or_initialize_by(release: release, kind: kind)
-        old_blob = record.blob if record.persisted?
-        record.update!(png.except(:bytes).merge(blob: blob, licence: release.game.screenshot_licence))
-        release.game.releases.touch_all if selected != selected_attributes(game_id: release.game_id)
+        record, old_blob = replace(release: release, kind: kind, blob: blob, png: png)
         record
       end
     rescue StandardError
@@ -21,6 +17,15 @@ class ScreenshotService
     end
     old_blob&.purge_later
     screenshot
+  end
+
+  def self.replace(release:, kind:, blob:, png:)
+    selected = selected_attributes(game_id: release.game_id)
+    record = Screenshot.find_or_initialize_by(release: release, kind: kind)
+    old_blob = record.blob if record.persisted?
+    record.update!(png.except(:bytes).merge(blob: blob, licence: release.game.screenshot_licence))
+    release.game.releases.touch_all if selected != selected_attributes(game_id: release.game_id)
+    [ record, old_blob ]
   end
 
   def self.remove(public_id:, kind:)
@@ -62,14 +67,25 @@ class ScreenshotService
   end
   private_class_method :selected_attributes
 
+  def self.purge(blob:)
+    blob.delete
+    blob.destroy!
+  end
+
+  def self.cleanup_failed_upload(blob:)
+    purge(blob: blob) if blob&.persisted?
+  rescue StandardError
+    ScreenshotBlobCleanupJob.perform_later(blob)
+  end
+  private_class_method :cleanup_failed_upload
+
   def self.upload(bytes:)
     blob = ActiveStorage::Blob.build_after_unfurling(io: StringIO.new(bytes), filename: "screenshot.png", content_type: "image/png", identify: false)
     blob.save!
     blob.upload_without_unfurling(StringIO.new(bytes))
     blob
   rescue StandardError
-    blob&.purge_later
+    cleanup_failed_upload(blob: blob)
     raise Screenshot::StorageUnavailable
   end
-  private_class_method :upload
 end

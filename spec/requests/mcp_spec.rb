@@ -27,7 +27,13 @@ RSpec.describe "Authenticated catalog MCP", type: :request do
       consumes "application/json"
       produces "application/json"
       security [ private_service_basic: [] ]
-      description "Read-only catalog tools over MCP 1.11.0; see https://github.com/arcadary/service/blob/main/docs/mcp.md for schemas, pagination, protocol versions, client setup and deployment exclusions. Every method and subtree authenticates before parsing and sends no-store. No OAuth discovery or login. POST bodies are limited to 65536 bytes and JSON nesting to 64; finite JSON replies only, without SSE subscriptions or persistent sessions."
+      description <<~TEXT
+        Catalog reads, staged screenshot publication and private HLS intake over MCP 1.11.0. See https://github.com/arcadary/service/blob/main/docs/mcp.md for discoverable input/output schemas, targeting, expiry, retries, pagination and client setup. Every method and subtree requires current shared admin Basic credentials before parsing and returns no-store. No OAuth discovery/login, SSE subscriptions or persistent sessions.
+
+        Complete HTTP request bodies are bounded at 2 MiB (2097152 bytes) regardless of Content-Length; an oversized request returns HTTP 413. JSON nesting remains limited to 64. begin_playthrough_staging arguments follow the playthrough_declaration schema: stable release public_id, exact source_sha1, capture provenance, retry_key, immutable manifest and explicit authenticated mismatch-verification evidence when needed. Limits apply together: 1 MiB (1048576 bytes) UTF-8 compact argument JSON before normalization, excluding the JSON-RPC envelope; 4096 objects; 8 MiB (8388608 bytes) each; 4 GiB (4294967296 bytes) total. A 4096-object, 4 GiB declaration with short paths fits. Over-limit declarations return MCP tool error stage_too_large without a stage or authorization.
+
+        Begin returns staging_id, release_id, package_sha256, state, every object's {object_id, path, received}, declared_at, stage_expires_at, capability and expires_at, within 1 MiB of structured JSON before SDK text representation. No declaration echo, bulk bytes, credentials or signed upload URLs. Identical normalized replay before declared_at plus 24 hours retains stage/package/progress/deadline and issues a fresh capability. At that deadline it returns stage_expired without authorization; changed input returns stage_conflict even after manifest pruning, with retry keys reserved. The capability lifetime stays exactly 900 seconds even beyond the stage deadline. Capabilities bind that exact release, stage, immutable manifest and declared objects and expire exactly 900 seconds after issuance, invalid at or after expires_at. Earlier tokens retain their expiry. Raw object PUT requires current Basic credentials plus X-Arcadary-Upload-Capability, never a URL token. Missing, expired or mismatched tokens return 403 upload_not_authorized before application transfer reads or storage access, including accepted-object retries. Authenticated metadata GET remains 200 with expired/reclaimed receipts, original declaration/deadline, fingerprint and provenance; reclaimed receipts omit object lists and manifests. Per-attempt renewable fenced leases protect concurrent work and hourly bounded cleanup retains key tombstones for late-write recovery. Metadata GET never mints or renews authorization; standalone HTTP stage POST is removed. No staged-byte playback/download route or public exposure. PNG bytes retain their separate authenticated HTTP staging route. No footage publication, provisioning or deployment is performed.
+      TEXT
       parameter name: :Authorization, in: :header, required: true, schema: { type: :string }
       parameter name: :request_body, in: :body, schema: {
         type: :object, additionalProperties: false, required: %w[jsonrpc id method],
@@ -61,6 +67,18 @@ RSpec.describe "Authenticated catalog MCP", type: :request do
         header "Cache-Control", schema: { type: :string, enum: [ "no-store" ] }
         run_test!
       end
+
+      response "413", "complete HTTP request exceeds 2 MiB" do
+        let(:request_body) { "x" * 2_097_153 }
+        schema type: :object, additionalProperties: false, required: %w[jsonrpc error], properties: {
+          jsonrpc: { type: :string, enum: [ "2.0" ] }, id: { type: :integer, nullable: true },
+          error: { type: :object, additionalProperties: false, required: %w[code message], properties: {
+            code: { type: :integer, enum: [ -32600 ] }, message: { type: :string }
+          } }
+        }
+        header "Cache-Control", schema: { type: :string, enum: [ "no-store" ] }
+        run_test! { expect(response.headers["Cache-Control"]).to eq("no-store") }
+      end
     end
   end
 
@@ -75,7 +93,7 @@ RSpec.describe "Authenticated catalog MCP", type: :request do
   end
 
   it "requires the current configured pair on every reconnect" do
-    expect(rpc(method: "tools/list").dig("result", "tools").size).to eq(4)
+    expect(rpc(method: "tools/list").dig("result", "tools").size).to eq(6)
     allow(ENV).to receive(:[]).with("VALIDATION_REVIEWER_PASSWORD").and_return("rotated-synthetic")
     rpc(method: "tools/list")
     expect(response).to have_http_status(:unauthorized)
@@ -83,14 +101,18 @@ RSpec.describe "Authenticated catalog MCP", type: :request do
     expect(response).to have_http_status(:ok)
   end
 
-  it "advertises only four read tools with input/output schemas and preserves SDK version negotiation" do
+  it "advertises read tools, screenshot publication and playthrough intake with schemas and preserves SDK version negotiation" do
     discovered = rpc(method: "tools/list").dig("result", "tools")
-    expect(discovered.map { |entry| entry.fetch("name") }).to eq(%w[search_games get_game get_release get_catalog_history])
-    discovered.each do |entry|
+    expect(discovered.map { |entry| entry.fetch("name") }).to eq(%w[search_games get_game get_release get_catalog_history publish_screenshot begin_playthrough_staging])
+    discovered.first(4).each do |entry|
       expect(entry.dig("annotations", "readOnlyHint")).to be(true)
       expect(entry.fetch("inputSchema")).to include("additionalProperties" => false)
       expect(entry.fetch("outputSchema").dig("$defs", "page", "properties", "items", "maxItems")).to eq(50)
     end
+    publication = discovered.find { |entry| entry.fetch("name") == "publish_screenshot" }
+    expect(publication.fetch("annotations")).to include("readOnlyHint" => false, "destructiveHint" => true, "idempotentHint" => false)
+    expect(publication.fetch("inputSchema")).to include("additionalProperties" => false, "required" => %w[staging_id release_id source_sha1 kind])
+    expect(publication.fetch("outputSchema").dig("properties", "error", "properties", "code", "enum")).to include("staged_image_consumed", "storage_unavailable")
     negotiated = rpc(method: "initialize", params: { protocolVersion: "2099-01-01", capabilities: {}, clientInfo: { name: "synthetic-spec", version: "1" } })
     expect(negotiated.dig("result", "protocolVersion")).to eq("2025-11-25")
     rpc(method: "tools/list", extra_headers: { "MCP-Protocol-Version" => "2099-01-01", "Accept" => "application/json, text/event-stream" })
@@ -117,7 +139,10 @@ RSpec.describe "Authenticated catalog MCP", type: :request do
 
   it "bounds request bytes and nesting before catalog calls" do
     expect(McpCatalogReadService).not_to receive(:call)
-    post "/mcp", params: "x" * (McpTransportService::MAX_REQUEST_BYTES + 1), headers: headers
+    request = { jsonrpc: "2.0", id: 1, method: "ping" }.to_json
+    post "/mcp", params: request.ljust(2_097_152), headers: headers.merge("CONTENT_LENGTH" => "")
+    expect(response).to have_http_status(:ok)
+    post "/mcp", params: request.ljust(2_097_153), headers: headers.merge("CONTENT_LENGTH" => "1")
     expect(response).to have_http_status(:content_too_large)
     expect(response.headers["Cache-Control"]).to eq("no-store")
     post "/mcp", params: "[" * 65 + "0" + "]" * 65, headers: headers
@@ -134,7 +159,7 @@ RSpec.describe "Authenticated catalog MCP", type: :request do
     expect(response).to have_http_status(:forbidden)
     rpc(method: "tools/list", extra_headers: { "Host" => "api.arcadary.org", "Origin" => "https://api.arcadary.org" })
     expect(response).to have_http_status(:ok)
-    expect(rpc(method: "tools/list").dig("result", "tools").size).to eq(4)
+    expect(rpc(method: "tools/list").dig("result", "tools").size).to eq(6)
   end
 
   it "keeps unsupported methods, missing subpaths and application failures private" do
@@ -181,13 +206,17 @@ RSpec.describe "Authenticated catalog MCP", type: :request do
 
   it "reads catalog metadata through SDK structured results" do
     game = create(:game, title_aliases: [ "Alias" ], source_title: "Original")
-    release = create(:release, game: game, source_system: "source-system")
+    release = create(:release, game: game, system: "snes", source_system: "source-system", controller_profile: build(:controller_profile))
     result = tool(name: "get_release", id: release.public_id)
     expect(result["isError"]).to be(false)
     data = result.dig("structuredContent", "data")
     expect(data).to include("id" => release.public_id, "authoring_revision" => 0, "source" => hash_including("source_system" => "source-system"))
     expect(data.dig("canonical", "startup")).to eq(ReleaseStartupService.for_release(release: release))
     expect(data.dig("canonical", "media", "items").sole).to include("sha1" => release.sha1, "position" => 1)
+    profile = data.dig("canonical", "controller_profile")
+    expect(profile.fetch("binding")).to eq(release.controller_profile.fetch("binding"))
+    expect(profile.dig("layout", "items").first.dig("evidence", "items")).to eq(release.controller_profile.dig("layout", 0, "evidence"))
+    expect(profile.dig("prompts", "items").sole).to include("letter" => "A", "position" => "right")
     expect(JSON.parse(result.fetch("content").sole.fetch("text"))).to eq(result.fetch("structuredContent"))
   end
 end

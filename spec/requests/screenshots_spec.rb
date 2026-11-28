@@ -3,6 +3,7 @@ require_relative "../support/screenshot_helpers"
 
 RSpec.describe "Screenshots", type: :request do
   include ScreenshotHelpers
+  include ActiveJob::TestHelper
 
   let!(:release) { create(:release, system: "gb") }
   let(:sha1) { release.sha1 }
@@ -150,6 +151,35 @@ RSpec.describe "Screenshots", type: :request do
     expect(response).to have_http_status(:conflict)
     expect(response.parsed_body).to eq("error" => "ambiguous_release")
     expect(Screenshot.sole.attributes).to eq(previous)
+  end
+
+  it "returns storage_unavailable during an upload and deletion outage and retries private blob cleanup" do
+    previous = upload_screenshot(release: release)
+    attributes, bytes = previous.attributes, previous.blob.download
+    storage = ActiveStorage::Blob.service
+    allow(storage).to receive(:upload).and_wrap_original do |method, *arguments, **options|
+      method.call(*arguments, **options)
+      raise IOError
+    end
+    allow(storage).to receive(:delete).and_raise(IOError)
+
+    expect { put upload_url, params: png, headers: capture_headers }.to have_enqueued_job(ScreenshotBlobCleanupJob)
+    expect(response).to have_http_status(:service_unavailable)
+    expect(response.parsed_body).to eq("error" => "storage_unavailable")
+    expect(response.headers["Cache-Control"]).to eq("no-store")
+    expect(previous.reload.attributes).to eq(attributes)
+    expect(previous.blob.download).to eq(bytes)
+    failed_blob = ActiveStorage::Blob.where.not(id: previous.blob_id).sole
+    clear_enqueued_jobs
+    expect { ScreenshotBlobCleanupJob.perform_now(failed_blob) }.to have_enqueued_job(ScreenshotBlobCleanupJob)
+    expect(ActiveStorage::Blob.exists?(failed_blob.id)).to be(true)
+    expect(storage.exist?(failed_blob.key)).to be(true)
+
+    allow(storage).to receive(:delete).and_call_original
+    perform_enqueued_jobs(only: ScreenshotBlobCleanupJob)
+    expect(ActiveStorage::Blob.exists?(failed_blob.id)).to be(false)
+    expect(storage.exist?(failed_blob.key)).to be(false)
+    expect(previous.blob.download).to eq(bytes)
   end
 
   it "answers 422 to corrupt compressed pixels without writing to stderr" do

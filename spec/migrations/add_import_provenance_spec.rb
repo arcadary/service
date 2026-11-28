@@ -1,5 +1,5 @@
 require "rails_helper"
-require Rails.root.join("db/migrate/20261128020000_add_import_provenance")
+require Rails.root.join("db/migrate/20261128130000_add_import_provenance")
 
 RSpec.describe AddImportProvenance do
   it "recovers pre-grouping source ownership and protects existing grouping titles without inventing corrected source metadata" do

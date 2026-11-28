@@ -1,5 +1,5 @@
 class McpTransportService
-  MAX_REQUEST_BYTES = 64 * 1024
+  MAX_REQUEST_BYTES = 2.megabytes
   HOSTS = %w[api.arcadary.org localhost 127.0.0.1 [::1]].freeze
   ORIGINS = %w[https://api.arcadary.org].freeze
 

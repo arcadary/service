@@ -4,6 +4,28 @@ require_relative "../support/catalog_helpers"
 RSpec.describe CatalogImportService do
   include CatalogHelpers
 
+  it "preserves an authored exact-edition profile and evidence through a supported reimport" do
+    entries = [ { title: "Synthetic (USA)", sha1: checksum(1), size: 16384 } ]
+    import_entries(entries: entries, system: "snes")
+    release = Release.sole
+    profile = build(:controller_profile, binding: { "system" => "snes", "region" => "USA", "revision" => nil })
+    allow(ENV).to receive(:[]).and_call_original
+    allow(ENV).to receive(:[]).with("CATALOG_ADMIN_NAME").and_return("Synthetic Owner")
+    CatalogAuthoringService.call(operation: :correct_release, attributes: { id: release.public_id, controller_profile: profile },
+      expected_revisions: { "game:#{release.game.public_id}" => 0, "release:#{release.public_id}" => 0 },
+      reason: "Synthetic evidence", idempotency_key: "import-profile")
+    original = release.reload.attributes
+    history = CatalogMutation.sole.attributes
+    import_entries(entries: [ entries.sole.merge(size: 32768) ], system: "snes")
+    expect(release.reload.attributes.except("updated_at", "authoring_revision")).to eq(original.except("updated_at", "authoring_revision"))
+    expect(release.authoring_revision).to eq(original.fetch("authoring_revision") + 1)
+    expect(release.media_files.sole.size).to eq(32768)
+    expect(CatalogMutation.sole.attributes).to eq(history)
+    before = snapshot
+    expect { import_entries(entries: [ entries.sole.merge(title: "Synthetic (Europe)") ], system: "snes") }.to raise_error(described_class::IdentityConflict, /binding/)
+    expect(snapshot).to eq(before)
+  end
+
   around do |example|
     Dir.mktmpdir("catalog-", Rails.root.join("tmp")) do |folder|
       @folder = folder
