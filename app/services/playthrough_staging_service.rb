@@ -12,25 +12,35 @@ class PlaythroughStagingService
 
       require_membership!(release: release, declaration: declaration)
       stage = PlaythroughStage.create!(release: release, retry_key: retry_key, declaration: declaration,
+        declared_at: Time.current,
         declaration_sha256: fingerprint, package_sha256: PlaythroughDeclarationService.package_sha256(manifest: declaration.fetch("manifest")))
       declaration.fetch("manifest").each { |entry| stage.objects.create!(entry) }
       stage
     end
-    find_by(staging_id: stage.public_id)
+    stage = find_by(staging_id: stage.public_id)
+    PlaythroughLifecycleService.require_open!(stage: stage)
+    stage
   rescue ActiveRecord::RecordNotUnique
     stage = replay(stage: PlaythroughStage.find_by!(retry_key: retry_key), fingerprint: fingerprint)
-    find_by(staging_id: stage.public_id)
+    stage = find_by(staging_id: stage.public_id)
+    PlaythroughLifecycleService.require_open!(stage: stage)
+    stage
   end
 
   def self.find_by(staging_id:)
-    stage = PlaythroughStage.includes(:objects).find_by(public_id: staging_id)
-    raise PlaythroughStage::NotFound, "not_found" unless stage
+    PlaythroughStage.uncached do
+      stage = PlaythroughStage.find_by(public_id: staging_id)
+      raise PlaythroughStage::NotFound, "not_found" unless stage
 
-    stage
+      PlaythroughLifecycleService.synchronize(stage_id: stage.id) { |current| current }
+      PlaythroughStage.includes(:objects).find(stage.id)
+    end
   end
 
   def self.replay(stage:, fingerprint:)
     raise PlaythroughStage::Conflict unless stage.declaration_sha256 == fingerprint
+
+    PlaythroughLifecycleService.expire(stage: stage)
 
     stage
   end

@@ -2,6 +2,7 @@ class PlaythroughUploadAuthorizationService
   LIFETIME = 900
 
   def self.issue(stage:)
+    PlaythroughLifecycleService.synchronize(stage_id: stage.id) { |current| PlaythroughLifecycleService.require_open!(stage: current) }
     expires_at = (Time.current + LIFETIME).iso8601(9)
     payload = bound_identity(stage: stage).merge("expires_at" => expires_at, "nonce" => SecureRandom.hex(16))
     { capability: verifier.generate(payload, purpose: "playthrough-upload"), expires_at: expires_at }
@@ -19,6 +20,7 @@ class PlaythroughUploadAuthorizationService
     unless stage && payload.slice(*bound_identity(stage: stage).keys) == bound_identity(stage: stage) && stage.objects.exists?(public_id: object_id)
       raise PlaythroughStage::UploadNotAuthorized
     end
+    PlaythroughLifecycleService.synchronize(stage_id: stage.id) { |current| PlaythroughLifecycleService.require_open!(stage: current) }
     stage
   end
 

@@ -6,28 +6,41 @@ class PlaythroughValidationService
 
   def self.validate(staging_id:)
     Rails.logger.silence(Logger::UNKNOWN) do
-      ActiveRecord::Base.uncached do
-        stage = PlaythroughStagingService.find_by(staging_id: staging_id)
-        next replay(stage: stage) if stage.validation_state
+      stage = PlaythroughStagingService.find_by(staging_id: staging_id)
+      PlaythroughLifecycleService.require_open!(stage: stage)
+      next replay(stage: stage) if stage.validation_state
 
-        receipts = stage.objects.index_by(&:path)
-        unless stage.declaration.fetch("manifest").all? { |entry| receipts[entry.fetch("path")]&.received_at }
-          raise PlaythroughStage::StageIncomplete, "stage_incomplete"
+      receipts = stage.objects.index_by(&:path)
+      unless stage.declaration.fetch("manifest").all? { |entry| receipts[entry.fetch("path")]&.received_at }
+        raise PlaythroughStage::StageIncomplete, "stage_incomplete"
+      end
+
+      attempt = PlaythroughLifecycleService.synchronize(stage_id: stage.id) do |current|
+        PlaythroughAttemptService.register(stage: current, kind: "validation")
+      end
+      begin
+        PlaythroughAttemptService.during(attempt: attempt) { new(stage: stage, attempt: attempt).validate }
+      rescue StandardError
+        PlaythroughLifecycleService.synchronize(stage_id: stage.id) do |current|
+          PlaythroughAttemptService.require_live!(stage: current, attempt: attempt, allow_finished: true)
         end
-
-        new(stage: stage).validate
+        raise
+      ensure
+        PlaythroughAttemptService.relinquish(attempt: attempt)
       end
     end
   end
 
   def self.replay(stage:)
+    PlaythroughLifecycleService.require_open!(stage: stage)
     raise FAILURES.fetch(stage.validation_error), stage.validation_error if stage.validation_error
 
     stage.validation_result
   end
 
-  def initialize(stage:)
+  def initialize(stage:, attempt:)
     @stage = stage
+    @attempt = attempt
     @objects = stage.objects.index_by(&:path)
     @manifest = stage.declaration.fetch("manifest")
     @entries = @manifest.index_by { |entry| entry.fetch("path") }
@@ -99,14 +112,18 @@ class PlaythroughValidationService
   end
 
   def persist(result:, failure:)
-    stage = PlaythroughStage.transaction do
-      current = PlaythroughStage.find(@stage.id)
+    stage = PlaythroughLifecycleService.synchronize(stage_id: @stage.id) do |current|
+      PlaythroughAttemptService.require_live!(stage: current, attempt: @attempt)
       unless current.validation_state
         current.update!(validation_state: failure ? "validation_failed" : "validated",
           validation_result: result, validation_error: failure)
       end
+      PlaythroughAttemptService.finish(stage: current, attempt: @attempt)
       current
     end
-    self.class.replay(stage: stage)
+    PlaythroughLifecycleService.synchronize(stage_id: stage.id) do |current|
+      PlaythroughAttemptService.require_live!(stage: current, attempt: @attempt, allow_finished: true)
+      self.class.replay(stage: current)
+    end
   end
 end

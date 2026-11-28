@@ -1,5 +1,6 @@
 class McpPlaythroughToolsService
   ERRORS = {
+    PlaythroughStage::Expired => "stage_expired",
     PlaythroughStage::InvalidDeclaration => "invalid_declaration", PlaythroughStage::TooLarge => "stage_too_large",
     PlaythroughStage::TargetMismatch => "target_mismatch", PlaythroughStage::Conflict => "stage_conflict",
     Release::ReleaseNotFound => "not_found"
@@ -7,7 +8,7 @@ class McpPlaythroughToolsService
 
   def self.tools
     [ MCP::Tool.define(name: "begin_playthrough_staging",
-      description: "Begin private HLS staging for one stable release_id and exact source_sha1, capture provenance, retry_key and immutable manifest. The source or explicitly verified payload must belong to that release; mismatch evidence must name both checksums and the authenticated verifier. Limits together: 1 MiB UTF-8 compact argument JSON before normalization (excluding the RPC envelope), 4096 objects, 8 MiB each, 4 GiB total. Returns complete object progress and a capability expiring exactly 900 seconds after issuance. PUT raw objects with current Basic credentials plus X-Arcadary-Upload-Capability, never in a URL. Replay the identical normalized declaration to renew, preserving stage/package/progress and earlier capabilities' expiry; changes conflict. Metadata reads do not renew. received reports stored-object progress only; read authenticated stage metadata for validation status. No publication.",
+      description: "Begin private HLS staging for one stable release_id and exact source_sha1, capture provenance, retry_key and immutable manifest. The source or explicitly verified payload must belong to that release; mismatch evidence must name both checksums and the authenticated verifier. Limits together: 1 MiB UTF-8 compact argument JSON before normalization (excluding the RPC envelope), 4096 objects, 8 MiB each, 4 GiB total. Returns incomplete/received object progress, declared_at, stage_expires_at (declaration plus 24 hours), and a capability with expires_at exactly 900 seconds after issuance, even beyond the stage deadline. Identical normalized replay renews before the deadline, preserving the deadline, progress and older capabilities; at the deadline it returns stage_expired without a capability. Changed declarations return stage_conflict, including after pruning; retry keys stay reserved. PUT raw objects with current Basic credentials plus X-Arcadary-Upload-Capability, never in a URL. Invalid capability or unknown object returns 403 before stage expiry is checked; valid declared-object authorization on expired/reclaimed stages returns 410 before body/storage reads. Metadata GET never renews; it reports validation and expired/reclaimed receipts. Concurrent attempts use renewable fenced 15-minute leases. Hourly bounded cleanup retains identity/evidence and permanent attempt tombstones, pruning manifests and bytes after absence checks; late writes reopen expired receipts until reclaimed again. No publication.",
       input_schema: input_schema, output_schema: output_schema,
       annotations: { read_only_hint: false, destructive_hint: false, idempotent_hint: false, open_world_hint: false }) do |server_context: nil, **arguments|
       McpPlaythroughToolsService.call(arguments: arguments)
@@ -65,7 +66,8 @@ class McpPlaythroughToolsService
           objects: { type: "array", maxItems: PlaythroughStageInputService::OBJECT_COUNT, items: object_schema(properties: {
             object_id: { type: "string" }, path: { type: "string" }, received: { type: "boolean" }
           }) },
-          capability: { type: "string" }, expires_at: { type: "string", format: "date-time" }
+          capability: { type: "string" }, expires_at: { type: "string", format: "date-time" },
+          declared_at: { type: "string", format: "date-time" }, stage_expires_at: { type: "string", format: "date-time" }
         }),
         error: object_schema(properties: { code: { type: "string", enum: ERRORS.values } })
       }

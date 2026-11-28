@@ -16,5 +16,7 @@ class PlaythroughStageBody
     @app.call(env)
   rescue PlaythroughStage::UploadNotAuthorized
     [ 403, { "content-type" => "application/json", "cache-control" => "no-store" }, [ { error: "upload_not_authorized" }.to_json ] ]
+  rescue PlaythroughStage::Expired
+    [ 410, { "content-type" => "application/json", "cache-control" => "no-store" }, [ { error: "stage_expired" }.to_json ] ]
   end
 end

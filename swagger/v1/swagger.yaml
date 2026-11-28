@@ -6,7 +6,7 @@ info:
   description: |-
     Public, anonymous reads for the Arcadary launcher; authenticated capture-device uploads and private admin staging. JSON routes end in .json; screenshot delivery ends in .png. Generated from the request specs in spec/requests; do not edit swagger/ by hand.
 
-    Catalog data originates from [No-Intro](https://no-intro.org/), sourced through [libretro-database at f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029](https://github.com/libretro/libretro-database/tree/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/metadat/no-intro). Arcadary imports checksum metadata, groups releases into games, normalizes titles/regions/revisions and applies explicit launcher identity mappings. The entire service catalog, including project corrections, additions and later metadata fields, is licensed under [CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/), as is the [upstream source at the pin](https://github.com/libretro/libretro-database/blob/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/LICENSE). Screenshot images and all video are excluded: each medium's own rights apply. Catalog and screenshot licences grant no video rights. The owner-approved exception permits authenticated private HLS staging and delivery, including the private Donkey Kong trial, without public commercial-footage distribution or anonymous playthrough metadata. Internal HLS validation leaves all bytes private; publication, cleanup and delivery arrive separately. Application code remains MIT.
+    Catalog data originates from [No-Intro](https://no-intro.org/), sourced through [libretro-database at f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029](https://github.com/libretro/libretro-database/tree/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/metadat/no-intro). Arcadary imports checksum metadata, groups releases into games, normalizes titles/regions/revisions and applies explicit launcher identity mappings. The entire service catalog, including project corrections, additions and later metadata fields, is licensed under [CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/), as is the [upstream source at the pin](https://github.com/libretro/libretro-database/blob/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/LICENSE). Screenshot images and all video are excluded: each medium's own rights apply. Catalog and screenshot licences grant no video rights. The owner-approved exception permits authenticated private HLS staging and delivery, including the private Donkey Kong trial, without public commercial-footage distribution or anonymous playthrough metadata. Internal HLS validation leaves all bytes private; expiry and bounded private reclamation retain terminal receipts; publication and delivery arrive separately. Application code remains MIT.
 
     The pinned NES DAT includes distinct headered .nes and unheadered .unh releases. A launcher hashing NES payload bytes without the iNES header sends the matching unheadered checksum. All eight lists are covered, including C64 tape metadata; catalog coverage does not imply launcher playback support. No game files or player filenames are received, stored or served.
 
@@ -94,7 +94,7 @@ paths:
 
         Complete HTTP request bodies are bounded at 2 MiB (2097152 bytes) regardless of Content-Length; an oversized request returns HTTP 413. JSON nesting remains limited to 64. begin_playthrough_staging arguments follow the playthrough_declaration schema: stable release public_id, exact source_sha1, capture provenance, retry_key, immutable manifest and explicit authenticated mismatch-verification evidence when needed. Limits apply together: 1 MiB (1048576 bytes) UTF-8 compact argument JSON before normalization, excluding the JSON-RPC envelope; 4096 objects; 8 MiB (8388608 bytes) each; 4 GiB (4294967296 bytes) total. A 4096-object, 4 GiB declaration with short paths fits. Over-limit declarations return MCP tool error stage_too_large without a stage or authorization.
 
-        Begin returns staging_id, release_id, package_sha256, state, every object's {object_id, path, received}, capability and expires_at, within 1 MiB of structured JSON before SDK text representation. No declaration echo, bulk bytes, credentials or signed upload URLs. Identical normalized replay retains stage/package/progress and issues a fresh capability; changed declarations conflict. Capabilities bind that exact release, stage, immutable manifest and declared objects and expire exactly 900 seconds after issuance, invalid at or after expires_at. Earlier tokens retain their expiry. Raw object PUT requires current Basic credentials plus X-Arcadary-Upload-Capability, never a URL token. Missing, expired or mismatched tokens return 403 upload_not_authorized before application transfer reads or storage access, including accepted-object retries. Metadata GET never mints or renews authorization; standalone HTTP stage POST is removed. No staged-byte playback/download route or public exposure. PNG bytes retain their separate authenticated HTTP staging route. No footage publication, provisioning or deployment is performed.
+        Begin returns staging_id, release_id, package_sha256, state, every object's {object_id, path, received}, declared_at, stage_expires_at, capability and expires_at, within 1 MiB of structured JSON before SDK text representation. No declaration echo, bulk bytes, credentials or signed upload URLs. Identical normalized replay before declared_at plus 24 hours retains stage/package/progress/deadline and issues a fresh capability. At that deadline it returns stage_expired without authorization; changed input returns stage_conflict even after manifest pruning, with retry keys reserved. The capability lifetime stays exactly 900 seconds even beyond the stage deadline. Capabilities bind that exact release, stage, immutable manifest and declared objects and expire exactly 900 seconds after issuance, invalid at or after expires_at. Earlier tokens retain their expiry. Raw object PUT requires current Basic credentials plus X-Arcadary-Upload-Capability, never a URL token. Missing, expired or mismatched tokens return 403 upload_not_authorized before application transfer reads or storage access, including accepted-object retries. Authenticated metadata GET remains 200 with expired/reclaimed receipts, original declaration/deadline, fingerprint and provenance; reclaimed receipts omit object lists and manifests. Per-attempt renewable fenced leases protect concurrent work and hourly bounded cleanup retains key tombstones for late-write recovery. Metadata GET never mints or renews authorization; standalone HTTP stage POST is removed. No staged-byte playback/download route or public exposure. PNG bytes retain their separate authenticated HTTP staging route. No footage publication, provisioning or deployment is performed.
       parameters:
       - name: Authorization
         in: header
@@ -328,9 +328,13 @@ paths:
         schema:
           type: string
       description: |
+        declared_at is the original declaration/creation time; stage_expires_at is exactly 24 hours later. At that deadline every stage expires on access, before validation replay. GET remains 200: expired includes expired_at equal to the deadline; reclaimed adds reclaimed_at only after all associated reclaimable keys are confirmed absent with no deletion work pending. Receipts retain retry/stage identity, declaration fingerprint/package digest, exact release, source, capture and full mismatch evidence. Reclaimed receipts omit objects and manifests, including nested copies, and have no media attachments or bytes. Identical normalized begin replay returns stage_expired without authorization after the deadline; changed input returns stage_conflict even after pruning, with the retry key reserved.
+
+        Transfers and validators have independent renewable fenced 15-minute leases. Concurrent different-object transfers proceed independently; same-object transfers return the winning receipt and delete only their own loser keys. Concurrent live validators replay the first terminal outcome, including conflicting local outcomes. Heartbeats renew during blocking upload/download and validation, without extending the declaration deadline. At lease equality abandoned attempts are fenced; stale attachment, validation commit/replay or renewal fails stage_conflict, or stage_expired after the deadline. Hourly cleanup at minute 5 after screenshot cleanup handles at most 100 stages and 500 keys with durable fair progress, skips live transfer/validation owners and uses renewable fenced claims. It deletes only owned private staging keys after reference rechecks; legacy bytes wait for the retained owning stage's original deadline. Failed deletion stays pending with retryable storage_unavailable while other work continues. Transfer key/blob identities and fencing tombstones persist with the stage, even after reclamation. Fenced late writers record pending work and delete only their own keys; failed deletion clears reclaimed_at until absence is reconfirmed. Cleanup revisits reclaimed tombstones even when a late writer crashes before recording pending work. Staging never reopens. All private HTTP, validation, cleanup and ownership failures suppress logs.
+
         Existing stages always return 200. incomplete means missing receipts; received means stored but unvalidated. validated includes validation_result; validation_failed includes validation_error (invalid_hls or package_integrity_mismatch). Other states omit both validation fields. Results bind this exact staging ID, immutable normalized manifest/declaration fingerprint/package digest, stable release ID, source SHA-1 and capture/verification evidence. duration is exact summed decimal seconds, audio_codec is null for silent H.264, and absent chapters use chapters_path:null and chapters:[]. No public object, descriptor, redirect or playback is created.
 
-        PlaythroughValidationService.validate(staging_id:) is an internal operation for the authenticated MCP workflow, without a validation HTTP route. Unknown IDs raise not_found. Persisted success or terminal failure replays before completeness or storage checks, including after restart; concurrent validation cannot overwrite it. stage_incomplete is retryable and precedes all byte reads/parsing, including malformed received playlists or wrong role MIME. All completed objects are then read and verified before HLS interpretation: missing/unreadable blobs raise retryable storage_unavailable; readable bytes or stored size/hash/MIME disagreement raises terminal package_integrity_mismatch. Wrong declared role MIME, undeclared references, malformed/unsupported HLS, transport or chapters raises terminal invalid_hls. Retryable failures leave state unchanged; terminal failures require a new declaration/retry key to correct bytes. PUT receipts and declaration replays stay immutable. Internal validation suppresses logs, including failures.
+        PlaythroughValidationService.validate(staging_id:) is an internal operation for the authenticated MCP workflow, without a validation HTTP route. Unknown IDs raise not_found. Before the declaration deadline, persisted success or terminal failure replays before completeness or storage checks, including after restart; concurrent live validation cannot overwrite it. stage_incomplete is retryable and precedes all byte reads/parsing, including malformed received playlists or wrong role MIME. All completed objects are then read and verified before HLS interpretation: missing/unreadable blobs raise retryable storage_unavailable; readable bytes or stored size/hash/MIME disagreement raises terminal package_integrity_mismatch. Wrong declared role MIME, undeclared references, malformed/unsupported HLS, transport or chapters raises terminal invalid_hls. Retryable failures leave state unchanged; terminal failures require a new declaration/retry key to correct bytes. PUT receipts and declaration replays stay immutable. Internal validation suppresses logs, including failures.
 
         Restricted RFC 8216 profile: UTF-8 NFC, no BOM/control characters, LF or CRLF, first-line EXTM3U, exactly one EXT-X-VERSION:3 in every playlist. One media playlist or one master directly referencing media playlists, with shared media references allowed; no nested masters, alternate renditions or other tags/attributes. Masters require positive unsigned 64-bit BANDWIDTH; optional positive AVERAGE-BANDWIDTH, quoted CODECS list and positive RESOLUTION dimensions use RFC syntax and unique attributes. Media requires segments, a single positive unsigned 64-bit TARGETDURATION, PLAYLIST-TYPE:VOD, terminal ENDLIST and optional single MEDIA-SEQUENCE:0 before segments. Every URI follows one positive finite decimal EXTINF and required comma; optional UTF-8 titles are ignored. Half-up rounded durations cannot exceed target. Variant segment counts and numeric duration sequences must match. References use declaration path grammar relative to their playlist; every declared object must be reachable except optional root chapters.vtt, which is also required and validated. MIME roles: application/vnd.apple.mpegurl, video/mp2t, text/vtt.
 
@@ -355,7 +359,8 @@ paths:
                 - package_sha256
                 - declaration
                 - state
-                - objects
+                - declared_at
+                - stage_expires_at
                 properties:
                   staging_id:
                     type: string
@@ -365,7 +370,102 @@ paths:
                     type: string
                     pattern: "^[0-9a-f]{64}$"
                   declaration:
-                    "$ref": "#/components/schemas/playthrough_declaration"
+                    oneOf:
+                    - "$ref": "#/components/schemas/playthrough_declaration"
+                    - type: object
+                      additionalProperties: false
+                      required:
+                      - retry_key
+                      - release_id
+                      - source_sha1
+                      - capture
+                      properties:
+                        retry_key:
+                          type: string
+                          minLength: 1
+                          maxLength: 200
+                        release_id:
+                          type: string
+                          minLength: 1
+                          maxLength: 200
+                          description: Stable release public_id, never a title or
+                            checksum selector.
+                        source_sha1:
+                          type: string
+                          pattern: "^[0-9a-f]{40}$"
+                          minLength: 40
+                          maxLength: 40
+                        capture:
+                          type: object
+                          additionalProperties: false
+                          required:
+                          - tool
+                          - version
+                          - captured_at
+                          properties:
+                            tool:
+                              type: string
+                              minLength: 1
+                              maxLength: 200
+                            version:
+                              type: string
+                              minLength: 1
+                              maxLength: 200
+                            captured_at:
+                              type: string
+                              format: date-time
+                              maxLength: 64
+                        verification:
+                          type: object
+                          additionalProperties: false
+                          required:
+                          - source_sha1
+                          - payload_sha1
+                          - relationship
+                          - method
+                          - result
+                          - verifier
+                          - verified_at
+                          - evidence
+                          properties:
+                            source_sha1:
+                              type: string
+                              pattern: "^[0-9a-f]{40}$"
+                              minLength: 40
+                              maxLength: 40
+                            payload_sha1:
+                              type: string
+                              pattern: "^[0-9a-f]{40}$"
+                              minLength: 40
+                              maxLength: 40
+                            relationship:
+                              type: string
+                              enum:
+                              - trailing_padding
+                              - verified_equivalence
+                            removed_bytes:
+                              type: integer
+                              minimum: 1
+                            method:
+                              type: string
+                              minLength: 1
+                              maxLength: 8000
+                            result:
+                              type: string
+                              enum:
+                              - success
+                            verifier:
+                              type: string
+                              minLength: 1
+                              maxLength: 8000
+                            verified_at:
+                              type: string
+                              format: date-time
+                              maxLength: 64
+                            evidence:
+                              type: string
+                              minLength: 1
+                              maxLength: 8000
                   state:
                     type: string
                     enum:
@@ -373,6 +473,23 @@ paths:
                     - received
                     - validated
                     - validation_failed
+                    - expired
+                    - reclaimed
+                  declared_at:
+                    type: string
+                    format: date-time
+                  stage_expires_at:
+                    type: string
+                    format: date-time
+                  expired_at:
+                    type: string
+                    format: date-time
+                  reclaimed_at:
+                    type: string
+                    format: date-time
+                  declaration_sha256:
+                    type: string
+                    pattern: "^[0-9a-f]{64}$"
                   validation_result:
                     "$ref": "#/components/schemas/playthrough_validation_result"
                   validation_error:
@@ -481,14 +598,18 @@ paths:
         from MCP begin_playthrough_staging. Capabilities bind the exact release, stage,
         immutable manifest and declared objects, never travel in URLs, and expire
         exactly 900 seconds after issuance (invalid at or after expires_at). Identical
-        begin replay renews without extending older capabilities; HTTP metadata reads
-        never renew. Missing, expired or mismatched authorization returns 403 upload_not_authorized
-        before application body or storage reads, including accepted-object retries.
-        Raw bytes with the exact declared Content-Type; any valid declared MIME type
-        without parameters is accepted. Exact size and SHA-256 must match, including
-        on successful retries. Reads are bounded at 8 MiB regardless of Content-Length.
-        Success returns an immutable object_id/received_at receipt; identical retries
-        return exactly that receipt, even after other objects finish. GET stage metadata
+        begin replay renews before the 24-hour declaration deadline without extending
+        older capabilities or the stage deadline; HTTP metadata reads never renew.
+        After Basic authentication, missing, invalid, expired or mismatched capabilities
+        and unknown object IDs return 403 upload_not_authorized first. Valid declared-object
+        authorization on an expired/reclaimed stage returns 410 stage_expired, including
+        accepted-object retries, before application body or storage reads. Capability
+        expiry remains issuance plus 900 seconds even beyond the stage deadline. Raw
+        bytes with the exact declared Content-Type; any valid declared MIME type without
+        parameters is accepted. Exact size and SHA-256 must match, including on successful
+        retries. Reads are bounded at 8 MiB regardless of Content-Length. Success
+        returns an immutable object_id/received_at receipt; identical retries return
+        exactly that receipt, even after other objects finish. GET stage metadata
         for aggregate progress. Fresh private storage keys isolate attempts and stages;
         completion follows storage success. Interrupted reads and storage failure
         leave the object incomplete and retryable after restart. No HLS validation
@@ -599,6 +720,26 @@ paths:
                     type: string
                     enum:
                     - stage_conflict
+        '410':
+          description: authorized object on an expired stage
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - error
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - stage_expired
         '413':
           description: actual bytes exceed 8 MiB
           headers:
