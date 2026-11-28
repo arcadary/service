@@ -1,5 +1,6 @@
 module V1
   class PlaythroughStagesController < ApiController
+    rescue_from PlaythroughStage::Expired, with: -> { render_error("stage_expired", status: :gone) }
     rescue_from PlaythroughStage::TooLarge, with: -> { render_error("stage_too_large", status: :content_too_large) }
     rescue_from PlaythroughStage::Conflict, with: -> { render_error("stage_conflict", status: :conflict) }
     rescue_from PlaythroughStage::NotFound, with: -> { render_error("not_found", status: :not_found) }

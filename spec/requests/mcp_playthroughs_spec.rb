@@ -48,7 +48,7 @@ RSpec.describe "MCP playthrough intake", type: :request do
     expect(tool.fetch("annotations")).to include("readOnlyHint" => false, "destructiveHint" => false, "idempotentHint" => false)
     result = begin_stage
     expect(JSONSchemer.schema(tool.fetch("outputSchema")).valid?(result)).to be(true)
-    expect(result.fetch("data").keys).to contain_exactly("staging_id", "release_id", "package_sha256", "state", "objects", "capability", "expires_at")
+    expect(result.fetch("data").keys).to contain_exactly("staging_id", "release_id", "package_sha256", "state", "objects", "capability", "expires_at", "declared_at", "stage_expires_at")
     expect(result.dig("data", "objects").sole.keys).to contain_exactly("object_id", "path", "received")
   end
 
@@ -58,7 +58,7 @@ RSpec.describe "MCP playthrough intake", type: :request do
     receive_hls(stage: stage, files: files)
     PlaythroughValidationService.validate(staging_id: stage.public_id)
     result = begin_stage(input: stage.declaration).fetch("data")
-    expect(result.keys).to contain_exactly("staging_id", "release_id", "package_sha256", "state", "objects", "capability", "expires_at")
+    expect(result.keys).to contain_exactly("staging_id", "release_id", "package_sha256", "state", "objects", "capability", "expires_at", "declared_at", "stage_expires_at")
     expect(result.fetch("state")).to eq("received")
     expect(result.fetch("objects")).to all(include("received" => true))
     get "/v1/playthrough-stages/#{stage.public_id}.json", headers: headers
@@ -263,6 +263,44 @@ RSpec.describe "MCP playthrough intake", type: :request do
       expect(output.string).to eq("")
     ensure
       Rails.logger.stop_broadcasting_to(capture)
+    end
+  end
+
+  it "keeps the declaration deadline fixed and applies authorization before terminal stage errors, including after pruning" do
+    freeze_time do
+      first = begin_stage.fetch("data")
+      upload(authorization: first)
+      deadline = Time.iso8601(first.fetch("stage_expires_at"))
+      expect(deadline).to eq(Time.iso8601(first.fetch("declared_at")) + 24.hours)
+      travel_to deadline - 1
+      renewed = begin_stage.fetch("data")
+      expect(renewed.slice("declared_at", "stage_expires_at")).to eq(first.slice("declared_at", "stage_expires_at"))
+      expect(Time.iso8601(renewed.fetch("expires_at"))).to eq(Time.current + 900)
+      travel 1
+      expect(begin_stage).to eq("error" => { "code" => "stage_expired" })
+      expect(begin_stage(input: declaration.merge("capture" => declaration["capture"].merge("version" => "2"))))
+        .to eq("error" => { "code" => "stage_conflict" })
+      input = instance_double(StringIO)
+      expect(input).not_to receive(:read)
+      expect(PlaythroughStageInputService).not_to receive(:read)
+      expect(ActiveStorage::Blob.service).not_to receive(:upload)
+      expect(ActiveStorage::Blob.service).not_to receive(:download)
+      2.times do |iteration|
+        PlaythroughStageCleanupService.call if iteration == 1
+        [ [ renewed.fetch("capability"), first.fetch("objects").sole.fetch("object_id"), 410 ],
+          [ nil, first.fetch("objects").sole.fetch("object_id"), 403 ],
+          [ first.fetch("capability"), first.fetch("objects").sole.fetch("object_id"), 403 ],
+          [ renewed.fetch("capability"), "unknown", 403 ] ].each do |token, object_id, expected|
+          env = Rack::MockRequest.env_for("/v1/playthrough-stages/#{first.fetch('staging_id')}/objects/#{object_id}.json",
+            method: "PUT", "HTTP_AUTHORIZATION" => headers.fetch("Authorization"), "HTTP_X_ARCADARY_UPLOAD_CAPABILITY" => token)
+          env["rack.input"] = input
+          status, response_headers, body = Rails.application.call(env)
+          expect(status).to eq(expected)
+          expect(response_headers["cache-control"]).to eq("no-store")
+          expect(JSON.parse(body.join)).to eq("error" => (expected == 410 ? "stage_expired" : "upload_not_authorized"))
+        end
+      end
+      expect(begin_stage).to eq("error" => { "code" => "stage_expired" })
     end
   end
 end
