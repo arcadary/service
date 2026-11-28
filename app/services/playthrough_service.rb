@@ -1,5 +1,4 @@
 class PlaythroughService
-  SHA1 = { type: "string", pattern: "^[0-9a-f]{40}$" }.freeze
   TIMESTAMP = { type: "string", maxLength: 64, pattern: "(Z|[+-][0-9]{2}:[0-9]{2})$", description: "ISO 8601 with a time zone." }.freeze
   CAPTURE = {
     type: "object", additionalProperties: false, required: %w[tool version captured_at],
@@ -10,7 +9,7 @@ class PlaythroughService
     required: %w[source_sha1 payload_sha1 relationship method result verifier verified_at evidence],
     description: "Explains a source_sha1 that is not one of the release's media. removed_bytes goes with trailing_padding only.",
     properties: {
-      source_sha1: SHA1, payload_sha1: SHA1.merge(description: "The release medium the source corresponds to."),
+      source_sha1: McpToolService::SHA1, payload_sha1: McpToolService::SHA1.merge(description: "The release medium the source corresponds to."),
       relationship: { type: "string", enum: %w[trailing_padding verified_equivalence] }, removed_bytes: { type: "integer", minimum: 1 },
       method: { type: "string", minLength: 1, maxLength: 8000 }, result: { type: "string", enum: %w[success] },
       verifier: { type: "string", minLength: 1, maxLength: 8000, description: "The admin username." }, verified_at: TIMESTAMP,
@@ -21,8 +20,7 @@ class PlaythroughService
   def self.create(upload_id:, release_id:, source_sha1:, capture:, verifier:, verification: nil)
     capture = capture.to_h.stringify_keys
     verification = verification!(verification.to_h.stringify_keys, source_sha1: source_sha1, verifier: verifier) if verification
-    release = Release.find_by(public_id: release_id)
-    raise Release::ReleaseNotFound unless release
+    release = ReleaseService.find(public_id: release_id)
     raise Playthrough::TargetMismatch unless member?(release: release, source_sha1: source_sha1, verification: verification)
 
     UploadService.use(upload_id: upload_id, kind: "video") do |upload|

@@ -1,6 +1,6 @@
 # Private catalog MCP
 
-`/mcp` is the single admin's MCP endpoint for catalog reads, uploads and device compatibility results in the Rails application. It uses the official Ruby `mcp` SDK **1.11.0**, in stateless Streamable HTTP mode with finite JSON responses. Writes start and confirm uploads and turn a confirmed upload into a release's screenshot or a private playthrough, or append a reviewer's compatibility result for one release and device class. It exposes no video publication, catalog metadata writes, game files, downloads, submissions, shell, SQL or arbitrary URL tools. Catalog coverage is not a playability verdict; only a recorded compatibility result is.
+`/mcp` is the single admin's MCP endpoint for catalog reads, uploads, device compatibility results and release registration in the Rails application. It uses the official Ruby `mcp` SDK **1.11.0**, in stateless Streamable HTTP mode with finite JSON responses. Writes start and confirm uploads and turn a confirmed upload into a release's screenshot or a private playthrough, append a reviewer's compatibility result for one release and device class, or register a release by its checksums. It exposes no video publication, other catalog metadata writes, game files, downloads, submissions, shell, SQL or arbitrary URL tools. Catalog coverage is not a playability verdict; only a recorded compatibility result is.
 
 The generated [HTTP endpoint documentation](../swagger/v1/swagger.yaml) is served at `/api-docs`. MCP `tools/list` publishes the input/output JSON schemas and help for each tool; `server/discover` serves SDK discovery for the modern protocol. All discovery is authenticated. These schemas, rather than the launcher's public JSON shapes, describe the private authoring records.
 
@@ -57,7 +57,7 @@ Tool errors use `isError: true` and `structuredContent: {"error":{"code":"..."}}
 
 ## Device compatibility
 
-`record_compatibility_result` appends what a named reviewer saw after playing one exact file of one stable release on one device class. Every argument except `reason` and `requires_input` is required, and no others are accepted:
+`record_compatibility_result` appends what a named reviewer saw after playing one exact file of one stable release on one device class. Every argument except `reason`, `requires_input` and `playthrough_ids` is required, and no others are accepted:
 
 | Argument | Meaning |
 | --- | --- |
@@ -73,11 +73,18 @@ Tool errors use `isError: true` and `structuredContent: {"error":{"code":"..."}}
 | `reviewer` | The reviewer's display name, at most 100 characters. Internal: it never appears in public JSON. |
 | `owns_file` | Must be `true`: the reviewer owns that exact file. |
 | `requires_input` | Optional, default `[]`: input devices besides the controller that the release needs to be playable on this device class, from the closed list `keyboard`, `mouse`, each at most once (stored sorted). Separate from `status`: a game can work and still need a keyboard; the launcher shows Attention while a listed device is not connected, unless the status is `does_not_work`, which outranks it. Public. |
+| `playthrough_ids` | Optional, default none: up to 20 ids of this release's private playthroughs (from `upload_video`) that show the result. Another release's playthrough returns `target_mismatch`. Internal: they appear in `get_compatibility`'s history, never in public JSON. |
 | `retry_key` | Nonblank, at most 200 characters. An identical retry returns the original result; changed arguments with a used key return `retry_conflict`. |
 
 Success returns `{"data":{"release_id","result","current"}}`: the stored history entry and the release's new `current`. Errors are `invalid_input` (schema, attestation, time, text, or a reason missing for `attention` or given for `works`/`unknown`), `not_found` (unknown release), `target_mismatch` (the file is not in the release, or `startup_revision` is not current) and `retry_conflict`. The tool is non-read-only, non-destructive and idempotent per retry key.
 
-`requires_input` is the one plain array in these results (a closed set of at most two values, never paginated); the `history` page continues with `cursor` like every other collection. Results are append-only: a retest or correction is a new result, and earlier ones stay in `get_compatibility`'s history with their reviewer and `recorded_at`. Public `release.compatibility` has exactly two keys, `steam_machine` and `steam_deck`. Each is the newest result for that device whose `startup_revision` equals the release's current one, as `{status, reason, core, core_version, startup_revision, tested_at, observed, limits, requires_input}`, or `{"status":"unknown"}` when there is none, when the newest is a withdrawal, or after a media or startup correction changes the revision. One device class never stands in for the other. Recording touches the release, so its release and media ETags and Last-Modified change at once; CDN copies may stay up to their 300 seconds. Unknown never stops a launch.
+`requires_input` (at most two values) and `playthrough_ids` (at most twenty) are the plain arrays in these results, never paginated; the `history` page continues with `cursor` like every other collection. Results are append-only: a retest or correction is a new result, and earlier ones stay in `get_compatibility`'s history with their reviewer and `recorded_at`. Public `release.compatibility` has exactly two keys, `steam_machine` and `steam_deck`. Each is the newest result for that device whose `startup_revision` equals the release's current one, as `{status, reason, core, core_version, startup_revision, tested_at, observed, limits, requires_input}`, or `{"status":"unknown"}` when there is none, when the newest is a withdrawal, or after a media or startup correction changes the revision. One device class never stands in for the other. Recording touches the release, so its release and media ETags and Last-Modified change at once; CDN copies may stay up to their 300 seconds. Unknown never stops a launch.
+
+## Registering releases
+
+Each medium's `label` is at most 80 characters.
+
+`register_release` takes a `reason`, an `idempotency_key`, `game_id` or `new_game` `{id, title}`, the `system`, optional `region` and `revision`, and `media` (`sha1` with optional `size`, `crc32`, `md5`, `format`, `label`, `key`, `role`). It returns the new release as `get_release` does. It runs `create_game` when it names a `new_game`, then `create_release`, in one transaction, so a failure leaves neither. It takes the game's existing records at their current revisions and raises them, as any release creation does. Retrying with the same `idempotency_key` and arguments returns the same release. Errors are `invalid_input` (including an unknown `game_id`), `conflict` (an existing checksum or game id, or a reused `idempotency_key` with different arguments) and `admin_unavailable` (`CATALOG_ADMIN_NAME` is not configured).
 
 ## Codex configured-header connection
 

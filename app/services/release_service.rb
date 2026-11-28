@@ -8,6 +8,13 @@ class ReleaseService
     releases.first
   end
 
+  def self.find(public_id:, includes: [])
+    release = Release.includes(includes).find_by(public_id: public_id)
+    raise Release::ReleaseNotFound unless release
+
+    release
+  end
+
   def self.containing(sha1:)
     checksum = normalize(sha1)
     ids = ReleaseMedium.joins(:media_file).where(media_files: { sha1: checksum }).distinct.pluck(:release_id)

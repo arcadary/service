@@ -7,7 +7,7 @@ class McpTransportService
     return error(status: 404, code: "not_found") unless [ "", "/" ].include?(env.fetch("PATH_INFO"))
     return error(status: 403, code: "forbidden") unless allowed_request?(env: env)
 
-    server = MCP::Server.new(name: "arcadary-catalog", version: "1", tools: McpCatalogToolsService.tools,
+    server = MCP::Server.new(name: "arcadary-catalog", version: "1", tools: McpCatalogToolsService.tools + McpUploadToolsService.tools + McpCompatibilityToolsService.tools + McpReleaseToolsService.tools,
       server_context: { base_url: Rack::Request.new(env).base_url, admin: env.fetch(PrivateServiceAuthentication::ADMIN) },
       configuration: MCP::Configuration.new(validate_tool_call_arguments: false, validate_tool_call_results: true))
     MCP::Server::Transports::StreamableHTTPTransport.new(server,

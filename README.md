@@ -152,6 +152,10 @@ Grouping/restoration preserves screenshots, stored images and recorded image lic
 
 A supported reimport preserves the authored controller profile, evidence, authored-state tracking and stable release identity; an import making its edition binding incompatible fails before writes.
 
+### Registering releases over MCP
+
+The MCP tool `register_release` adds a release by its checksum metadata alone, through `create_game` and `create_release`; no game file reaches the service. `create_release` also accepts `expected_revisions: :current`, which takes the game's existing revisions at write time instead of requiring them. [Private catalog MCP](docs/mcp.md#registering-releases) has the contract.
+
 ### Offline manual metadata imports
 
 Run these local-file operations with exclusive operator access, against the intended Rails database. Configure `CATALOG_ADMIN_NAME` before applying. Inputs are UTF-8 JSON metadata, with one operation envelope per file; no SQL, game-file bytes, filenames from a player's device or batch transaction language is accepted. The operation/attribute allow-lists and startup schema above apply unchanged.

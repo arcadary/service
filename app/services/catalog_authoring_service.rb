@@ -24,11 +24,12 @@ class CatalogAuthoringService
   end
 
   def initialize(operation:, attributes:, expected_revisions:, reason:, idempotency_key:, preview:)
-    raise InvalidInput, "attributes and expected revisions must be objects" unless attributes.is_a?(Hash) && expected_revisions.is_a?(Hash)
+    current = expected_revisions == :current && operation.to_s == "create_release"
+    raise InvalidInput, "attributes and expected revisions must be objects" unless attributes.is_a?(Hash) && (expected_revisions.is_a?(Hash) || current)
 
     @operation = operation.to_s
     @attributes = attributes.deep_stringify_keys
-    @expected = expected_revisions.deep_stringify_keys
+    @expected = current ? :current : expected_revisions.deep_stringify_keys
     @reason = reason
     @key = idempotency_key
     @supplied_preview = preview.is_a?(Hash) ? preview.deep_stringify_keys : preview
@@ -110,7 +111,7 @@ class CatalogAuthoringService
 
     def create_release
       allow!(attributes: @attributes, fields: RELEASE_FIELDS + %w[game_id media])
-      game = CatalogGameIdentityService.resolve(game: Game.find_by!(public_id: @attributes.fetch("game_id")))
+      game = CatalogGameIdentityService.resolve(game: Game.find_by(public_id: @attributes.fetch("game_id")) || raise(InvalidInput, "unknown game"))
       existing = prepare_existing!(game: game)
       media = @attributes.fetch("media")
       raise InvalidInput, "media must be a nonempty ordered array" unless media.is_a?(Array) && media.any?
@@ -143,6 +144,7 @@ class CatalogAuthoringService
 
     def prepare_existing!(game:)
       records = [ *CatalogGameIdentityService.identities(game: game), *game.releases.includes(release_media: :media_file).order(:public_id) ]
+      @expected = records.to_h { |record| [ reference(state: CatalogAuthoringReadService.record(record)), record.authoring_revision ] } if @expected == :current
       records.each { |record| expect_current!(record: record) }
       no_extra_revisions!(references: records.map { |record| reference(state: CatalogAuthoringReadService.record(record)) })
       records

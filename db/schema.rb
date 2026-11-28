@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_28_160000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_28_170000) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.string "name", null: false
     t.string "record_type", null: false
@@ -49,6 +49,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_28_160000) do
     t.json "result", default: {}, null: false
     t.datetime "created_at", null: false
     t.index ["idempotency_key"], name: "index_catalog_mutations_on_idempotency_key", unique: true
+  end
+
+  create_table "compatibility_result_playthroughs", id: false, force: :cascade do |t|
+    t.integer "compatibility_result_id", null: false
+    t.integer "playthrough_id", null: false
+    t.index ["compatibility_result_id", "playthrough_id"], name: "index_compatibility_result_playthroughs_unique", unique: true
+    t.index ["playthrough_id"], name: "index_compatibility_result_playthroughs_on_playthrough_id"
   end
 
   create_table "compatibility_results", force: :cascade do |t|

@@ -7,13 +7,11 @@ class McpUploadToolsService
     Upload::StorageDisabled => "uploads_disabled",
     Upload::StorageUnavailable => "storage_unavailable", Screenshot::StorageUnavailable => "storage_unavailable"
   }.freeze
-  TEXT = { type: "string", minLength: 1, maxLength: 200, pattern: "\\S" }.freeze
-  UPLOAD_ID = TEXT.merge(description: "upload_id returned by request_upload.").freeze
-  RELEASE_ID = TEXT.merge(description: "The release's stable id, never its title or a checksum.").freeze
-  FILE = McpCatalogToolsService.object_schema(properties: {
+  UPLOAD_ID = McpToolService::TEXT.merge(description: "upload_id returned by request_upload.").freeze
+  FILE = McpToolService.object_schema(properties: {
     name: { type: "string" }, size: { type: "integer", minimum: 1 }, sha256: { type: "string", pattern: "^[0-9a-f]{64}$" }
   }).freeze
-  UPLOAD = McpCatalogToolsService.object_schema(properties: {
+  UPLOAD = McpToolService.object_schema(properties: {
     upload_id: { type: "string" }, type: { type: "string", enum: Upload::LIMITS.keys }, state: { type: "string", enum: Upload::STATES },
     expires_at: { type: "string", format: "date-time" }, rejection_reason: { type: [ "string", "null" ] }, files: { type: "array", items: FILE }
   }).freeze
@@ -24,7 +22,7 @@ class McpUploadToolsService
         "package-relative name, with the same Basic credentials, its Content-Type and its SHA-256 in Content-Digest " \
         "(sha-256=:BASE64:), within limits. Then call confirm_upload. Expires 24 hours after this call.",
       input: { type: { type: "string", enum: Upload::LIMITS.keys } },
-      output: McpCatalogToolsService.object_schema(properties: {
+      output: McpToolService.object_schema(properties: {
         upload_id: { type: "string" }, type: { type: "string" }, expires_at: { type: "string", format: "date-time" },
         upload_url: { type: "string", format: "uri" }, limits: { type: "object" }
       }),
@@ -42,7 +40,7 @@ class McpUploadToolsService
     "upload_screenshot" => {
       description: "Make a confirmed screenshot upload the release's title or gameplay screenshot, replacing the previous one. " \
         "The PNG must decode within the release system's size limits. Uses the game's image licence; grants no new rights.",
-      input: { upload_id: UPLOAD_ID, release_id: RELEASE_ID, kind: { type: "string", enum: Screenshot::KINDS } },
+      input: { upload_id: UPLOAD_ID, release_id: McpToolService::RELEASE_ID, kind: { type: "string", enum: Screenshot::KINDS } },
       output: { type: "object", required: %w[release_id screenshot], properties: { release_id: { type: "string" }, screenshot: { type: "object" } } },
       annotations: { read_only_hint: false, destructive_hint: true, idempotent_hint: false }
     },
@@ -50,7 +48,7 @@ class McpUploadToolsService
       description: "Make a confirmed video upload a private playthrough of the release. source_sha1 is the captured medium's " \
         "SHA-1 and must belong to the release, unless verification attests how it differs from a release medium. " \
         "Nothing is published.",
-      input: { upload_id: UPLOAD_ID, release_id: RELEASE_ID, source_sha1: PlaythroughService::SHA1,
+      input: { upload_id: UPLOAD_ID, release_id: McpToolService::RELEASE_ID, source_sha1: McpToolService::SHA1,
                capture: PlaythroughService::CAPTURE, verification: PlaythroughService::VERIFICATION },
       optional: %w[verification],
       output: { type: "object", required: %w[playthrough], properties: { playthrough: { type: "object" } } },
@@ -59,20 +57,7 @@ class McpUploadToolsService
   }.freeze
 
   def self.tools
-    TOOLS.map do |name, tool|
-      MCP::Tool.define(name: name, description: tool.fetch(:description), input_schema: input_schema(tool: tool),
-        output_schema: output_schema(data: tool.fetch(:output)), annotations: tool.fetch(:annotations).merge(open_world_hint: false)) do |server_context: nil, **arguments|
-        McpUploadToolsService.call(tool: name, arguments: arguments, context: server_context)
-      end
-    end
-  end
-
-  def self.call(tool:, arguments:, context:)
-    raise Upload::InvalidInput unless JSONSchemer.schema(input_schema(tool: TOOLS.fetch(tool))).valid?(arguments.deep_stringify_keys)
-
-    McpCatalogToolsService.response(result: { "data" => perform(tool: tool, arguments: arguments.deep_symbolize_keys, context: context) })
-  rescue *ERRORS.keys => error
-    McpCatalogToolsService.response(result: { "error" => { "code" => ERRORS.fetch(error.class) } }, error: true)
+    McpToolService.tools(definitions: TOOLS, errors: ERRORS) { |name, arguments, context| perform(tool: name, arguments: arguments, context: context) }
   end
 
   def self.perform(tool:, arguments:, context:)
@@ -91,22 +76,4 @@ class McpUploadToolsService
     end
   end
   private_class_method :perform
-
-  def self.input_schema(tool:)
-    input = tool.fetch(:input)
-    { type: "object", additionalProperties: false, required: input.keys.map(&:to_s) - tool.fetch(:optional, []), properties: input }
-  end
-  private_class_method :input_schema
-
-  def self.output_schema(data:)
-    {
-      type: "object", additionalProperties: false, oneOf: [ { required: [ "data" ] }, { required: [ "error" ] } ],
-      properties: {
-        data: data,
-        error: { type: "object", additionalProperties: false, required: [ "code" ], properties: {
-          code: { type: "string", enum: ERRORS.values.uniq } } }
-      }
-    }
-  end
-  private_class_method :output_schema
 end

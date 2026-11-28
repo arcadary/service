@@ -2,9 +2,7 @@ class ScreenshotService
   def self.create(upload_id:, release_id:, kind:)
     raise Screenshot::InvalidKind unless Screenshot::KINDS.include?(kind)
 
-    release = Release.find_by(public_id: release_id)
-    raise Release::ReleaseNotFound unless release
-
+    release = ReleaseService.find(public_id: release_id)
     UploadService.use(upload_id: upload_id, kind: "screenshot") do |upload|
       store(release: release, kind: kind, bytes: UploadStorageService.read(upload: upload, name: upload.files.sole.name))
     end
@@ -46,9 +44,7 @@ class ScreenshotService
   def self.remove(public_id:, kind:)
     raise Screenshot::InvalidKind unless Screenshot::KINDS.include?(kind)
 
-    release = Release.find_by(public_id: public_id)
-    raise Release::ReleaseNotFound unless release
-
+    release = ReleaseService.find(public_id: public_id)
     blob = Screenshot.transaction do
       selected = selected_attributes(game_id: release.game_id)
       screenshot = Screenshot.find_by(release: release, kind: kind)

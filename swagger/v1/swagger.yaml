@@ -90,7 +90,7 @@ paths:
       security:
       - private_service_basic: []
       description: |
-        Catalog reads, uploads and append-only device compatibility results (record_compatibility_result, get_compatibility) over MCP 1.11.0. See https://github.com/arcadary/service/blob/main/docs/mcp.md for discoverable input/output schemas, targeting, pagination and client setup. Every method and subtree requires current shared admin Basic credentials before parsing and returns no-store. No OAuth discovery/login, SSE subscriptions or persistent sessions.
+        Catalog reads, uploads, append-only device compatibility results (record_compatibility_result, get_compatibility) and release registration (register_release) over MCP 1.11.0. See https://github.com/arcadary/service/blob/main/docs/mcp.md for discoverable input/output schemas, targeting, pagination and client setup. Every method and subtree requires current shared admin Basic credentials before parsing and returns no-store. No OAuth discovery/login, SSE subscriptions or persistent sessions.
 
         Complete HTTP request bodies are bounded at 2 MiB (2097152 bytes) regardless of Content-Length; an oversized request returns HTTP 413. JSON nesting remains limited to 64. request_upload returns an upload_id and the upload_url its files are PUT to; confirm_upload checks the upload as a whole; upload_screenshot and upload_video turn a confirmed upload into a release's screenshot or a private playthrough. File bytes never travel through MCP.
       parameters:
