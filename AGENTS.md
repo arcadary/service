@@ -6,14 +6,7 @@ The Rails 8.1 application behind [Arcadary](https://github.com/arcadary/arcadary
 
 **Check the corpus before implementing anything.** Search it for what the change touches, and read the pages tagged `product-intent`, the decision records and the pages tagged `technical-reference` that cover it. A decision in force wins over anything here; when a change conflicts with one, stop and ask. When a change alters what a page describes, update the page in step with the change; read the pages tagged `guidance` before writing to the corpus. This file holds the technical and implementation rules.
 
-## Implemented
-
-- `GET /v1/lookup/{sha1}.json`: a known checksum answers `301` to its resource, with `Cache-Control: public` for a day; an unknown one answers `404`. The target is `GET /v1/releases/{sha1}.json` (a release, its game, ordered media and validated startup), or `GET /v1/media/{sha1}.json` when the file is shared by several releases; both are cached for 300 seconds with ETags. See [Ordered media and startup](README.md#ordered-media-and-startup). The `.json` suffix is required. Errors are JSON with `no-store`. `/api-docs` documents the contract.
-- An offline importer for eight pinned No-Intro lists (29,336 distinct checksums) and two bundled homebrew seeds that need no DATs. Commands, identity rules and the CC-BY-SA-4.0 catalog licence: [Catalog data](README.md#catalog-data).
-- Screenshots and playthrough videos arrive through one upload flow: MCP `request_upload`, files PUT to `/v1/uploads` onto the host's own disk, `confirm_upload` checks them, and `upload_screenshot` or `upload_video` turns them into a release's screenshot, served from the public media bucket at `media.arcadary.org`, or a private playthrough. Screenshots carry their own image licence; the catalog licence excludes images. See [Uploads](README.md#uploads) and the Uploads technical reference in the corpus.
-- `register_release` (MCP) adds a release by checksum metadata alone, through the audited catalog operations. See [Registering releases over MCP](README.md#registering-releases-over-mcp).
-- Shared database operations create and correct catalog metadata with expected authoring revisions, retry protection and atomic audit history. Aliases and retained source values stay internal. See [Catalog authoring](README.md#catalog-authoring).
-- The admin records per-device compatibility (`works`, `attention`, `does_not_work` or `unknown` per release and device class, with core, core version, startup revision, evidence, a short reason and required input devices) through MCP; the release response returns the newest current result per device as `release.compatibility`, `unknown` when none. See [Device compatibility](README.md#device-compatibility).
+What the service does today, and where each part is described, is in the [README](README.md#what-it-does).
 
 ## Rules
 

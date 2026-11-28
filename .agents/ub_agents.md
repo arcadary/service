@@ -29,8 +29,10 @@ protection or publishes a release. A merge into `main` reaches production within
 minutes, once CI passes at the merge commit (`bin/auto-deploy`, see
 [Automatic deploys](../README.md#automatic-deploys)). Leave the merge to a maintainer (an admin of this repository) when the PR:
 
-- changes agent configuration or guidance: `ub-agents.yaml`, `.agents/`, `.claude/`
-  and any `AGENTS.md` or `CLAUDE.md`;
+- changes agent configuration or guidance: `ub-agents.yaml`, `.agents/`, `.claude/`,
+  `CLAUDE.md`, or the rules in `AGENTS.md` (its Rules, Code conventions, Decided not
+  built yet and Agent loop sections). Factual updates elsewhere in `AGENTS.md`, such as
+  setup steps, checks or where things are, merge like any other change;
 - changes setup, CI or release tooling;
 - adds a runtime dependency;
 - changes the production persistence layout: the primary, cache, queue or cable

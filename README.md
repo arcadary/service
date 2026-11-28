@@ -1,6 +1,15 @@
 # Arcadary service
 
-The remote service for [Arcadary](https://github.com/arcadary/arcadary): a Rails 8.1 application for the project's homepage and launcher JSON API. `GET /v1/lookup/{sha1}.json` identifies a game file and redirects to its release and game, or to all containing releases for a shared file. The offline catalog importer covers eight pinned No-Intro lists (29,336 distinct checksums); two optional homebrew seeds work without those lists. Original controller facts support exact SNES releases; compatibility and page features are still to be built. Nothing is deployed.
+The remote service for [Arcadary](https://github.com/arcadary/arcadary): a Rails 8.1 application for the project's homepage and launcher JSON API, deployed at `api.arcadary.org`.
+
+## What it does
+
+- `GET /v1/lookup/{sha1}.json`: a known checksum answers `301` to its resource, with `Cache-Control: public` for a day; an unknown one answers `404`. The target is `GET /v1/releases/{sha1}.json` (a release, its game, ordered media and validated startup), or `GET /v1/media/{sha1}.json` when the file is shared by several releases; both are cached for 300 seconds with ETags. See [Ordered media and startup](#ordered-media-and-startup). The `.json` suffix is required. Errors are JSON with `no-store`. `/api-docs` documents the contract.
+- An offline importer for eight pinned No-Intro lists (29,336 distinct checksums) and two bundled homebrew seeds that need no DATs. Commands, identity rules and the CC-BY-SA-4.0 catalog licence: [Catalog data](#catalog-data).
+- Screenshots and playthrough videos arrive through one upload flow: MCP `request_upload`, files PUT to `/v1/uploads` onto the host's own disk, `confirm_upload` checks them, and `upload_screenshot` or `upload_video` turns them into a release's screenshot, served from the public media bucket at `media.arcadary.org`, or a private playthrough. Screenshots carry their own image licence; the catalog licence excludes images. See [Uploads](#uploads) and the Uploads technical reference in the corpus.
+- `register_release` (MCP) adds a release by checksum metadata alone, through the audited catalog operations. See [Registering releases over MCP](#registering-releases-over-mcp).
+- Shared database operations create and correct catalog metadata with expected authoring revisions, retry protection and atomic audit history. Aliases and retained source values stay internal. See [Catalog authoring](#catalog-authoring).
+- The admin records per-device compatibility (`works`, `attention`, `does_not_work` or `unknown` per release and device class, with core, core version, startup revision, evidence, a short reason and required input devices) through MCP; the release response returns the newest current result per device as `release.compatibility`, `unknown` when none. See [Device compatibility](#device-compatibility).
 
 ## Setup
 
