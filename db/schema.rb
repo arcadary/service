@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_27_210000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_28_000000) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.string "name", null: false
     t.string "record_type", null: false
@@ -39,6 +39,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_27_210000) do
     t.index ["blob_id", "variation_digest"], name: "index_active_storage_variant_records_uniqueness", unique: true
   end
 
+  create_table "catalog_mutations", force: :cascade do |t|
+    t.string "idempotency_key", null: false
+    t.string "fingerprint", null: false
+    t.string "operation", null: false
+    t.string "admin_name", null: false
+    t.text "reason", null: false
+    t.json "record_changes", default: [], null: false
+    t.json "result", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.index ["idempotency_key"], name: "index_catalog_mutations_on_idempotency_key", unique: true
+  end
+
   create_table "game_identities", force: :cascade do |t|
     t.integer "game_id", null: false
     t.string "key", null: false
@@ -53,6 +65,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_27_210000) do
     t.datetime "updated_at", null: false
     t.boolean "catalog_curated", default: false, null: false
     t.string "screenshot_licence", default: "", null: false
+    t.integer "authoring_revision", default: 0, null: false
+    t.json "authored_fields", default: [], null: false
+    t.json "title_aliases", default: [], null: false
+    t.string "source_title"
     t.index ["public_id"], name: "index_games_on_public_id", unique: true
   end
 
@@ -64,6 +80,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_27_210000) do
     t.string "md5"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.integer "authoring_revision", default: 0, null: false
+    t.json "authored_fields", default: [], null: false
     t.index ["sha1"], name: "index_media_files_on_sha1", unique: true
   end
 
@@ -93,6 +111,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_27_210000) do
     t.string "source_title"
     t.string "public_id", null: false
     t.json "startup"
+    t.integer "authoring_revision", default: 0, null: false
+    t.json "authored_fields", default: [], null: false
+    t.string "source_system"
+    t.string "source_region"
+    t.string "source_revision"
     t.index ["game_id"], name: "index_releases_on_game_id"
     t.index ["public_id"], name: "index_releases_on_public_id", unique: true
     t.index ["sha1"], name: "index_releases_on_sha1"

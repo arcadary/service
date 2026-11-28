@@ -10,6 +10,7 @@ The Rails 8.1 application behind [Arcadary](https://github.com/arcadary/arcadary
 - An offline importer for eight pinned No-Intro lists (29,336 distinct checksums) and two bundled homebrew seeds that need no DATs. Commands, identity rules and the CC-BY-SA-4.0 catalog licence: [Catalog data](README.md#catalog-data).
 - Anonymous, cookie-free `POST /v1/validations.json` admission and raw `PUT /v1/validations/{sha1}/file.json` receipt into private host storage, separately from releases. Every response is `no-store`. Production defaults off; receipt needs both reviewer credentials and a valid private storage path. Reviewer access/downloads follow in #27, released together through `milestone/validation-requests`. See [Validation receipts](README.md#validation-receipts).
 - The owner's capture device uploads title/gameplay PNGs per release with a bearer token. The service re-encodes pixels, stores them privately in R2 and serves content-addressed PNG URLs through the Rails API. Screenshots carry their own image licence; the catalog licence excludes images. See [Screenshots](README.md#screenshots).
+- Shared database operations create and correct catalog metadata with expected authoring revisions, retry protection and atomic audit history. Aliases and retained source values stay internal. See [Catalog authoring](README.md#catalog-authoring).
 
 ## Rules
 
