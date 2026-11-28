@@ -75,6 +75,7 @@ RSpec.describe "MCP playthrough intake", type: :request do
   end
 
   it "renews normalized replays while preserving progress and each older token's exact expiry" do
+    declaration["manifest"] << declaration["manifest"].first.merge("path" => "video/other.ts")
     travel_to Time.current.change(usec: 123456), with_usec: true do
       issued_at = Time.current
       first = begin_stage.fetch("data")
@@ -85,10 +86,12 @@ RSpec.describe "MCP playthrough intake", type: :request do
       expect(response).to have_http_status(:ok)
       travel_to expiry - Rational(1, 1_000_000), with_usec: true
       declaration["capture"]["captured_at"] = "2026-11-28T09:00:00+01:00"
+      declaration["manifest"].reverse!
       renewed = begin_stage.fetch("data")
       expect(renewed.slice("staging_id", "release_id", "package_sha256")).to eq(first.slice("staging_id", "release_id", "package_sha256"))
-      expect(renewed.fetch("state")).to eq("received")
-      expect(renewed.fetch("objects").sole).to eq(first.fetch("objects").sole.merge("received" => true))
+      expect(renewed.fetch("state")).to eq("incomplete")
+      expect(renewed.fetch("objects").first).to eq(first.fetch("objects").first.merge("received" => true))
+      expect(renewed.fetch("objects").last).to eq(first.fetch("objects").last)
       expect(renewed.fetch("capability")).not_to eq(first.fetch("capability"))
       upload(authorization: first)
       expect(response.body).to eq(receipt)
@@ -97,7 +100,7 @@ RSpec.describe "MCP playthrough intake", type: :request do
       expect(response).to have_http_status(:forbidden)
       expect(response.parsed_body).to eq("error" => "upload_not_authorized")
       get "/v1/playthrough-stages/#{first.fetch('staging_id')}.json", headers: headers
-      expect(response.parsed_body.fetch("objects").sole.fetch("received")).to be(true)
+      expect(response.parsed_body.fetch("objects").first.fetch("received")).to be(true)
       expect(response.parsed_body.keys).not_to include("capability", "expires_at")
       after_expiry = begin_stage.fetch("data")
       upload(authorization: after_expiry)
@@ -107,7 +110,7 @@ RSpec.describe "MCP playthrough intake", type: :request do
       expect(begin_stage(input: declaration.merge("capture" => declaration["capture"].merge("version" => "2"))))
         .to eq("error" => { "code" => "stage_conflict" })
       expect(PlaythroughStage.count).to eq(1)
-      expect(PlaythroughStageObject.count).to eq(1)
+      expect(PlaythroughStageObject.count).to eq(2)
     end
   end
 

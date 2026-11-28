@@ -10,7 +10,6 @@ RSpec.describe "Private playthrough staging", type: :request do
   let(:declaration) { playthrough_declaration(release: release) }
   let(:Authorization) { ActionController::HttpAuthentication::Basic.encode_credentials("synthetic-admin", "synthetic-password") }
   let(:headers) { { "Authorization" => self.Authorization, "CONTENT_TYPE" => "application/json" } }
-  let(:payload) { declaration }
   let(:stage) { declare_playthrough }
   let(:staging_id) { stage.public_id }
   let(:stage_object_id) { stage.objects.sole.public_id }

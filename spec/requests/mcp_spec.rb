@@ -27,7 +27,13 @@ RSpec.describe "Authenticated catalog MCP", type: :request do
       consumes "application/json"
       produces "application/json"
       security [ private_service_basic: [] ]
-      description "Catalog read tools and staged screenshot publication plus private HLS intake over MCP 1.11.0; see https://github.com/arcadary/service/blob/main/docs/mcp.md for schemas, targeting, expiry, retries, pagination, protocol versions, client setup and deployment exclusions. PNG bytes use the separate authenticated HTTP staging route. Every method and subtree authenticates before parsing and sends no-store. No OAuth discovery or login. POST bodies are limited to 2097152 bytes and JSON nesting to 64; finite JSON replies only, without SSE subscriptions or persistent sessions."
+      description <<~TEXT
+        Catalog reads, staged screenshot publication and private HLS intake over MCP 1.11.0. See https://github.com/arcadary/service/blob/main/docs/mcp.md for discoverable input/output schemas, targeting, expiry, retries, pagination and client setup. Every method and subtree requires current shared admin Basic credentials before parsing and returns no-store. No OAuth discovery/login, SSE subscriptions or persistent sessions.
+
+        Complete HTTP request bodies are bounded at 2 MiB (2097152 bytes) regardless of Content-Length; an oversized request returns HTTP 413. JSON nesting remains limited to 64. begin_playthrough_staging arguments follow the playthrough_declaration schema: stable release public_id, exact source_sha1, capture provenance, retry_key, immutable manifest and explicit authenticated mismatch-verification evidence when needed. Limits apply together: 1 MiB (1048576 bytes) UTF-8 compact argument JSON before normalization, excluding the JSON-RPC envelope; 4096 objects; 8 MiB (8388608 bytes) each; 4 GiB (4294967296 bytes) total. A 4096-object, 4 GiB declaration with short paths fits. Over-limit declarations return MCP tool error stage_too_large without a stage or authorization.
+
+        Begin returns staging_id, release_id, package_sha256, state, every object's {object_id, path, received}, capability and expires_at, within 1 MiB of structured JSON before SDK text representation. No declaration echo, bulk bytes, credentials or signed upload URLs. Identical normalized replay retains stage/package/progress and issues a fresh capability; changed declarations conflict. Capabilities bind that exact release, stage, immutable manifest and declared objects and expire exactly 900 seconds after issuance, invalid at or after expires_at. Earlier tokens retain their expiry. Raw object PUT requires current Basic credentials plus X-Arcadary-Upload-Capability, never a URL token. Missing, expired or mismatched tokens return 403 upload_not_authorized before application transfer reads or storage access, including accepted-object retries. Metadata GET never mints or renews authorization; standalone HTTP stage POST is removed. No staged-byte playback/download route or public exposure. PNG bytes retain their separate authenticated HTTP staging route. No footage publication, provisioning or deployment is performed.
+      TEXT
       parameter name: :Authorization, in: :header, required: true, schema: { type: :string }
       parameter name: :request_body, in: :body, schema: {
         type: :object, additionalProperties: false, required: %w[jsonrpc id method],
@@ -60,6 +66,18 @@ RSpec.describe "Authenticated catalog MCP", type: :request do
         schema type: :object, additionalProperties: false, required: [ "error" ], properties: { error: { type: :string, enum: [ "authentication_unavailable" ] } }
         header "Cache-Control", schema: { type: :string, enum: [ "no-store" ] }
         run_test!
+      end
+
+      response "413", "complete HTTP request exceeds 2 MiB" do
+        let(:request_body) { "x" * 2_097_153 }
+        schema type: :object, additionalProperties: false, required: %w[jsonrpc error], properties: {
+          jsonrpc: { type: :string, enum: [ "2.0" ] }, id: { type: :integer, nullable: true },
+          error: { type: :object, additionalProperties: false, required: %w[code message], properties: {
+            code: { type: :integer, enum: [ -32600 ] }, message: { type: :string }
+          } }
+        }
+        header "Cache-Control", schema: { type: :string, enum: [ "no-store" ] }
+        run_test! { expect(response.headers["Cache-Control"]).to eq("no-store") }
       end
     end
   end
