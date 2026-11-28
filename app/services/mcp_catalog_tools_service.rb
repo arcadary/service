@@ -4,7 +4,7 @@ class McpCatalogToolsService
   DESCRIPTIONS = {
     "search_games" => "Find games by case-insensitive title or alias substring and optional system. Returns game summaries with stable id, title and authoring_revision.",
     "get_game" => "Inspect a stable game id: canonical title and paginated title_aliases, source_title, authored_fields, authoring_revision, and releases (id, game_id, system, region, revision, authoring_revision).",
-    "get_release" => "Inspect exactly one release by stable id or SHA-1. Returns canonical metadata, ordered media with checksums, source provenance, authored_fields, authoring_revision and effective startup with revision. A shared SHA-1 raises ambiguous_release with paginated candidate summaries; select a candidate id.",
+    "get_release" => "Inspect exactly one release by stable id or SHA-1. Returns canonical metadata, ordered media, source provenance, authored_fields, authoring_revision, effective startup and optional controller_profile with edition binding and text evidence. A shared SHA-1 raises ambiguous_release with paginated candidate summaries; select a candidate id.",
     "get_catalog_history" => "Read audit records newest first: id, operation, admin_name, created_at, reason and paginated record_changes with before/after authoring snapshots. Nested snapshot collections also have cursors."
   }.freeze
 
@@ -124,6 +124,7 @@ class McpCatalogToolsService
         canonical: object_schema(properties: {
           game_id: { type: "string" }, system: { type: "string", enum: Release::SYSTEMS },
           region: { type: [ "string", "null" ] }, revision: { type: [ "string", "null" ] },
+          controller_profile: { anyOf: [ { type: "null" }, controller_profile_schema ] },
           startup: object_schema(properties: {
             schema: { type: "integer", const: 1 }, boot: { type: "string" }, revision: { type: "string" },
             drives: { type: "object", additionalProperties: false, properties: { "8" => { type: "string" }, "9" => { type: "string" } } }
@@ -143,6 +144,23 @@ class McpCatalogToolsService
     end
   end
   private_class_method :result_schema
+
+  def self.controller_profile_schema
+    position = { type: "string", enum: ReleaseControllerProfileService::POSITIONS }
+    evidence = page_schema(items: { type: "string", minLength: 1, maxLength: ReleaseControllerProfileService::MAX_CITATION_LENGTH })
+    edition = { type: [ "string", "null" ], maxLength: ReleaseControllerProfileService::MAX_EDITION_LENGTH }
+    object_schema(properties: {
+      version: { type: "integer", const: 1 },
+      binding: object_schema(properties: { system: { type: "string", const: "snes" }, region: edition, revision: edition }),
+      layout: page_schema(items: object_schema(properties: {
+        position: position, label: { type: "string", enum: ReleaseControllerProfileService::LABELS }, evidence: evidence
+      })),
+      prompts: page_schema(items: object_schema(properties: {
+        letter: { type: "string", pattern: "^[A-Za-z]$", minLength: 1, maxLength: 1 }, position: position, evidence: evidence
+      }))
+    })
+  end
+  private_class_method :controller_profile_schema
 
   def self.record_properties(type:)
     { type: { type: "string", const: type }, id: { type: "string" }, authoring_revision: { type: "integer" },

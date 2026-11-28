@@ -32,6 +32,14 @@ RSpec.describe "Release", type: :request do
           let(:sha1) { release.sha1.upcase }
           run_test! { expect(response.parsed_body).to eq(expected_payload) }
         end
+
+        context "with an authored original controller profile" do
+          before { release.update!(system: "snes", controller_profile: build(:controller_profile)) }
+          run_test! do
+            expect(response.parsed_body.dig("release", "controller_profile")).to eq(
+              ReleaseControllerProfileDecorator.decorate(release.controller_profile).as_json)
+          end
+        end
       end
 
       response "400", "malformed SHA-1" do

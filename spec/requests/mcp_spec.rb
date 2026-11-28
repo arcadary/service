@@ -185,13 +185,17 @@ RSpec.describe "Authenticated catalog MCP", type: :request do
 
   it "reads catalog metadata through SDK structured results" do
     game = create(:game, title_aliases: [ "Alias" ], source_title: "Original")
-    release = create(:release, game: game, source_system: "source-system")
+    release = create(:release, game: game, system: "snes", source_system: "source-system", controller_profile: build(:controller_profile))
     result = tool(name: "get_release", id: release.public_id)
     expect(result["isError"]).to be(false)
     data = result.dig("structuredContent", "data")
     expect(data).to include("id" => release.public_id, "authoring_revision" => 0, "source" => hash_including("source_system" => "source-system"))
     expect(data.dig("canonical", "startup")).to eq(ReleaseStartupService.for_release(release: release))
     expect(data.dig("canonical", "media", "items").sole).to include("sha1" => release.sha1, "position" => 1)
+    profile = data.dig("canonical", "controller_profile")
+    expect(profile.fetch("binding")).to eq(release.controller_profile.fetch("binding"))
+    expect(profile.dig("layout", "items").first.dig("evidence", "items")).to eq(release.controller_profile.dig("layout", 0, "evidence"))
+    expect(profile.dig("prompts", "items").sole).to include("letter" => "A", "position" => "right")
     expect(JSON.parse(result.fetch("content").sole.fetch("text"))).to eq(result.fetch("structuredContent"))
   end
 end

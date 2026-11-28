@@ -41,7 +41,7 @@ class CatalogAuthoringReadService
     when Game
       [ "game", record.public_id, record.slice(:title, :title_aliases), record.slice(:source_title) ]
     when Release
-      canonical = record.slice(:system, :region, :revision).merge("game_id" => record.game.public_id,
+      canonical = record.slice(:system, :region, :revision, :controller_profile).merge("game_id" => record.game.public_id,
         "startup" => ReleaseStartupService.for_release(release: record),
         "media" => record.release_media.reject(&:marked_for_destruction?).sort_by(&:position).map { |medium| medium.slice(:key, :position, :role, :label).merge(medium.media_file.slice(:sha1, :size, :format, :crc32, :md5)) })
       [ "release", record.public_id, canonical, record.slice(:source_title, :source_system, :source_region, :source_revision) ]
