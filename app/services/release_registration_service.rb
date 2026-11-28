@@ -8,12 +8,10 @@ class ReleaseRegistrationService
         CatalogAuthoringService.call(operation: "create_game", attributes: new_game, expected_revisions: {},
           reason: reason, idempotency_key: "#{idempotency_key}:game")
       end
-      CatalogAuthoringService.call(operation: "create_release", expected_revisions: :current, reason: reason,
+      created = CatalogAuthoringService.call(operation: "create_release", expected_revisions: :current, reason: reason,
         attributes: { game_id: game_id || new_game.fetch(:id), system: system, region: region, revision: revision, media: media }.compact,
         idempotency_key: "#{idempotency_key}:release")
+      created.fetch("records").find { |state| state.fetch("type") == "release" }.fetch("id")
     end
-    McpCatalogReadService.call(tool: "get_release", sha1: media.first.fetch(:sha1))
-  rescue ActiveRecord::RecordNotFound
-    raise CatalogAuthoringService::InvalidInput, "unknown game"
   end
 end

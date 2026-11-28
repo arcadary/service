@@ -15,13 +15,6 @@ class CatalogAuthoringService
     new(operation: operation, attributes: attributes, expected_revisions: expected_revisions, reason: reason, idempotency_key: idempotency_key, preview: preview).call
   end
 
-  def self.admin_name
-    name = ENV["CATALOG_ADMIN_NAME"].to_s.strip
-    raise MissingAdminName, "CATALOG_ADMIN_NAME must be configured" if name.empty?
-
-    name
-  end
-
   def self.preview(operation:, attributes:)
     raise InvalidInput, "attributes must be an object" unless attributes.is_a?(Hash)
 
@@ -45,7 +38,8 @@ class CatalogAuthoringService
   end
 
   def call
-    admin_name = self.class.admin_name
+    admin_name = ENV["CATALOG_ADMIN_NAME"].to_s.strip
+    raise MissingAdminName, "CATALOG_ADMIN_NAME must be configured" if admin_name.empty?
     raise InvalidInput, "unknown operation" unless OPERATIONS.include?(@operation)
     raise InvalidInput, "reason and idempotency key are required" unless @reason.is_a?(String) && @reason.present? && @key.is_a?(String) && @key.present?
 
@@ -117,7 +111,7 @@ class CatalogAuthoringService
 
     def create_release
       allow!(attributes: @attributes, fields: RELEASE_FIELDS + %w[game_id media])
-      game = CatalogGameIdentityService.resolve(game: Game.find_by!(public_id: @attributes.fetch("game_id")))
+      game = CatalogGameIdentityService.resolve(game: Game.find_by(public_id: @attributes.fetch("game_id")) || raise(InvalidInput, "unknown game"))
       existing = prepare_existing!(game: game)
       media = @attributes.fetch("media")
       raise InvalidInput, "media must be a nonempty ordered array" unless media.is_a?(Array) && media.any?
@@ -150,6 +144,7 @@ class CatalogAuthoringService
 
     def prepare_existing!(game:)
       records = [ *CatalogGameIdentityService.identities(game: game), *game.releases.includes(release_media: :media_file).order(:public_id) ]
+      @expected = records.to_h { |record| [ reference(state: CatalogAuthoringReadService.record(record)), record.authoring_revision ] } if @expected == :current
       records.each { |record| expect_current!(record: record) }
       no_extra_revisions!(references: records.map { |record| reference(state: CatalogAuthoringReadService.record(record)) })
       records
@@ -158,9 +153,8 @@ class CatalogAuthoringService
     def expect_current!(record:)
       state = CatalogAuthoringReadService.record(record)
       key = reference(state: state)
-      unless @expected == :current || (@expected[key].is_a?(Integer) && @expected[key] == record.authoring_revision)
-        raise Conflict, "missing or stale authoring revision for #{key}"
-      end
+      expected = @expected[key]
+      raise Conflict, "missing or stale authoring revision for #{key}" unless expected.is_a?(Integer) && expected == record.authoring_revision
 
       @before[key] = state
     end
@@ -173,7 +167,7 @@ class CatalogAuthoringService
     end
 
     def no_extra_revisions!(references:)
-      raise InvalidInput, "unexpected revision targets" unless @expected == :current || (@expected.keys - references).empty?
+      raise InvalidInput, "unexpected revision targets" unless (@expected.keys - references).empty?
     end
 
     def allow!(attributes:, fields:)

@@ -154,7 +154,7 @@ A supported reimport preserves the authored controller profile, evidence, author
 
 ### Registering releases over MCP
 
-The MCP tool `register_release` adds a release by its checksum metadata alone; no game file reaches the service. It runs `create_game` when it names a `new_game`, then `create_release`, in one transaction. `create_release` alone also accepts `expected_revisions: :current`, which takes the game scope's revisions at write time; creating a release only adds records, and the retry key still replays an identical request. [Private catalog MCP](docs/mcp.md#registering-releases) lists its arguments and errors.
+The MCP tool `register_release` adds a release by its checksum metadata alone, through `create_game` and `create_release`; no game file reaches the service. `create_release` also accepts `expected_revisions: :current`, which takes the game's existing revisions at write time instead of requiring them. [Private catalog MCP](docs/mcp.md#registering-releases) has the contract.
 
 ### Offline manual metadata imports
 

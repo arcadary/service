@@ -134,7 +134,6 @@ class McpCatalogToolsService
       })
     end
   end
-  private_class_method :result_schema
 
   def self.controller_profile_schema
     position = { type: "string", enum: ReleaseControllerProfileService::POSITIONS }

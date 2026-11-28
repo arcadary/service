@@ -1,6 +1,8 @@
 class CompatibilityService
   FIELDS = %w[release_id sha1 device status core core_version startup_revision tested_at observed limits reviewer owns_file retry_key].freeze
   OPTIONAL = %w[requires_input reason playthrough_ids].freeze
+  LISTS = %w[requires_input playthrough_ids].freeze
+  REFERENCES = %w[release_id playthrough_ids].freeze
   ZONED = /(?:Z|[+-]\d{2}:\d{2})\z/
   PRINTABLE = /\A[^\p{Cc}]*\z/
 
@@ -18,7 +20,7 @@ class CompatibilityService
       playthroughs = release.playthroughs.where(public_id: attributes.fetch("playthrough_ids")).to_a
       raise CompatibilityResult::TargetMismatch unless playthroughs.size == attributes.fetch("playthrough_ids").size
 
-      release.compatibility_results.create!(attributes.except("release_id", "owns_file", "playthrough_ids").merge("fingerprint" => fingerprint, "playthroughs" => playthroughs))
+      release.compatibility_results.create!(attributes.except(*REFERENCES).merge("fingerprint" => fingerprint, "playthroughs" => playthroughs))
     end
   rescue ActiveRecord::RecordNotUnique
     replay(result: CompatibilityResult.find_by!(retry_key: attributes.fetch("retry_key")), fingerprint: fingerprint)
@@ -39,18 +41,14 @@ class CompatibilityService
     raise CompatibilityResult::InvalidInput unless (arguments.keys - OPTIONAL).sort == FIELDS.sort
     raise CompatibilityResult::InvalidInput unless arguments.fetch("owns_file") == true
 
-    inputs = arguments.fetch("requires_input", [])
-    playthrough_ids = arguments.fetch("playthrough_ids", [])
-    [ inputs, playthrough_ids ].each do |list|
-      raise CompatibilityResult::InvalidInput unless list.is_a?(Array) && list.all?(String) && list.uniq.size == list.size
-    end
+    lists = LISTS.to_h { |name| [ name, arguments.fetch(name, []) ] }
+    raise CompatibilityResult::InvalidInput unless lists.values.all? { |list| list.is_a?(Array) && list.all?(String) && list.uniq.size == list.size }
 
-    text = arguments.except("owns_file", "requires_input", "playthrough_ids")
+    text = arguments.except("owns_file", *LISTS)
     raise CompatibilityResult::InvalidInput unless text.values.all? { |value| value.is_a?(String) && value.strip.present? && PRINTABLE.match?(value) }
 
-    attributes = text.merge("sha1" => text.fetch("sha1").downcase, "tested_at" => timestamp(value: text.fetch("tested_at")),
-      "requires_input" => inputs.sort, "playthrough_ids" => playthrough_ids.sort)
-    result = CompatibilityResult.new(attributes.except("release_id", "playthrough_ids"))
+    attributes = text.merge(lists.transform_values(&:sort), "sha1" => text.fetch("sha1").downcase, "tested_at" => timestamp(value: text.fetch("tested_at")))
+    result = CompatibilityResult.new(attributes.except(*REFERENCES))
     result.fingerprint = "pending"
     result.validate
     raise CompatibilityResult::InvalidInput unless (result.errors.attribute_names - [ :release ]).empty?

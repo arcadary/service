@@ -1,6 +1,7 @@
 class McpToolService
   MAX_RESULT_BYTES = 1024 * 1024
   TEXT = { type: "string", minLength: 1, maxLength: 200, pattern: "\\S" }.freeze
+  SHA1 = { type: "string", pattern: "^[0-9a-f]{40}$" }.freeze
   RELEASE_ID = TEXT.merge(description: "The release's stable id, never its title or a checksum.").freeze
 
   def self.tools(definitions:, errors:, &perform)

@@ -14,30 +14,20 @@ class McpCompatibilityToolsService
     "startup_revision returns target_mismatch."
 
   def self.tools
-    [ MCP::Tool.define(name: "record_compatibility_result", description: DESCRIPTION,
-      input_schema: input_schema, output_schema: output_schema,
-      annotations: { read_only_hint: false, destructive_hint: false, idempotent_hint: true, open_world_hint: false }) do |server_context: nil, **arguments|
-      McpCompatibilityToolsService.call(arguments: arguments)
-    end ]
+    McpToolService.tools(definitions: { "record_compatibility_result" => definition }, errors: ERRORS) do |_name, arguments, _context|
+      result = CompatibilityService.record(**arguments)
+      release = CompatibilityService.find_release(release_id: result.release.public_id)
+      { release_id: release.public_id, result: CompatibilityResultDecorator.decorate(result).history_json,
+        current: CompatibilityResultDecorator.current(CompatibilityService.current(release: release)) }
+    end
   end
 
-  def self.call(arguments:)
-    raise CompatibilityResult::InvalidInput unless JSONSchemer.schema(input_schema).valid?(arguments.stringify_keys)
-
-    result = CompatibilityService.record(**arguments.symbolize_keys)
-    release = CompatibilityService.find_release(release_id: result.release.public_id)
-    McpToolService.response(result: { data: { release_id: release.public_id, result: CompatibilityResultDecorator.decorate(result).history_json,
-      current: CompatibilityResultDecorator.current(CompatibilityService.current(release: release)) } })
-  rescue *ERRORS.keys => error
-    McpToolService.response(result: { error: { code: ERRORS.fetch(error.class) } }, error: true)
-  end
-
-  def self.input_schema
-    text = ->(maximum) { { type: "string", minLength: 1, maxLength: maximum, pattern: "\\S" } }
+  def self.definition
+    text = ->(maximum) { McpToolService::TEXT.merge(maxLength: maximum) }
     {
-      type: "object", additionalProperties: false, required: CompatibilityService::FIELDS,
-      properties: {
-        release_id: text.(200).merge(description: "Stable release public id; a shared checksum never selects a release."),
+      description: DESCRIPTION, optional: CompatibilityService::OPTIONAL,
+      input: {
+        release_id: McpToolService::RELEASE_ID,
         sha1: { type: "string", minLength: 40, maxLength: 40, pattern: "^[0-9a-fA-F]{40}$", description: "The exact file played; must be a medium of the release." },
         device: { type: "string", enum: CompatibilityResult::DEVICES },
         status: { type: "string", enum: CompatibilityResult::STATUSES },
@@ -52,23 +42,15 @@ class McpCompatibilityToolsService
         reason: text.(CompatibilityResult::REASON_LENGTH).merge(description: "One short public sentence on why: required for attention (for example a performance problem), optional for does_not_work, absent for works and unknown."),
         requires_input: { type: "array", uniqueItems: true, maxItems: CompatibilityResult::INPUTS.size, items: { type: "string", enum: CompatibilityResult::INPUTS },
           description: "Optional, default none: input devices besides the controller that the release needs to be playable on this device class. Public." },
-        playthrough_ids: { type: "array", uniqueItems: true, maxItems: 20, items: text.(200),
+        playthrough_ids: { type: "array", uniqueItems: true, maxItems: 20, items: McpToolService::TEXT,
           description: "Optional: ids of this release's private playthroughs (from upload_video) that show the result. Internal, never public." },
-        retry_key: text.(200)
-      }
+        retry_key: McpToolService::TEXT
+      },
+      output: McpToolService.object_schema(properties: { release_id: { type: "string" }, result: history_item_schema, current: current_schema }),
+      annotations: { read_only_hint: false, destructive_hint: false, idempotent_hint: true }
     }
   end
-
-  def self.output_schema
-    {
-      type: "object", additionalProperties: false,
-      oneOf: [ { required: [ "data" ] }, { required: [ "error" ] } ],
-      properties: {
-        data: McpToolService.object_schema(properties: { release_id: { type: "string" }, result: history_item_schema, current: current_schema }),
-        error: McpToolService.object_schema(properties: { code: { type: "string", enum: ERRORS.values } })
-      }
-    }
-  end
+  private_class_method :definition
 
   def self.current_schema
     result = McpToolService.object_schema(properties: {

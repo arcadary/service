@@ -48,7 +48,7 @@ class McpUploadToolsService
       description: "Make a confirmed video upload a private playthrough of the release. source_sha1 is the captured medium's " \
         "SHA-1 and must belong to the release, unless verification attests how it differs from a release medium. " \
         "Nothing is published.",
-      input: { upload_id: UPLOAD_ID, release_id: McpToolService::RELEASE_ID, source_sha1: PlaythroughService::SHA1,
+      input: { upload_id: UPLOAD_ID, release_id: McpToolService::RELEASE_ID, source_sha1: McpToolService::SHA1,
                capture: PlaythroughService::CAPTURE, verification: PlaythroughService::VERIFICATION },
       optional: %w[verification],
       output: { type: "object", required: %w[playthrough], properties: { playthrough: { type: "object" } } },
