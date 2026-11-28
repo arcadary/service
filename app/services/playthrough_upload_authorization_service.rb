@@ -3,7 +3,7 @@ class PlaythroughUploadAuthorizationService
 
   def self.issue(stage:)
     expires_at = (Time.current + LIFETIME).iso8601(9)
-    payload = binding(stage: stage).merge("expires_at" => expires_at, "nonce" => SecureRandom.hex(16))
+    payload = bound_identity(stage: stage).merge("expires_at" => expires_at, "nonce" => SecureRandom.hex(16))
     { capability: verifier.generate(payload, purpose: "playthrough-upload"), expires_at: expires_at }
   end
 
@@ -16,17 +16,17 @@ class PlaythroughUploadAuthorizationService
     end
 
     stage = PlaythroughStage.includes(:release).find_by(public_id: staging_id)
-    unless stage && payload.slice(*binding(stage: stage).keys) == binding(stage: stage) && stage.objects.exists?(public_id: object_id)
+    unless stage && payload.slice(*bound_identity(stage: stage).keys) == bound_identity(stage: stage) && stage.objects.exists?(public_id: object_id)
       raise PlaythroughStage::UploadNotAuthorized
     end
     stage
   end
 
-  def self.binding(stage:)
+  def self.bound_identity(stage:)
     { "staging_id" => stage.public_id, "release_id" => stage.release.public_id,
       "package_sha256" => stage.package_sha256, "declaration_sha256" => stage.declaration_sha256 }
   end
-  private_class_method :binding
+  private_class_method :bound_identity
 
   def self.verifier
     Rails.application.message_verifier("playthrough-upload")

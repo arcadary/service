@@ -95,6 +95,8 @@ Transfer raw bytes to `PUT /v1/playthrough-stages/{staging_id}/objects/{object_i
 
 Begin errors are `isError: true` with `structuredContent: {"error":{"code":"..."}}`: `invalid_declaration`, `not_found`, `target_mismatch`, `stage_conflict`, or `stage_too_large`. Missing required arguments are SDK tool errors. Correct the declaration for validation/targeting failures; preserve the original declaration when renewing or recovering from a lost response. IDs and capabilities provide no video rights. Synthetic specs cover intake and transfer; technical HLS validation and abandoned-stage retention remain #56, R2 promotion/release discovery #57, and MCP publication/end-to-end verification #46. This intake performs no footage upload/publication, provisioning or deployment.
 
+Duplicate JSON keys, including repeated release selectors, return HTTP `400` with JSON-RPC parse error `-32700` before stage creation or authorization issuance. Object-route capability checks apply to every HTTP method before method overrides or body parsing, so a Basic-only POST with `X-HTTP-Method-Override: PUT` returns `403 upload_not_authorized`. Even an authorized object GET returns `404`; staged bytes have no download route.
+
 ## Codex configured-header connection
 
 Placeholder-only configuration, following [Codex MCP configuration](https://developers.openai.com/codex/mcp/):

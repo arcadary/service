@@ -166,7 +166,8 @@ RSpec.describe "Private playthrough staging", type: :request do
       expect([ response.status, response.body, response.headers.slice("ETag", "Last-Modified", "Cache-Control") ]).to eq(previous[index])
     end
     object = staged.objects.sole.reload
-    get "/v1/playthrough-stages/#{staged.public_id}/objects/#{object.public_id}.json", headers: headers
+    token = PlaythroughUploadAuthorizationService.issue(stage: staged).fetch(:capability)
+    get "/v1/playthrough-stages/#{staged.public_id}/objects/#{object.public_id}.json", headers: headers.merge("X-Arcadary-Upload-Capability" => token)
     expect(response).to have_http_status(:not_found)
     get "/rails/active_storage/blobs/redirect/#{object.blob.signed_id}/playthrough-object"
     expect(response).to have_http_status(:not_found)

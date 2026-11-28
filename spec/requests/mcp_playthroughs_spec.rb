@@ -119,10 +119,14 @@ RSpec.describe "MCP playthrough intake", type: :request do
     second = begin_stage(input: declaration.merge("retry_key" => "other")).fetch("data")
     other_release = create(:release)
     third = begin_stage(input: playthrough_declaration(release: other_release)).fetch("data")
+    payload, signature = first.fetch("capability").split("--", 2)
+    tampered_payload = JSON.parse(Base64.strict_decode64(payload))
+    tampered_payload["staging_id"] = second.fetch("staging_id")
+    tampered = "#{Base64.strict_encode64(JSON.generate(tampered_payload))}--#{signature}"
     expect(PlaythroughStageInputService).not_to receive(:read)
     expect(ActiveStorage::Blob.service).not_to receive(:upload)
     expect(ActiveStorage::Blob.service).not_to receive(:download)
-    [ nil, "invalid", second.fetch("capability"), third.fetch("capability") ].each do |capability|
+    [ nil, tampered, second.fetch("capability"), third.fetch("capability") ].each do |capability|
       upload(authorization: first, capability: capability)
       expect(response).to have_http_status(:forbidden)
       expect(response.parsed_body).to eq("error" => "upload_not_authorized")
@@ -135,6 +139,39 @@ RSpec.describe "MCP playthrough intake", type: :request do
     allow(ENV).to receive(:[]).with("VALIDATION_REVIEWER_PASSWORD").and_return("rotated-synthetic")
     upload(authorization: first)
     expect(response).to have_http_status(:unauthorized)
+  end
+
+  it "rejects Basic-only method overrides before reading transfer bytes or touching storage" do
+    first = begin_stage.fetch("data")
+    object = first.fetch("objects").sole
+    path = "/v1/playthrough-stages/#{first.fetch('staging_id')}/objects/#{object.fetch('object_id')}.json"
+    expect(PlaythroughStageInputService).not_to receive(:read)
+    expect(ActiveStorage::Blob.service).not_to receive(:upload)
+    expect(ActiveStorage::Blob.service).not_to receive(:download)
+    input = instance_double(StringIO)
+    expect(input).not_to receive(:read)
+    [ path, "#{path}/" ].each do |object_path|
+      env = Rack::MockRequest.env_for(object_path, method: "POST", "CONTENT_TYPE" => "video/mp2t",
+        "HTTP_AUTHORIZATION" => headers.fetch("Authorization"), "HTTP_X_HTTP_METHOD_OVERRIDE" => "PUT")
+      env["rack.input"] = input
+      status, response_headers, body = Rails.application.call(env)
+      expect(status).to eq(403)
+      expect(response_headers["cache-control"]).to eq("no-store")
+      expect(JSON.parse(body.join)).to eq("error" => "upload_not_authorized")
+    end
+    expect(PlaythroughStageObject.find_by!(public_id: object.fetch("object_id")).received_at).to be_nil
+  end
+
+  it "rejects duplicate release selectors before creating a stage or issuing authorization" do
+    other_release = create(:release)
+    arguments = JSON.generate(declaration).sub('"release_id":', "\"release_id\":#{JSON.generate(other_release.public_id)},\"release_id\":")
+    request = %({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"begin_playthrough_staging","arguments":#{arguments}}})
+    expect(PlaythroughUploadAuthorizationService).not_to receive(:issue)
+    post "/mcp", params: request, headers: headers
+    expect(response).to have_http_status(:bad_request)
+    expect(response.parsed_body.dig("error", "code")).to eq(-32700)
+    expect(response.headers["Cache-Control"]).to eq("no-store")
+    expect(PlaythroughStage.count).to eq(0)
   end
 
   it "rejects an expired accepted-object retry before reading the Rack input or touching object storage" do
