@@ -4,17 +4,13 @@ require_relative "../support/screenshot_helpers"
 RSpec.describe "Screenshot response validators", type: :request do
   include ScreenshotHelpers
 
-  before do
-    allow(ScreenshotConfigurationService).to receive(:public_base_url).and_return("https://images.example")
-  end
-
   it "publishes exact release/game objects in title-gameplay order" do
     release = create(:release, system: "gb")
     gameplay = upload_screenshot(release: release)
     title = upload_screenshot(release: release, kind: "title")
     get "/v1/releases/#{release.sha1}.json"
     objects = [ title, gameplay ].map do |screenshot|
-      { "kind" => screenshot.kind, "url" => "https://images.example/v1/screenshots/#{screenshot.sha256}.png", "width" => 2, "height" => 2, "licence" => "" }
+      { "kind" => screenshot.kind, "url" => "https://media.example/screenshots/#{screenshot.sha256}.png", "width" => 2, "height" => 2, "licence" => "" }
     end
     expect(response.parsed_body.dig("release", "screenshots")).to eq(objects)
     expect(response.parsed_body.dig("game", "screenshot")).to eq(objects.last)

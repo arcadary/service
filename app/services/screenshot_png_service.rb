@@ -1,20 +1,12 @@
 require "zlib"
 
 class ScreenshotPngService
-  MAX_BYTES = 8_388_608
   DECODE_LOCK = Mutex.new
   LIMITS = {
     "nes" => [ 1024, 960 ], "snes" => [ 2048, 1912 ], "gb" => [ 640, 576 ], "gbc" => [ 640, 576 ],
     "megadrive" => [ 1280, 1920 ], "pcengine" => [ 2048, 960 ], "atari2600" => [ 640, 768 ], "c64" => [ 1536, 1088 ]
   }.freeze
   SIGNATURE = "\x89PNG\r\n\x1a\n".b.freeze
-
-  def self.decode(io:, system:)
-    bytes = io.read(MAX_BYTES + 1).to_s.b
-    raise Screenshot::TooLarge if bytes.bytesize > MAX_BYTES
-
-    new(bytes: bytes, system: system).decode
-  end
 
   def initialize(bytes:, system:)
     @bytes, @system = bytes, system

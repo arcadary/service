@@ -1,6 +1,8 @@
 require "base64"
 
 class PrivateServiceAuthentication
+  ADMIN = "arcadary.admin"
+
   def initialize(app, paths:)
     @app = app
     @paths = paths
@@ -19,6 +21,7 @@ class PrivateServiceAuthentication
     def authenticate(env)
       username, password = credentials(env["HTTP_AUTHORIZATION"])
       PrivateServiceAuthenticationService.authenticate!(username: username, password: password)
+      env[ADMIN] = username
       env["action_dispatch.show_detailed_exceptions"] = false
       status, headers, body = @app.call(env)
       [ status, headers.merge("cache-control" => "no-store"), body ]

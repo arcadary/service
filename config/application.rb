@@ -2,7 +2,6 @@ require_relative "boot"
 
 require "rails/all"
 require_relative "../lib/middleware/private_service_authentication"
-require_relative "../lib/middleware/playthrough_stage_body"
 
 # Require the gems listed in Gemfile, including any gems
 # you've limited to :test, :development, or :production.
@@ -18,15 +17,15 @@ module ArcadaryService
     # Common ones are `templates`, `generators`, or `middleware`, for example.
     config.autoload_lib(ignore: %w[assets tasks middleware])
 
-    config.x.private_service_paths = [ %r{\A/mcp(?:/|\z)}, %r{\A/v1/screenshot-stages(?:[/.]|\z)}, %r{\A/v1/playthrough-stages(?:[/.]|\z)} ]
+    config.x.private_service_paths = [ %r{\A/mcp(?:/|\z)}, %r{\A/v1/uploads(?:[/.]|\z)} ]
     config.middleware.insert_before 0, PrivateServiceAuthentication,
       paths: -> { Rails.application.config.x.private_service_paths }
-    config.middleware.insert_after PrivateServiceAuthentication, PlaythroughStageBody
 
     config.middleware.insert_before Rails::Rack::Logger, Rails::Rack::SilenceRequest,
-      path: %r{\A/+v1/+(lookup|releases|media|screenshots)/+}
+      path: %r{\A/+v1/+(lookup|releases|media)/+}
 
     config.active_storage.draw_routes = false
+    config.x.uploads_root = Rails.root.join("uploads")
 
     # Configuration for the application, engines, and railties goes here.
     #

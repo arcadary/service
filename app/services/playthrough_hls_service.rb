@@ -1,10 +1,10 @@
 class PlaythroughHlsService
-  def self.validate(manifest:, reader:)
-    new(manifest: manifest, reader: reader).validate
+  def self.validate(files:, reader:)
+    new(files: files, reader: reader).validate
   end
 
-  def initialize(manifest:, reader:)
-    @manifest = manifest.index_by { |entry| entry.fetch("path") }
+  def initialize(files:, reader:)
+    @manifest = files.index_by(&:name)
     @reader = reader
     @visited = Set.new
     @audio = {}
@@ -41,8 +41,7 @@ class PlaythroughHlsService
       []
     end
     invalid! unless @visited == @manifest.keys.to_set
-    { "root" => "index.m3u8", "duration" => duration.to_s("F"), "video_codec" => "h264",
-      "audio_codec" => @audio.values.first ? "aac" : nil, "chapters_path" => chapters_path, "chapters" => chapters }
+    { "duration" => duration.to_s("F"), "video_codec" => "h264", "audio_codec" => @audio.values.first ? "aac" : nil, "chapters" => chapters }
   end
 
   private
@@ -53,20 +52,18 @@ class PlaythroughHlsService
 
   def read(path:, content_type:)
     entry = @manifest[path]
-    invalid! unless entry && entry.fetch("content_type") == content_type
+    invalid! unless entry&.content_type == content_type
     @visited.add(path)
     @reader.call(path: path)
   end
 
   def resolve(from:, uri:)
-    unless /\A[^\s\\:%?#\x00-\x1f\x7f]+\z/.match?(uri) && uri.split("/", -1).none? { |part| [ "", ".", ".." ].include?(part) }
-      invalid!
-    end
+    invalid! unless UploadFile.valid_name?(uri)
     directory = from.rpartition("/").first
     directory.empty? ? uri : "#{directory}/#{uri}"
   end
 
   def invalid!
-    raise PlaythroughStage::InvalidHls, "invalid_hls"
+    raise Playthrough::InvalidHls, "invalid_hls"
   end
 end

@@ -1,6 +1,9 @@
 require "zlib"
+require_relative "upload_helpers"
 
 module ScreenshotHelpers
+  include UploadHelpers
+
   def png_chunk(type, payload)
     [ payload.bytesize ].pack("N") + type + payload + [ Zlib.crc32(type + payload) ].pack("N")
   end
@@ -11,7 +14,11 @@ module ScreenshotHelpers
     ScreenshotPngService::SIGNATURE + png_chunk("IHDR", header) + chunks.join + png_chunk("IDAT", Zlib.deflate(rows)) + png_chunk("IEND", "")
   end
 
+  def confirmed_screenshot(bytes: png)
+    confirmed_upload(kind: "screenshot", files: { "screenshot.png" => [ bytes, "image/png" ] })
+  end
+
   def upload_screenshot(release:, kind: "gameplay", bytes: png)
-    ScreenshotService.create(release: release, kind: kind, io: StringIO.new(bytes), content_type: "image/png")
+    ScreenshotService.create(upload_id: confirmed_screenshot(bytes: bytes).public_id, release_id: release.public_id, kind: kind)
   end
 end

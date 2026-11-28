@@ -1,8 +1,4 @@
-require_relative "playthrough_helpers"
-
 module PlaythroughHlsHelpers
-  include PlaythroughHelpers
-
   def hls_media(segments: [ [ "segment.ts", "2.5" ] ], target: 3)
     [ "#EXTM3U", "#EXT-X-VERSION:3", "#EXT-X-TARGETDURATION:#{target}", "#EXT-X-PLAYLIST-TYPE:VOD",
       "#EXT-X-MEDIA-SEQUENCE:0", *segments.flat_map { |path, duration| [ "#EXTINF:#{duration},Synthetic café title", path ] },
@@ -24,17 +20,8 @@ module PlaythroughHlsHelpers
       "chapters.vtt" => "\uFEFFWEBVTT\n\n00:00:00.000 --> 00:00:02.500\nFirst chapter\n" }
   end
 
-  def declare_hls(release:, files:, types: {})
-    input = playthrough_declaration(release: release)
-    input["manifest"] = files.map do |path, bytes|
-      { "path" => path, "byte_size" => bytes.bytesize, "sha256" => Digest::SHA256.hexdigest(bytes),
-        "content_type" => types.fetch(path) { { ".m3u8" => "application/vnd.apple.mpegurl", ".ts" => "video/mp2t", ".vtt" => "text/vtt" }.fetch(File.extname(path)) } }
-    end
-    declare_playthrough(input: input)
-  end
-
-  def receive_hls(stage:, files:)
-    stage.objects.each { |object| receive_playthrough(stage: stage, object: object, bytes: files.fetch(object.path)) }
+  def hls_content_type(name)
+    { ".m3u8" => "application/vnd.apple.mpegurl", ".ts" => "video/mp2t", ".vtt" => "text/vtt" }.fetch(File.extname(name))
   end
 
   def hls_transport(audio: true, streams: nil, programs: [ [ 1, 0x100 ] ])

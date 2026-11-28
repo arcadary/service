@@ -30,6 +30,10 @@
 /tmp/storage/*
 !/tmp/storage/.keep
 
+# Ignore uploads waiting on the host's disk for confirmation.
+/uploads/*
+!/uploads/.keep
+
 # Ignore assets.
 /node_modules/
 /app/assets/builds/*

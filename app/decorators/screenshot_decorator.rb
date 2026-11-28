@@ -1,8 +1,8 @@
 class ScreenshotDecorator
-  VERSION = 1
+  VERSION = 2
 
   def self.version
-    [ VERSION, ScreenshotConfigurationService.public_base_url ]
+    [ VERSION, StorageConfigurationService.media_base_url ]
   end
 
   def self.decorate(screenshot)
@@ -15,7 +15,7 @@ class ScreenshotDecorator
 
   def as_json(*)
     @screenshot.slice(:kind, :width, :height, :licence).merge(
-      "url" => "#{ScreenshotConfigurationService.public_base_url}/v1/screenshots/#{@screenshot.sha256}.png"
+      "url" => "#{StorageConfigurationService.media_base_url}/#{ScreenshotService.key(sha256: @screenshot.sha256)}"
     )
   end
 end
