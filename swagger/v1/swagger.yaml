@@ -90,7 +90,7 @@ paths:
       security:
       - private_service_basic: []
       description: |
-        Catalog reads, staged screenshot publication and private HLS intake over MCP 1.11.0. See https://github.com/arcadary/service/blob/main/docs/mcp.md for discoverable input/output schemas, targeting, expiry, retries, pagination and client setup. Every method and subtree requires current shared admin Basic credentials before parsing and returns no-store. No OAuth discovery/login, SSE subscriptions or persistent sessions.
+        Catalog reads, staged screenshot publication, private HLS intake and append-only device compatibility results (record_compatibility_result, get_compatibility) over MCP 1.11.0. See https://github.com/arcadary/service/blob/main/docs/mcp.md for discoverable input/output schemas, targeting, expiry, retries, pagination and client setup. Every method and subtree requires current shared admin Basic credentials before parsing and returns no-store. No OAuth discovery/login, SSE subscriptions or persistent sessions.
 
         Complete HTTP request bodies are bounded at 2 MiB (2097152 bytes) regardless of Content-Length; an oversized request returns HTTP 413. JSON nesting remains limited to 64. begin_playthrough_staging arguments follow the playthrough_declaration schema: stable release public_id, exact source_sha1, capture provenance, retry_key, immutable manifest and explicit authenticated mismatch-verification evidence when needed. Limits apply together: 1 MiB (1048576 bytes) UTF-8 compact argument JSON before normalization, excluding the JSON-RPC envelope; 4096 objects; 8 MiB (8388608 bytes) each; 4 GiB (4294967296 bytes) total. A 4096-object, 4 GiB declaration with short paths fits. Over-limit declarations return MCP tool error stage_too_large without a stage or authorization.
 
@@ -807,15 +807,19 @@ paths:
   "/v1/releases/{sha1}.json":
     get:
       summary: A release and its game, by the SHA-1 of its game file
-      description: The target of an unambiguous lookup redirect. Hex is case-insensitive;
+      description: 'The target of an unambiguous lookup redirect. Hex is case-insensitive;
         release.sha1 is the asked file and release.id identifies the whole release.
         Media are in position order. Startup applies defaults and includes a SHA-256
         revision over effective startup and ordered checksums. C64 slots are 8 and
-        9; other systems have no drives. The service never infers a set from one checksum
+        9; other systems have no drives. release.compatibility gives works, works_with_issues
+        (with a reason), broken or unknown for steam_machine and steam_deck separately:
+        the newest recorded result under the current startup revision, with its core,
+        core version, evidence and the input devices besides the controller it needs
+        (requires_input), or unknown. The service never infers a set from one checksum
         or from file names. Successes are public for 300 seconds with ETag and Last-Modified
         validators; corrections refresh both, while cached responses may remain until
         their existing TTL expires. Current conditional requests return 304. Errors
-        are never stored.
+        are never stored.'
       parameters:
       - name: sha1
         in: path
@@ -1584,6 +1588,96 @@ components:
                 - right
                 - bottom
                 - left
+    DeviceCompatibility:
+      description: The newest result recorded for this device class under the release's
+        current startup.revision, or unknown when there is none. unknown carries only
+        status and never stops a launch. works, works_with_issues (plays, with a caveat
+        such as a performance problem) and broken name the core and version tested,
+        the launch configuration (startup_revision) and test time, with a short public
+        reason sentence (required for works_with_issues, optional for broken, null
+        for works), what the reviewer saw (observed) and what the test did not cover
+        (limits). requires_input lists input devices besides the controller (keyboard,
+        mouse) that the release needs to be playable on this device class, empty when
+        none; it is separate from status, and the launcher decides from connected
+        hardware whether to warn. Compare core and core_version with your own before
+        treating a result as yours.
+      oneOf:
+      - type: object
+        required:
+        - status
+        additionalProperties: false
+        properties:
+          status:
+            type: string
+            enum:
+            - unknown
+      - type: object
+        required:
+        - status
+        - reason
+        - core
+        - core_version
+        - startup_revision
+        - tested_at
+        - observed
+        - limits
+        - requires_input
+        additionalProperties: false
+        properties:
+          status:
+            type: string
+            enum:
+            - works
+            - works_with_issues
+            - broken
+          reason:
+            type: string
+            nullable: true
+            minLength: 1
+            maxLength: 200
+          core:
+            type: string
+            pattern: "^[a-z0-9][a-z0-9_.-]{0,63}$"
+          core_version:
+            type: string
+            minLength: 1
+            maxLength: 100
+          startup_revision:
+            type: string
+            pattern: "^[0-9a-f]{64}$"
+          tested_at:
+            type: string
+            format: date-time
+          observed:
+            type: string
+            minLength: 1
+            maxLength: 500
+          limits:
+            type: string
+            minLength: 1
+            maxLength: 500
+          requires_input:
+            type: array
+            uniqueItems: true
+            items:
+              type: string
+              enum:
+              - keyboard
+              - mouse
+    Compatibility:
+      type: object
+      required:
+      - steam_machine
+      - steam_deck
+      additionalProperties: false
+      description: Playability per device class, recorded by a named reviewer who
+        owns and played the exact file. A Steam Machine result says nothing about
+        Steam Deck. Recording a result refreshes this release's and its media's validators.
+      properties:
+        steam_machine:
+          "$ref": "#/components/schemas/DeviceCompatibility"
+        steam_deck:
+          "$ref": "#/components/schemas/DeviceCompatibility"
     Release:
       type: object
       required:
@@ -1602,6 +1696,7 @@ components:
           - region
           - revision
           - screenshots
+          - compatibility
           additionalProperties: false
           properties:
             id:
@@ -1632,6 +1727,8 @@ components:
               type: array
               items:
                 "$ref": "#/components/schemas/Screenshot"
+            compatibility:
+              "$ref": "#/components/schemas/Compatibility"
         game:
           type: object
           required:

@@ -1,6 +1,6 @@
 # Private catalog MCP
 
-`/mcp` is the single admin's MCP endpoint for catalog reads, staged screenshot publication and private HLS upload intake in the Rails application. It uses the official Ruby `mcp` SDK **1.11.0**, in stateless Streamable HTTP mode with finite JSON responses. Writes publish a screenshot issued by private PNG staging, or begin/renew a release-bound private playthrough stage. It exposes no video publication, general blob publication, catalog metadata writes, compatibility operations, game files, downloads, submissions, shell, SQL or arbitrary URL tools. Catalog coverage is not a playability verdict.
+`/mcp` is the single admin's MCP endpoint for catalog reads, staged screenshot publication, private HLS upload intake and device compatibility results in the Rails application. It uses the official Ruby `mcp` SDK **1.11.0**, in stateless Streamable HTTP mode with finite JSON responses. Writes publish a screenshot issued by private PNG staging, begin/renew a release-bound private playthrough stage, or append a reviewer's compatibility result for one release and device class. It exposes no video publication, general blob publication, catalog metadata writes, game files, downloads, submissions, player run reports, shell, SQL or arbitrary URL tools. Catalog coverage is not a playability verdict; only a recorded compatibility result is.
 
 The generated [HTTP endpoint documentation](../swagger/v1/swagger.yaml) is served at `/api-docs`. MCP `tools/list` publishes the input/output JSON schemas and help for each tool; `server/discover` serves SDK discovery for the modern protocol. All discovery is authenticated. These schemas, rather than the launcher's public JSON shapes, describe the private authoring records.
 
@@ -26,8 +26,9 @@ The explicit Host allow-list is `api.arcadary.org`, plus `localhost`, `127.0.0.1
 | `get_game` | `id` from search | `{type, id, authoring_revision, canonical, authored_fields, source, releases}`. Canonical title and aliases; existing release variant summaries. |
 | `get_release` | Exactly one of `id` or `sha1` | `{type, id, authoring_revision, canonical, authored_fields, source}`. Stable release ID selects one edition; a SHA-1 can identify several candidates. |
 | `get_catalog_history` | No required initial argument | Page of `{id, operation, admin_name, created_at, reason, record_changes}` audit entries, newest ID first. Each change retains its before/after authoring snapshots. |
+| `get_compatibility` | `release_id` (stable release public ID) | `{release_id, startup_revision, current, history}`. `current` is exactly the public `release.compatibility`; `history` is a page of every recorded result, newest first. See [Device compatibility](#device-compatibility). |
 
-Each initial read call accepts `limit`: default **20**, range **1–50**. Systems are `nes`, `snes`, `gb`, `gbc`, `megadrive`, `pcengine`, `atari2600`, `c64`. SHA-1 is 40 hexadecimal characters, case-insensitive. Player filenames are never accepted. These four tools retain read-only, non-destructive, idempotent annotations and their existing read semantics.
+Each initial read call accepts `limit`: default **20**, range **1–50**. Systems are `nes`, `snes`, `gb`, `gbc`, `megadrive`, `pcengine`, `atari2600`, `c64`. SHA-1 is 40 hexadecimal characters, case-insensitive. Player filenames are never accepted. These five tools carry read-only, non-destructive, idempotent annotations.
 
 Every collection uses `{ "items": [...], "next_cursor": "opaque-token-or-null" }`, including aliases, authored-field names, variants, media, controller-profile layout/prompts and each fact's evidence citations, ambiguous candidates, audit changes and collections inside before/after snapshots. No array is silently cut off. Alias ordering is lexical, releases/candidates use stable release ID, and media retain exact position order. Profile and audit snapshot arrays retain the recorded order.
 
@@ -69,6 +70,30 @@ Publication errors use `isError: true` and `structuredContent: {"error":{"code":
 | `storage_unavailable` | Storage failed; retry the same stage before expiry after storage recovers. |
 
 The production recurring scheduler runs cleanup at least hourly, with at most 100 records per pass and queued continuation for excess work. It removes expired consumed receipts and unconsumed blobs; storage deletion failures retain a durable expired record for the next hourly retry without blocking later records. Cleanup never removes a blob transferred to a screenshot. A storage upload failure returns `storage_unavailable` and cleans up its private blob. If deletion also fails, cleanup retains the blob record and queues hourly retries until deletion succeeds. Solid Queue workers and its recurring scheduler must run. Private stage bytes/metadata have no anonymous route or storage redirect and never appear in public JSON. A known PNG hash alone grants no public access; existing published copies of identical pixels keep normal delivery. This is not a trial-media flow or a general blob-publication operation.
+
+## Device compatibility
+
+`record_compatibility_result` appends what a named reviewer saw after playing one exact file of one stable release on one device class. Every argument except `reason` and `requires_input` is required, and no others are accepted:
+
+| Argument | Meaning |
+| --- | --- |
+| `release_id` | Stable release public ID, at most 200 characters. A shared checksum never selects a release. |
+| `sha1` | The exact file played, 40 hexadecimal characters, case-insensitive. It must be a medium of the release (a secondary disk is fine). |
+| `device` | `steam_machine` or `steam_deck`, the device class it was played on. |
+| `status` | `works`, `works_with_issues` (plays, with a caveat such as a performance problem), `broken`, or `unknown` to withdraw an earlier result for that device without claiming the opposite. |
+| `reason` | One short public sentence on why, at most 200 characters, no control characters. Required for `works_with_issues`, optional for `broken`, refused for `works` and `unknown`. |
+| `core`, `core_version` | The libretro core (`^[a-z0-9][a-z0-9_.-]{0,63}$`, for example `mesen`) and its version or build as the launcher reports it, at most 100 characters. |
+| `startup_revision` | The release's current `startup.revision` (from `get_release`, `get_compatibility` or the public release JSON): the launch configuration tested. |
+| `tested_at` | When it was played: ISO 8601 with `Z` or an offset, not in the future. |
+| `observed`, `limits` | What the reviewer saw and what the test did not cover: nonblank, at most 500 characters each, no control characters (one paragraph). Both are public. |
+| `reviewer` | The reviewer's display name, at most 100 characters. Internal: it never appears in public JSON. |
+| `owns_file` | Must be `true`: the reviewer owns that exact file. |
+| `requires_input` | Optional, default `[]`: input devices besides the controller that the release needs to be playable on this device class, from the closed list `keyboard`, `mouse`, each at most once (stored sorted). Separate from `status`: a game can work and still need a keyboard. Public. |
+| `retry_key` | Nonblank, at most 200 characters. An identical retry returns the original result; changed arguments with a used key return `retry_conflict`. |
+
+Success returns `{"data":{"release_id","result","current"}}`: the stored history entry and the release's new `current`. Errors are `invalid_input` (schema, attestation, time, text, or a reason missing for `works_with_issues` or given for `works`/`unknown`), `not_found` (unknown release), `target_mismatch` (the file is not in the release, or `startup_revision` is not current) and `retry_conflict`. The tool is non-read-only, non-destructive and idempotent per retry key.
+
+`requires_input` is the one plain array in these results (a closed set of at most two values, never paginated); the `history` page continues with `cursor` like every other collection. Results are append-only: a retest or correction is a new result, and earlier ones stay in `get_compatibility`'s history with their reviewer and `recorded_at`. Public `release.compatibility` has exactly two keys, `steam_machine` and `steam_deck`. Each is the newest result for that device whose `startup_revision` equals the release's current one, as `{status, reason, core, core_version, startup_revision, tested_at, observed, limits, requires_input}`, or `{"status":"unknown"}` when there is none, when the newest is a withdrawal, or after a media or startup correction changes the revision. One device class never stands in for the other. Recording touches the release, so its release and media ETags and Last-Modified change at once; CDN copies may stay up to their 300 seconds. Unknown never stops a launch.
 
 ## Private playthrough intake
 

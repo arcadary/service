@@ -6,7 +6,7 @@ RSpec.describe "Release", type: :request do
   let(:url) { "/v1/releases/#{release.sha1}.json" }
   let(:expected_payload) do
     {
-      "release" => { "id" => release.public_id, "sha1" => release.sha1, "system" => "c64", "region" => nil, "revision" => nil, "screenshots" => [] },
+      "release" => { "id" => release.public_id, "sha1" => release.sha1, "system" => "c64", "region" => nil, "revision" => nil, "screenshots" => [], "compatibility" => { "steam_machine" => { "status" => "unknown" }, "steam_deck" => { "status" => "unknown" } } },
       "game" => { "id" => "lookup-game", "title" => "A game", "screenshot" => nil },
       "media" => [ { "key" => "main", "position" => 1, "label" => nil, "role" => "game", "sha1" => release.sha1, "size" => nil, "format" => nil } ],
       "startup" => { "schema" => 1, "boot" => "main", "drives" => { "8" => "main" }, "revision" => "20ac504497948774502ee889d50c8b20f4dcb493ee0a66f064e818b91cb8c9ff" }
@@ -16,7 +16,7 @@ RSpec.describe "Release", type: :request do
   path "/v1/releases/{sha1}.json" do
     get "A release and its game, by the SHA-1 of its game file" do
       produces "application/json"
-      description "The target of an unambiguous lookup redirect. Hex is case-insensitive; release.sha1 is the asked file and release.id identifies the whole release. Media are in position order. Startup applies defaults and includes a SHA-256 revision over effective startup and ordered checksums. C64 slots are 8 and 9; other systems have no drives. The service never infers a set from one checksum or from file names. Successes are public for 300 seconds with ETag and Last-Modified validators; corrections refresh both, while cached responses may remain until their existing TTL expires. Current conditional requests return 304. Errors are never stored."
+      description "The target of an unambiguous lookup redirect. Hex is case-insensitive; release.sha1 is the asked file and release.id identifies the whole release. Media are in position order. Startup applies defaults and includes a SHA-256 revision over effective startup and ordered checksums. C64 slots are 8 and 9; other systems have no drives. release.compatibility gives works, works_with_issues (with a reason), broken or unknown for steam_machine and steam_deck separately: the newest recorded result under the current startup revision, with its core, core version, evidence and the input devices besides the controller it needs (requires_input), or unknown. The service never infers a set from one checksum or from file names. Successes are public for 300 seconds with ETag and Last-Modified validators; corrections refresh both, while cached responses may remain until their existing TTL expires. Current conditional requests return 304. Errors are never stored."
       parameter name: :sha1, in: :path, required: true,
         schema: { type: :string, pattern: "^[0-9a-fA-F]{40}$", minLength: 40, maxLength: 40 }
 
@@ -31,6 +31,16 @@ RSpec.describe "Release", type: :request do
         context "upper-case hex" do
           let(:sha1) { release.sha1.upcase }
           run_test! { expect(response.parsed_body).to eq(expected_payload) }
+        end
+
+        context "with a Steam Machine result only" do
+          before { create(:compatibility_result, release: release, status: "broken", reason: "Hangs after loading.", core: "vice", core_version: "3.9", observed: "Hangs after loading.", limits: "Only the first disk tried.") }
+          run_test! do
+            expect(response.parsed_body.dig("release", "compatibility")).to eq(
+              "steam_machine" => { "status" => "broken", "reason" => "Hangs after loading.", "core" => "vice", "core_version" => "3.9", "startup_revision" => expected_payload.dig("startup", "revision"),
+                "tested_at" => "2026-11-20T18:00:00Z", "observed" => "Hangs after loading.", "limits" => "Only the first disk tried.", "requires_input" => [] },
+              "steam_deck" => { "status" => "unknown" })
+          end
         end
 
         context "with an authored original controller profile" do

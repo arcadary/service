@@ -72,17 +72,40 @@ RSpec.configure do |config|
               }
             }
           },
+          DeviceCompatibility: {
+            description: 'The newest result recorded for this device class under the release\'s current startup.revision, or unknown when there is none. unknown carries only status and never stops a launch. works, works_with_issues (plays, with a caveat such as a performance problem) and broken name the core and version tested, the launch configuration (startup_revision) and test time, with a short public reason sentence (required for works_with_issues, optional for broken, null for works), what the reviewer saw (observed) and what the test did not cover (limits). requires_input lists input devices besides the controller (keyboard, mouse) that the release needs to be playable on this device class, empty when none; it is separate from status, and the launcher decides from connected hardware whether to warn. Compare core and core_version with your own before treating a result as yours.',
+            oneOf: [
+              { type: :object, required: %w[status], additionalProperties: false, properties: { status: { type: :string, enum: %w[unknown] } } },
+              {
+                type: :object, required: %w[status reason core core_version startup_revision tested_at observed limits requires_input], additionalProperties: false,
+                properties: {
+                  status: { type: :string, enum: %w[works works_with_issues broken] }, reason: { type: :string, nullable: true, minLength: 1, maxLength: 200 },
+                  core: { type: :string, pattern: '^[a-z0-9][a-z0-9_.-]{0,63}$' },
+                  core_version: { type: :string, minLength: 1, maxLength: 100 }, startup_revision: { type: :string, pattern: '^[0-9a-f]{64}$' },
+                  tested_at: { type: :string, format: 'date-time' }, observed: { type: :string, minLength: 1, maxLength: 500 },
+                  limits: { type: :string, minLength: 1, maxLength: 500 },
+                  requires_input: { type: :array, uniqueItems: true, items: { type: :string, enum: %w[keyboard mouse] } }
+                }
+              }
+            ]
+          },
+          Compatibility: {
+            type: :object, required: %w[steam_machine steam_deck], additionalProperties: false,
+            description: 'Playability per device class, recorded by a named reviewer who owns and played the exact file. A Steam Machine result says nothing about Steam Deck. Recording a result refreshes this release\'s and its media\'s validators.',
+            properties: { steam_machine: { "$ref" => "#/components/schemas/DeviceCompatibility" }, steam_deck: { "$ref" => "#/components/schemas/DeviceCompatibility" } }
+          },
           Release: {
             type: :object, required: %w[release game media startup], additionalProperties: false,
             properties: {
               release: {
-                type: :object, required: %w[id sha1 system region revision screenshots], additionalProperties: false,
+                type: :object, required: %w[id sha1 system region revision screenshots compatibility], additionalProperties: false,
                 properties: {
                   id: { type: :string }, sha1: { type: :string, pattern: "^[0-9a-f]{40}$" },
                   system: { type: :string, enum: %w[nes snes gb gbc megadrive pcengine atari2600 c64] },
                   region: { type: :string, nullable: true }, revision: { type: :string, nullable: true },
                   controller_profile: { "$ref" => "#/components/schemas/ControllerProfile" },
-                  screenshots: { type: :array, items: { "$ref" => "#/components/schemas/Screenshot" } }
+                  screenshots: { type: :array, items: { "$ref" => "#/components/schemas/Screenshot" } },
+                  compatibility: { "$ref" => "#/components/schemas/Compatibility" }
                 }
               },
               game: {

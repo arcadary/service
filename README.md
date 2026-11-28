@@ -1,6 +1,6 @@
 # Arcadary service
 
-The remote service for [Arcadary](https://github.com/arcadary/arcadary): a Rails 8.1 application for the project's homepage and launcher JSON API. `GET /v1/lookup/{sha1}.json` identifies a game file and redirects to its release and game, or to all containing releases for a shared file. The offline catalog importer covers eight pinned No-Intro lists (29,336 distinct checksums); two optional homebrew seeds work without those lists. Original controller facts support exact SNES releases; compatibility and page features are still to be built. Nothing is deployed.
+The remote service for [Arcadary](https://github.com/arcadary/arcadary): a Rails 8.1 application for the project's homepage and launcher JSON API. `GET /v1/lookup/{sha1}.json` identifies a game file and redirects to its release and game, or to all containing releases for a shared file. The offline catalog importer covers eight pinned No-Intro lists (29,336 distinct checksums); two optional homebrew seeds work without those lists. Original controller facts support exact SNES releases; per-device compatibility results are recorded by the admin and returned with each release; page features are still to be built. Nothing is deployed.
 
 ## Setup
 
@@ -191,6 +191,28 @@ Convert that scope using the same `to_h` expression, and set `operation: "correc
 
 Successful apply prints the same committed `{audit_id, records}` result as direct authoring, with `preview` for previewed operations. Failures print JSON containing `failed` and `error` to stderr and exit nonzero. Invalid envelopes, stale revisions/previews, domain validation and persistence failures leave no partial writes or success audit. Each envelope is one atomic mutation; a sequence of files has no enclosing transaction. Retrying an exactly committed envelope returns its saved result even after revisions advance; changing any request content while reusing its key conflicts. Reference imports instead commit one whole system at a time and retry by re-running source inputs, without authoring retry keys or correction audits. Both retain their independent failure boundaries.
 
+## Device compatibility
+
+A known checksum says which release a file is, not whether it plays. After playing a file, the admin records what they saw through the [`record_compatibility_result`](docs/mcp.md#device-compatibility) MCP tool: `works`, `works_with_issues` (plays, with a caveat such as a performance problem, and a required short `reason` sentence), `broken` (optional `reason`), or `unknown` to withdraw an earlier result. Each result names the exact release and file (which the reviewer owns), the device class (`steam_machine` or `steam_deck`), the core and its version, the launch configuration (the release's current `startup.revision`), the test time, what the reviewer saw and the test's limits, the input devices besides the controller that the release needs on that device class (`requires_input`: `keyboard`, `mouse`, or none), and the reviewer's name. Results are append-only in `compatibility_results`; corrections and retests add to that history. `get_compatibility` reads the history back. There are no player run reports and no device upload path.
+
+Every release response carries `release.compatibility`:
+
+```json
+"compatibility": {
+  "steam_machine": {
+    "status": "works_with_issues", "reason": "Slows down when many enemies are on screen.",
+    "core": "sameboy", "core_version": "1.0.2",
+    "startup_revision": "94913af33af735c08211b2d614136735f0f855ec9173709238d451b97cbfed95",
+    "tested_at": "2026-11-20T18:00:00Z",
+    "observed": "Played the first level with sound and a battery save.", "limits": "Later levels not reached.",
+    "requires_input": ["keyboard"]
+  },
+  "steam_deck": { "status": "unknown" }
+}
+```
+
+Each device class shows the newest result whose `startup_revision` is still the release's current one, or `{"status":"unknown"}`. A Steam Machine result never fills in for Steam Deck, and a media or startup correction turns both back to unknown until someone plays the file again. The service cannot see a launcher's core version, so it returns the core and version tested; a launcher compares them with its own. Unknown must never stop a player launching a file. `requires_input` is separate from `status`: the launcher compares it with the hardware connected and decides itself whether to warn. The reviewer's name stays internal. Recording a result refreshes the release's and its media's ETag and Last-Modified; reads stay anonymous and cacheable for 300 seconds.
+
 ## Private playthrough staging
 
 The [owner decision](https://github.com/arcadary/service/issues/45#issuecomment-7230746970) permits authenticated private HLS staging and delivery, including the private Donkey Kong trial. Commercial footage must stay out of public distribution and anonymous responses. Catalog and screenshot licences grant no video rights; all video is excluded from the catalog licence. Staging accepts synthetic or rights-cleared rendered package objects, never game files. It exposes no staged bytes, playback, storage redirects or signed storage URLs.
@@ -368,7 +390,7 @@ Before public launch the deployment owner must verify Cloudflare CDN purging, ac
 
 ## Private service authentication
 
-`PrivateServiceAuthentication` is the shared single-admin HTTP Basic guard. The private catalog MCP endpoint at `/mcp`, screenshot ingest at `/v1/screenshot-stages`, and their entire subtrees use it; review/download adoption belongs to #27. It does not create accounts or replace the capture device's bearer token. The four bounded read tools, screenshot publication tool, protocol versions, Codex configured-header example and required hosted checks are documented in [Private catalog MCP](docs/mcp.md).
+`PrivateServiceAuthentication` is the shared single-admin HTTP Basic guard. The private catalog MCP endpoint at `/mcp`, screenshot ingest at `/v1/screenshot-stages`, and their entire subtrees use it; review/download adoption belongs to #27. It does not create accounts or replace the capture device's bearer token. The bounded read tools, screenshot publication tool, compatibility recording tool, protocol versions, Codex configured-header example and required hosted checks are documented in [Private catalog MCP](docs/mcp.md).
 
 The guard reads `VALIDATION_REVIEWER_USERNAME` and `VALIDATION_REVIEWER_PASSWORD` from the Rails process environment on every protected request. Supply both through fnox, with no defaults: `fnox set VALIDATION_REVIEWER_USERNAME` and `fnox set VALIDATION_REVIEWER_PASSWORD` prompt with hidden input, and Kamal forwards both to the web container (`.kamal/secrets`, `config/deploy.yml`). Placeholder configuration is `VALIDATION_REVIEWER_USERNAME=<admin-username>` and `VALIDATION_REVIEWER_PASSWORD=<long-random-password>`; use a username without a colon. Either missing or blank returns `503 {"error":"authentication_unavailable"}` before controller work. Missing, malformed or invalid Basic credentials return `401 {"error":"unauthorized"}` with a Basic challenge. Both credentials are compared as fixed-length SHA-256 digests in constant time. There is no remembered successful authentication or session.
 

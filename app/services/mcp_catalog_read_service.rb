@@ -30,10 +30,11 @@ class McpCatalogReadService
       when "get_game" then game
       when "get_release" then release
       when "get_catalog_history" then history
+      when "get_compatibility" then compatibility
       else raise InvalidInput
       end
     end
-  rescue ActiveRecord::RecordNotFound
+  rescue ActiveRecord::RecordNotFound, Release::ReleaseNotFound
     raise NotFound
   end
 
@@ -93,6 +94,19 @@ class McpCatalogReadService
       relation_page(records: entries, kind: "history", key: "id") { |record| record_tree(record: record, kind: "audit") }
     end
 
+    def compatibility
+      release = CompatibilityService.find_release(release_id: identifier!("release_id"))
+      { "release_id" => release.public_id, "startup_revision" => ReleaseStartupService.revision(release: release),
+        "current" => CompatibilityResultDecorator.current(CompatibilityService.current(release: release)),
+        "history" => compatibility_history(release: release) }
+    end
+
+    def compatibility_history(release:, before: nil)
+      results = release.compatibility_results.reorder(id: :desc)
+      results = results.where("id < ?", before) if before
+      relation_page(records: results, kind: "compatibility", key: "id", owner: release.public_id) { |record| CompatibilityResultDecorator.decorate(record).history_json }
+    end
+
     def relation_page(records:, kind:, key:, owner: nil)
       records = records.limit(@limit + 1).to_a
       more = records.size > @limit
@@ -140,6 +154,7 @@ class McpCatalogReadService
       case position.fetch("kind")
       when "search" then search(after: position.fetch("after"))
       when "history" then history(before: position.fetch("after"))
+      when "compatibility" then compatibility_history(release: Release.find_by!(public_id: position.fetch("owner")), before: position.fetch("after"))
       when "variants" then variants(game: Game.find_by!(public_id: position.fetch("owner")), after: position.fetch("after"))
       when "candidates"
         sha1 = @arguments.fetch("sha1").downcase
