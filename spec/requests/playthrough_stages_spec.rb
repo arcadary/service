@@ -14,6 +14,9 @@ RSpec.describe "Private playthrough staging", type: :request do
   let(:stage) { declare_playthrough }
   let(:staging_id) { stage.public_id }
   let(:stage_object_id) { stage.objects.sole.public_id }
+  let(:capability) { PlaythroughUploadAuthorizationService.issue(stage: stage).fetch(:capability) }
+  let(:"X-Arcadary-Upload-Capability") { capability }
+  let(:upload_headers) { headers.merge("X-Arcadary-Upload-Capability" => capability, "CONTENT_TYPE" => "video/mp2t") }
   let(:segment) { "synthetic segment" }
 
   before do
@@ -23,70 +26,13 @@ RSpec.describe "Private playthrough staging", type: :request do
   end
 
   stage_schema = {
-    type: :object, additionalProperties: false, required: %w[staging_id package_sha256 declaration state objects], properties: {
-      staging_id: { type: :string }, package_sha256: { type: :string, pattern: "^[0-9a-f]{64}$" },
+    type: :object, additionalProperties: false, required: %w[staging_id release_id package_sha256 declaration state objects], properties: {
+      staging_id: { type: :string }, release_id: { type: :string }, package_sha256: { type: :string, pattern: "^[0-9a-f]{64}$" },
       declaration: { "$ref" => "#/components/schemas/playthrough_declaration" }, state: { type: :string, enum: %w[incomplete received] },
       objects: { type: :array, items: { type: :object, additionalProperties: false, required: %w[object_id path received],
         properties: { object_id: { type: :string }, path: { type: :string }, received: { type: :boolean } } } }
     }
   }
-
-  path "/v1/playthrough-stages.json" do
-    post "Declare a private release-bound playthrough package" do
-      consumes "application/json"
-      produces "application/json"
-      security [ private_service_basic: [] ]
-      parameter name: :payload, in: :body, required: true, schema: { "$ref" => "#/components/schemas/playthrough_declaration" }
-      description <<~TEXT
-        Authenticated by shared admin Basic before parsing, body reads or logging. A strict single-target declaration binds a stable release public_id, capture source SHA-1, provenance and immutable manifest. Unknown fields and duplicate JSON keys are rejected. SHA-1s and SHA-256s are lowercase. Capture and verification times require ISO 8601 with an explicit timezone and normalize to UTC microseconds.
-
-        The source must belong to the named release, or carry a single offline successful verification attestation whose payload belongs to that release. The verifier must equal the authenticated admin username. Evidence must name exactly the source and payload SHA-1s, with no other checksum proposals. trailing_padding requires a positive removed_bytes, including 127 for the trial when verified; verified_equivalence accepts other byte-verified relationships without removed_bytes. No game bytes are accepted, no title matching or launcher-checksum inference occurs.
-
-        Each entry has a unique package-relative path, positive byte_size, lowercase sha256 and exact MIME content_type without parameters. Paths exclude absolute paths, URLs, traversal/dot/empty components, whitespace, backslashes, colon, percent, query/fragment and control characters. Package identity is SHA-256 of UTF-8 compact JSON of [path, byte_size, sha256, content_type] arrays sorted bytewise by path. Reordering manifest entries or JSON keys and equivalent timestamp offsets replay the original stage; changing the normalized declaration with the same retry_key conflicts. Successful replays return 201 with current progress.
-
-        Ceilings: 1 MiB actual declaration bytes, 4096 objects, 8 MiB per object, 4 GiB summed declared bytes. Actual reads are bounded independently of Content-Length. All responses are no-store and log-suppressed across the complete subtree. No download, playback, redirect, direct-upload capability or public storage route exists. received means all objects stored, never HLS-validated or published; HLS validation/publication/cleanup are #56 and private delivery/trial checks are #57. Catalog and screenshot licences grant no video rights; commercial footage remains private and absent from anonymous responses.
-      TEXT
-
-      response "201", "declaration persisted or identical replay" do
-        schema stage_schema
-        header "Cache-Control", schema: { type: :string, enum: [ "no-store" ] }
-        run_test! do
-          expect(response.parsed_body.fetch("state")).to eq("incomplete")
-          expect(response.headers["Cache-Control"]).to eq("no-store")
-          expect(response.headers["Set-Cookie"]).to be_nil
-        end
-      end
-
-      {
-        "400" => [ "invalid declaration or interrupted read", %w[invalid_declaration interrupted_transfer] ],
-        "401" => [ "authentication failed", %w[unauthorized] ],
-        "404" => [ "release not found", %w[not_found] ],
-        "409" => [ "target mismatch or changed retry declaration", %w[target_mismatch stage_conflict] ],
-        "413" => [ "declaration or package exceeds a ceiling", %w[stage_too_large] ],
-        "503" => [ "authentication not configured", %w[authentication_unavailable] ]
-      }.each do |status, (label, codes)|
-        response status, label do
-          schema type: :object, additionalProperties: false, required: %w[error], properties: { error: { type: :string, enum: codes } }
-          header "Cache-Control", schema: { type: :string, enum: [ "no-store" ] }
-          case status
-          when "400"
-            let(:payload) { declaration.except("capture") }
-          when "401"
-            let(:Authorization) { "Bearer wrong" }
-          when "404"
-            let(:payload) { declaration.merge("release_id" => "unknown") }
-          when "409"
-            let(:payload) { declaration.merge("source_sha1" => "f" * 40) }
-          when "413"
-            let(:payload) { declaration.merge("capture" => declaration["capture"].merge("tool" => "x" * 1.megabyte)) }
-          when "503"
-            before { allow(ENV).to receive(:[]).with("VALIDATION_REVIEWER_PASSWORD").and_return(nil) }
-          end
-          run_test! { expect(response.headers["Cache-Control"]).to eq("no-store") }
-        end
-      end
-    end
-  end
 
   path "/v1/playthrough-stages/{staging_id}.json" do
     get "Read private declaration and durable object progress" do
@@ -126,8 +72,9 @@ RSpec.describe "Private playthrough staging", type: :request do
       security [ private_service_basic: [] ]
       parameter name: :staging_id, in: :path, required: true, schema: { type: :string }
       parameter name: :stage_object_id, in: :path, required: true, schema: { type: :string }
+      parameter name: :"X-Arcadary-Upload-Capability", in: :header, required: true, schema: { type: :string }
       parameter name: :segment, in: :body, required: true, schema: { type: :string, format: :binary }
-      description "Raw bytes with the exact declared Content-Type; any valid declared MIME type without parameters is accepted. Exact size and SHA-256 must match, including on successful retries. Reads are bounded at 8 MiB regardless of Content-Length. Success returns an immutable object_id/received_at receipt; identical retries return exactly that receipt, even after other objects finish. GET stage metadata for aggregate progress. Fresh private storage keys isolate attempts and stages; completion follows storage success. Interrupted reads and storage failure leave the object incomplete and retryable after restart. No HLS validation or playback is performed. The deployment owner must verify the zone upload setting, which can be lower than Cloudflare's documented 100 MB minimum plan limit: https://developers.cloudflare.com/cache/concepts/default-cache-behavior/#upload-limits (#57)."
+      description "Requires current shared Basic credentials plus X-Arcadary-Upload-Capability from MCP begin_playthrough_staging. Capabilities bind the exact release, stage, immutable manifest and declared objects, never travel in URLs, and expire exactly 900 seconds after issuance (invalid at or after expires_at). Identical begin replay renews without extending older capabilities; HTTP metadata reads never renew. Missing, expired or mismatched authorization returns 403 upload_not_authorized before application body or storage reads, including accepted-object retries. Raw bytes with the exact declared Content-Type; any valid declared MIME type without parameters is accepted. Exact size and SHA-256 must match, including on successful retries. Reads are bounded at 8 MiB regardless of Content-Length. Success returns an immutable object_id/received_at receipt; identical retries return exactly that receipt, even after other objects finish. GET stage metadata for aggregate progress. Fresh private storage keys isolate attempts and stages; completion follows storage success. Interrupted reads and storage failure leave the object incomplete and retryable after restart. No HLS validation or playback is performed. The deployment owner must verify the zone upload setting, which can be lower than Cloudflare's documented 100 MB minimum plan limit: https://developers.cloudflare.com/cache/concepts/default-cache-behavior/#upload-limits (#57)."
 
       response "200", "verified object received, or identical successful retry" do
         schema type: :object, additionalProperties: false, required: %w[object_id received_at], properties: {
@@ -142,7 +89,7 @@ RSpec.describe "Private playthrough staging", type: :request do
       {
         "400" => [ "interrupted read", %w[interrupted_transfer] ],
         "401" => [ "authentication failed", %w[unauthorized] ],
-        "404" => [ "stage or declared object not found", %w[not_found] ],
+        "403" => [ "missing, expired or mismatched upload capability", %w[upload_not_authorized] ],
         "409" => [ "bytes, size or content type mismatch", %w[stage_conflict] ],
         "413" => [ "actual bytes exceed 8 MiB", %w[stage_too_large] ],
         "503" => [ "storage or authentication unavailable", %w[storage_unavailable authentication_unavailable] ]
@@ -155,8 +102,8 @@ RSpec.describe "Private playthrough staging", type: :request do
             before { allow(PlaythroughStageInputService).to receive(:read).and_call_original; allow(PlaythroughStageInputService).to receive(:read).with(io: anything, limit: 8.megabytes).and_raise(PlaythroughStage::InterruptedTransfer) }
           when "401"
             let(:Authorization) { "" }
-          when "404"
-            let(:stage_object_id) { "unknown" }
+          when "403"
+            let(:"X-Arcadary-Upload-Capability") { "" }
           when "409"
             let(:segment) { "changed bytes" }
           when "413"
@@ -171,21 +118,22 @@ RSpec.describe "Private playthrough staging", type: :request do
   end
 
   it "authenticates before bounded reads and silences success, parsing, integrity, storage and routing errors" do
+    receipt = PlaythroughStageDecorator.decorate(stage).summary.deep_stringify_keys
+    capability
     output = StringIO.new
     capture = ActiveSupport::Logger.new(output)
     capture.level = Logger::DEBUG
     Rails.logger.broadcast_to(capture)
     begin
       post "/v1/playthrough-stages.json", params: JSON.generate(declaration), headers: headers
-      expect(response).to have_http_status(:created)
-      receipt = response.parsed_body
+      expect(response).to have_http_status(:not_found)
       upload_path = "/v1/playthrough-stages/#{receipt.fetch('staging_id')}/objects/#{receipt.fetch('objects').sole.fetch('object_id')}.json"
       post "/v1/playthrough-stages.json", params: "private broken JSON", headers: headers
-      expect(response).to have_http_status(:bad_request)
-      put upload_path, params: "private wrong bytes", headers: headers.merge("CONTENT_TYPE" => "video/mp2t")
+      expect(response).to have_http_status(:not_found)
+      put upload_path, params: "private wrong bytes", headers: upload_headers
       expect(response).to have_http_status(:conflict)
       allow(ActiveStorage::Blob.service).to receive(:upload).and_raise(IOError, "private storage failure")
-      put upload_path, params: segment, headers: headers.merge("CONTENT_TYPE" => "video/mp2t")
+      put upload_path, params: segment, headers: upload_headers
       expect(response).to have_http_status(:service_unavailable)
       get "/v1//playthrough-stages//unknown", headers: headers
       expect(response).to have_http_status(:not_found)
@@ -225,16 +173,12 @@ RSpec.describe "Private playthrough staging", type: :request do
     expect(response).to have_http_status(:not_found)
   end
 
-  it "bounds declaration and object reads with missing or dishonest Content-Length" do
-    post "/v1/playthrough-stages.json", params: "x" * (1.megabyte + 1), headers: headers.merge("CONTENT_LENGTH" => "1")
+  it "bounds object reads with missing or dishonest Content-Length" do
+    put "/v1/playthrough-stages/#{stage.public_id}/objects/#{stage.objects.sole.public_id}.json",
+      params: "x" * (8.megabytes + 1), headers: upload_headers.merge("CONTENT_LENGTH" => "1")
     expect(response).to have_http_status(:content_too_large)
-    post "/v1/playthrough-stages.json", params: JSON.generate(declaration), headers: headers.merge("CONTENT_LENGTH" => "")
-    expect(response).to have_http_status(:created)
-    put "/v1/playthrough-stages/#{PlaythroughStage.sole.public_id}/objects/#{PlaythroughStageObject.sole.public_id}.json",
-      params: "x" * (8.megabytes + 1), headers: headers.merge("CONTENT_TYPE" => "video/mp2t", "CONTENT_LENGTH" => "1")
-    expect(response).to have_http_status(:content_too_large)
-    put "/v1/playthrough-stages/#{PlaythroughStage.sole.public_id}/objects/#{PlaythroughStageObject.sole.public_id}.json",
-      params: segment, headers: headers.merge("CONTENT_TYPE" => "video/mp2t", "CONTENT_LENGTH" => "")
+    put "/v1/playthrough-stages/#{stage.public_id}/objects/#{stage.objects.sole.public_id}.json",
+      params: segment, headers: upload_headers.merge("CONTENT_LENGTH" => "")
     expect(response).to have_http_status(:ok)
     expect(response.parsed_body.fetch("received_at")).to be_present
   end
@@ -244,11 +188,11 @@ RSpec.describe "Private playthrough staging", type: :request do
     staged = declare_playthrough
     first, second = staged.objects.to_a
     first_path = "/v1/playthrough-stages/#{staged.public_id}/objects/#{first.public_id}.json"
-    put first_path, params: segment, headers: headers.merge("CONTENT_TYPE" => "video/mp2t")
+    put first_path, params: segment, headers: upload_headers
     original = response.body
     put "/v1/playthrough-stages/#{staged.public_id}/objects/#{second.public_id}.json", params: segment,
-      headers: headers.merge("CONTENT_TYPE" => "video/mp2t")
-    put first_path, params: segment, headers: headers.merge("CONTENT_TYPE" => "video/mp2t")
+      headers: upload_headers
+    put first_path, params: segment, headers: upload_headers
     expect(response.body).to eq(original)
     get "/v1/playthrough-stages/#{staged.public_id}.json", headers: headers
     expect(response.parsed_body.fetch("state")).to eq("received")

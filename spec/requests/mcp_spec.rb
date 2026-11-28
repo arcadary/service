@@ -27,7 +27,7 @@ RSpec.describe "Authenticated catalog MCP", type: :request do
       consumes "application/json"
       produces "application/json"
       security [ private_service_basic: [] ]
-      description "Catalog read tools and staged screenshot publication over MCP 1.11.0; see https://github.com/arcadary/service/blob/main/docs/mcp.md for schemas, targeting, expiry, retries, pagination, protocol versions, client setup and deployment exclusions. PNG bytes use the separate authenticated HTTP staging route. Every method and subtree authenticates before parsing and sends no-store. No OAuth discovery or login. POST bodies are limited to 65536 bytes and JSON nesting to 64; finite JSON replies only, without SSE subscriptions or persistent sessions."
+      description "Catalog read tools and staged screenshot publication plus private HLS intake over MCP 1.11.0; see https://github.com/arcadary/service/blob/main/docs/mcp.md for schemas, targeting, expiry, retries, pagination, protocol versions, client setup and deployment exclusions. PNG bytes use the separate authenticated HTTP staging route. Every method and subtree authenticates before parsing and sends no-store. No OAuth discovery or login. POST bodies are limited to 2097152 bytes and JSON nesting to 64; finite JSON replies only, without SSE subscriptions or persistent sessions."
       parameter name: :Authorization, in: :header, required: true, schema: { type: :string }
       parameter name: :request_body, in: :body, schema: {
         type: :object, additionalProperties: false, required: %w[jsonrpc id method],
@@ -75,7 +75,7 @@ RSpec.describe "Authenticated catalog MCP", type: :request do
   end
 
   it "requires the current configured pair on every reconnect" do
-    expect(rpc(method: "tools/list").dig("result", "tools").size).to eq(5)
+    expect(rpc(method: "tools/list").dig("result", "tools").size).to eq(6)
     allow(ENV).to receive(:[]).with("VALIDATION_REVIEWER_PASSWORD").and_return("rotated-synthetic")
     rpc(method: "tools/list")
     expect(response).to have_http_status(:unauthorized)
@@ -83,15 +83,15 @@ RSpec.describe "Authenticated catalog MCP", type: :request do
     expect(response).to have_http_status(:ok)
   end
 
-  it "advertises four read tools and screenshot publication with schemas and preserves SDK version negotiation" do
+  it "advertises read tools, screenshot publication and playthrough intake with schemas and preserves SDK version negotiation" do
     discovered = rpc(method: "tools/list").dig("result", "tools")
-    expect(discovered.map { |entry| entry.fetch("name") }).to eq(%w[search_games get_game get_release get_catalog_history publish_screenshot])
+    expect(discovered.map { |entry| entry.fetch("name") }).to eq(%w[search_games get_game get_release get_catalog_history publish_screenshot begin_playthrough_staging])
     discovered.first(4).each do |entry|
       expect(entry.dig("annotations", "readOnlyHint")).to be(true)
       expect(entry.fetch("inputSchema")).to include("additionalProperties" => false)
       expect(entry.fetch("outputSchema").dig("$defs", "page", "properties", "items", "maxItems")).to eq(50)
     end
-    publication = discovered.last
+    publication = discovered.find { |entry| entry.fetch("name") == "publish_screenshot" }
     expect(publication.fetch("annotations")).to include("readOnlyHint" => false, "destructiveHint" => true, "idempotentHint" => false)
     expect(publication.fetch("inputSchema")).to include("additionalProperties" => false, "required" => %w[staging_id release_id source_sha1 kind])
     expect(publication.fetch("outputSchema").dig("properties", "error", "properties", "code", "enum")).to include("staged_image_consumed", "storage_unavailable")
@@ -121,7 +121,10 @@ RSpec.describe "Authenticated catalog MCP", type: :request do
 
   it "bounds request bytes and nesting before catalog calls" do
     expect(McpCatalogReadService).not_to receive(:call)
-    post "/mcp", params: "x" * (McpTransportService::MAX_REQUEST_BYTES + 1), headers: headers
+    request = { jsonrpc: "2.0", id: 1, method: "ping" }.to_json
+    post "/mcp", params: request.ljust(2_097_152), headers: headers.merge("CONTENT_LENGTH" => "")
+    expect(response).to have_http_status(:ok)
+    post "/mcp", params: request.ljust(2_097_153), headers: headers.merge("CONTENT_LENGTH" => "1")
     expect(response).to have_http_status(:content_too_large)
     expect(response.headers["Cache-Control"]).to eq("no-store")
     post "/mcp", params: "[" * 65 + "0" + "]" * 65, headers: headers
@@ -138,7 +141,7 @@ RSpec.describe "Authenticated catalog MCP", type: :request do
     expect(response).to have_http_status(:forbidden)
     rpc(method: "tools/list", extra_headers: { "Host" => "api.arcadary.org", "Origin" => "https://api.arcadary.org" })
     expect(response).to have_http_status(:ok)
-    expect(rpc(method: "tools/list").dig("result", "tools").size).to eq(5)
+    expect(rpc(method: "tools/list").dig("result", "tools").size).to eq(6)
   end
 
   it "keeps unsupported methods, missing subpaths and application failures private" do

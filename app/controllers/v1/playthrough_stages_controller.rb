@@ -8,13 +8,8 @@ module V1
     rescue_from PlaythroughStage::InterruptedTransfer, with: -> { render_error("interrupted_transfer", status: :bad_request) }
     rescue_from PlaythroughStage::StorageUnavailable, with: -> { render_error("storage_unavailable", status: :service_unavailable) }
 
-    before_action :create_stage, only: :create
     before_action :set_stage, only: :show
     before_action :receive_object, only: :update
-
-    def create
-      render json: PlaythroughStageDecorator.decorate(@stage), status: :created
-    end
 
     def show
       render json: PlaythroughStageDecorator.decorate(@stage)
@@ -25,11 +20,6 @@ module V1
     end
 
     private
-      def create_stage
-        @stage = PlaythroughStagingService.create(io: request.body, content_type: request.media_type,
-          verifier: ENV["VALIDATION_REVIEWER_USERNAME"])
-      end
-
       def set_stage
         @stage = PlaythroughStagingService.find_by(staging_id: request.path_parameters[:staging_id].to_s)
       end
