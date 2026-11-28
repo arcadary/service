@@ -1,5 +1,5 @@
 class ReleaseDecorator
-  VERSION = 5
+  VERSION = 6
 
   def self.decorate(release, sha1: release.sha1)
     new(release, sha1: sha1)
@@ -18,7 +18,7 @@ class ReleaseDecorator
   def as_json(*)
     {
       release: @release.slice(:system, :region, :revision).merge("id" => @release.public_id, "sha1" => @sha1,
-        "screenshots" => @release.screenshots.sort_by { |screenshot| Screenshot::KINDS.index(screenshot.kind) }.map { |screenshot| ScreenshotDecorator.decorate(screenshot).as_json })
+        "screenshots" => @release.screenshots.map { |screenshot| ScreenshotDecorator.decorate(screenshot).as_json })
         .merge(@release.controller_profile ? { "controller_profile" => ReleaseControllerProfileDecorator.decorate(@release.controller_profile).as_json } : {})
         .merge("compatibility" => @compatibility),
       game: GameDecorator.decorate(@release.game).as_json,

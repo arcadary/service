@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_28_170000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_28_180000) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.string "name", null: false
     t.string "record_type", null: false
@@ -182,8 +182,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_28_170000) do
     t.string "licence", default: "", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "public_id", null: false
+    t.integer "position", null: false
     t.index ["blob_id"], name: "index_screenshots_on_blob_id"
-    t.index ["release_id", "kind"], name: "index_screenshots_on_release_id_and_kind", unique: true
+    t.index ["public_id"], name: "index_screenshots_on_public_id", unique: true
+    t.index ["release_id", "position"], name: "index_screenshots_on_release_id_and_position", unique: true
     t.index ["release_id"], name: "index_screenshots_on_release_id"
     t.index ["sha256"], name: "index_screenshots_on_sha256"
   end

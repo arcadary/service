@@ -43,6 +43,17 @@ RSpec.describe "Release", type: :request do
           end
         end
 
+        context "with a title and gameplay screenshots" do
+          let!(:later) { create(:screenshot, release: release, position: 2) }
+          let!(:title) { create(:screenshot, release: release, kind: "title", position: 0) }
+          let!(:first) { create(:screenshot, release: release, position: 1) }
+          run_test! do
+            expected = [ title, first, later ].map { |screenshot| ScreenshotDecorator.decorate(screenshot).as_json }
+            expect(response.parsed_body.dig("release", "screenshots")).to eq(expected)
+            expect(response.parsed_body.dig("game", "screenshot")).to eq(expected.second)
+          end
+        end
+
         context "with an authored original controller profile" do
           before { release.update!(system: "snes", controller_profile: build(:controller_profile)) }
           run_test! do
