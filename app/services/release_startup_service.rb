@@ -8,7 +8,7 @@ class ReleaseStartupService
   end
 
   def self.effective(release:, media: release.release_media)
-    media = media.sort_by(&:position)
+    media = media.reject(&:marked_for_destruction?).sort_by(&:position)
     slots = SLOTS.fetch(release.system, [])
     boot = media.find { |medium| medium.role == "game" }&.key
     startup = release.startup || { "schema" => 1, "boot" => boot, "drives" => slots.empty? ? {} : { slots.first => boot } }
@@ -16,7 +16,7 @@ class ReleaseStartupService
   end
 
   def self.revision(release:)
-    canonical = { "startup" => effective(release: release), "media" => release.release_media.sort_by(&:position).map { |medium| medium.media_file.sha1 } }
+    canonical = { "startup" => effective(release: release), "media" => release.release_media.reject(&:marked_for_destruction?).sort_by(&:position).map { |medium| medium.media_file.sha1 } }
     Digest::SHA256.hexdigest(JSON.generate(canonical))
   end
 

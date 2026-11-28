@@ -3,6 +3,8 @@ class Game < ApplicationRecord
 
   has_many :releases, dependent: :restrict_with_exception
   has_many :game_identities, dependent: :restrict_with_exception
+  belongs_to :retired_into_game, class_name: "Game", optional: true
+  has_many :retired_games, class_name: "Game", foreign_key: :retired_into_game_id, dependent: :restrict_with_exception
 
   validates :title, :public_id, presence: true
   validates :public_id, uniqueness: true
