@@ -32,7 +32,11 @@ RSpec.describe "Storage container configuration" do
     expect(config.volume_args).to include("--volume", "/mnt/storage/arcadary_service:/rails/storage", "arcadary_service_uploads:/rails/uploads")
     storage = YAML.safe_load(ERB.new(Rails.root.join("config/storage.yml").read).result)
     expect(storage.keys).to contain_exactly("test_media", "local_media", "r2_media")
-    expect(storage.fetch("r2_media")).to include("bucket" => "test-media", "upload" => { "cache_control" => "public, max-age=31536000, immutable" })
+    expect(storage.fetch("r2_media")).to include("bucket" => "test-media")
+    media = ActiveStorage::Service.configure("r2_media", storage)
+    expect([ media.client.client.config.request_checksum_calculation, media.client.client.config.response_checksum_validation ]).to eq(%w[when_required when_required])
+    expect(media.multipart_upload_threshold).to eq(512.megabytes)
+    expect(media.upload_options).to eq(cache_control: "public, max-age=31536000, immutable")
   end
 
   it "omits empty optional secrets from both declarations and container values" do

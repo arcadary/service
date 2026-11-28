@@ -76,22 +76,16 @@ class VideoService
 
   def self.store(upload:, file:)
     path = UploadStorageService.path(upload: upload, name: file.name)
-    service = StorageConfigurationService.media_service
     begin
       path.open("rb") do |io|
-        service.upload(key(public_id: upload.public_id, name: file.name), io, checksum: checksum(service: service, path: path), content_type: file.content_type)
+        StorageConfigurationService.media_service.upload(key(public_id: upload.public_id, name: file.name), io,
+          checksum: Digest::MD5.file(path).base64digest, content_type: file.content_type)
       end
     rescue StandardError
       raise Upload::StorageUnavailable
     end
   end
   private_class_method :store
-
-  def self.checksum(service:, path:)
-    threshold = service.try(:multipart_upload_threshold)
-    Digest::MD5.file(path).base64digest unless threshold && path.size >= threshold
-  end
-  private_class_method :checksum
 
   def self.delete_files(public_id:)
     StorageConfigurationService.media_service.delete_prefixed(key(public_id: public_id, name: ""))
