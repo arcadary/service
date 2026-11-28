@@ -7,6 +7,9 @@ class PlaythroughStage < ApplicationRecord
   class InterruptedTransfer < StandardError; end
   class StorageUnavailable < StandardError; end
   class UploadNotAuthorized < StandardError; end
+  class StageIncomplete < StandardError; end
+  class InvalidHls < StandardError; end
+  class PackageIntegrityMismatch < StandardError; end
 
   belongs_to :release
   has_many :objects, -> { order(:path) }, class_name: "PlaythroughStageObject", dependent: :restrict_with_exception
@@ -17,4 +20,8 @@ class PlaythroughStage < ApplicationRecord
   validates :public_id, :retry_key, :declaration, presence: true
   validates :public_id, :retry_key, uniqueness: true
   validates :package_sha256, :declaration_sha256, format: { with: /\A[0-9a-f]{64}\z/ }
+  validates :validation_state, inclusion: { in: %w[validated validation_failed] }, allow_nil: true
+  validates :validation_error, inclusion: { in: %w[invalid_hls package_integrity_mismatch] }, allow_nil: true
+  validates :validation_result, presence: true, if: -> { validation_state == "validated" }
+  validates :validation_error, presence: true, if: -> { validation_state == "validation_failed" }
 end

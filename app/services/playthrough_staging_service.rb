@@ -24,7 +24,7 @@ class PlaythroughStagingService
 
   def self.find_by(staging_id:)
     stage = PlaythroughStage.includes(:objects).find_by(public_id: staging_id)
-    raise PlaythroughStage::NotFound unless stage
+    raise PlaythroughStage::NotFound, "not_found" unless stage
 
     stage
   end

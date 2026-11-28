@@ -1,8 +1,10 @@
 require "rails_helper"
 require_relative "../support/playthrough_helpers"
+require_relative "../support/playthrough_hls_helpers"
 
 RSpec.describe "MCP playthrough intake", type: :request do
   include PlaythroughHelpers
+  include PlaythroughHlsHelpers
   include ActiveSupport::Testing::TimeHelpers
 
   let!(:release) { create(:release) }
@@ -48,6 +50,20 @@ RSpec.describe "MCP playthrough intake", type: :request do
     expect(JSONSchemer.schema(tool.fetch("outputSchema")).valid?(result)).to be(true)
     expect(result.fetch("data").keys).to contain_exactly("staging_id", "release_id", "package_sha256", "state", "objects", "capability", "expires_at")
     expect(result.dig("data", "objects").sole.keys).to contain_exactly("object_id", "path", "received")
+  end
+
+  it "renews the bounded upload summary after validation without echoing validation evidence" do
+    files = hls_files
+    stage = declare_hls(release: release, files: files)
+    receive_hls(stage: stage, files: files)
+    PlaythroughValidationService.validate(staging_id: stage.public_id)
+    result = begin_stage(input: stage.declaration).fetch("data")
+    expect(result.keys).to contain_exactly("staging_id", "release_id", "package_sha256", "state", "objects", "capability", "expires_at")
+    expect(result.fetch("state")).to eq("received")
+    expect(result.fetch("objects")).to all(include("received" => true))
+    get "/v1/playthrough-stages/#{stage.public_id}.json", headers: headers
+    expect(response.parsed_body.fetch("state")).to eq("validated")
+    expect(response.parsed_body.fetch("validation_result")).to eq(stage.reload.validation_result)
   end
 
   it "targets shared and secondary media explicitly and retains authenticated mismatch verification" do

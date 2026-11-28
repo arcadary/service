@@ -1,5 +1,5 @@
 class PlaythroughStageDecorator
-  VERSION = 2
+  VERSION = 3
 
   def self.version
     [ VERSION ]
@@ -14,7 +14,11 @@ class PlaythroughStageDecorator
   end
 
   def as_json(*)
-    summary.merge(declaration: @stage.declaration)
+    summary.merge(declaration: @stage.declaration).tap do |result|
+      result[:state] = @stage.validation_state if @stage.validation_state
+      result[:validation_result] = @stage.validation_result if @stage.validation_result
+      result[:validation_error] = @stage.validation_error if @stage.validation_error
+    end
   end
 
   def summary

@@ -32,7 +32,7 @@ RSpec.configure do |config|
         description: <<~TEXT.strip
           Public, anonymous reads for the Arcadary launcher; authenticated capture-device uploads and private admin staging. JSON routes end in .json; screenshot delivery ends in .png. Generated from the request specs in spec/requests; do not edit swagger/ by hand.
 
-          Catalog data originates from [No-Intro](https://no-intro.org/), sourced through [libretro-database at f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029](https://github.com/libretro/libretro-database/tree/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/metadat/no-intro). Arcadary imports checksum metadata, groups releases into games, normalizes titles/regions/revisions and applies explicit launcher identity mappings. The entire service catalog, including project corrections, additions and later metadata fields, is licensed under [CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/), as is the [upstream source at the pin](https://github.com/libretro/libretro-database/blob/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/LICENSE). Screenshot images and all video are excluded: each medium's own rights apply. Catalog and screenshot licences grant no video rights. The owner-approved exception permits authenticated private HLS staging and delivery, including the private Donkey Kong trial, without public commercial-footage distribution or anonymous playthrough metadata. Staging exposes no playback; HLS validation/publication/cleanup and delivery arrive separately. Application code remains MIT.
+          Catalog data originates from [No-Intro](https://no-intro.org/), sourced through [libretro-database at f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029](https://github.com/libretro/libretro-database/tree/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/metadat/no-intro). Arcadary imports checksum metadata, groups releases into games, normalizes titles/regions/revisions and applies explicit launcher identity mappings. The entire service catalog, including project corrections, additions and later metadata fields, is licensed under [CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/), as is the [upstream source at the pin](https://github.com/libretro/libretro-database/blob/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/LICENSE). Screenshot images and all video are excluded: each medium's own rights apply. Catalog and screenshot licences grant no video rights. The owner-approved exception permits authenticated private HLS staging and delivery, including the private Donkey Kong trial, without public commercial-footage distribution or anonymous playthrough metadata. Internal HLS validation leaves all bytes private; publication, cleanup and delivery arrive separately. Application code remains MIT.
 
           The pinned NES DAT includes distinct headered .nes and unheadered .unh releases. A launcher hashing NES payload bytes without the iNES header sends the matching unheadered checksum. All eight lists are covered, including C64 tape metadata; catalog coverage does not imply launcher playback support. No game files or player filenames are received, stored or served.
 
@@ -116,6 +116,28 @@ RSpec.configure do |config|
       servers: [
         { url: '/' }
       ]
+    }
+  }
+
+  schemas = config.openapi_specs.fetch('v1/swagger.yaml').fetch(:components).fetch(:schemas)
+  declaration_properties = schemas.fetch(:playthrough_declaration).fetch(:properties)
+  schemas[:playthrough_validation_result] = {
+    type: :object, additionalProperties: false,
+    required: %w[staging_id declaration_sha256 package_sha256 manifest release_id source_sha1 capture verification root duration video_codec audio_codec chapters_path chapters],
+    properties: {
+      staging_id: { type: :string }, declaration_sha256: { type: :string, pattern: '^[0-9a-f]{64}$' },
+      package_sha256: { type: :string, pattern: '^[0-9a-f]{64}$' }, manifest: declaration_properties.fetch(:manifest),
+      release_id: declaration_properties.fetch(:release_id), source_sha1: declaration_properties.fetch(:source_sha1),
+      capture: declaration_properties.fetch(:capture), verification: declaration_properties.fetch(:verification).merge(nullable: true),
+      root: { type: :string, enum: [ 'index.m3u8' ] }, duration: { type: :string, pattern: '^[0-9]+\.[0-9]+$', description: 'Exact summed EXTINF seconds as a decimal string.' },
+      video_codec: { type: :string, enum: [ 'h264' ] }, audio_codec: { type: :string, nullable: true, enum: [ 'aac', nil ] },
+      chapters_path: { type: :string, nullable: true, enum: [ 'chapters.vtt', nil ] },
+      chapters: { type: :array, maxItems: 256, items: {
+        type: :object, additionalProperties: false, required: %w[start end title], properties: {
+          start: { type: :string, pattern: '^[0-9]{2}:[0-5][0-9]:[0-5][0-9]\.[0-9]{3}$' },
+          end: { type: :string, pattern: '^[0-9]{2}:[0-5][0-9]:[0-5][0-9]\.[0-9]{3}$' }, title: { type: :string, minLength: 1 }
+        }
+      } }
     }
   }
 

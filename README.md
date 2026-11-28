@@ -180,9 +180,60 @@ Actual size and SHA-256 are checked before storage, even for successful retries.
 
 All ceilings apply together: **2 MiB (2,097,152 bytes)** for the complete MCP HTTP request body, **1 MiB (1,048,576 bytes)** for the declaration arguments measured as UTF-8 compact JSON before normalization, excluding the JSON-RPC envelope, **4,096 objects**, **8 MiB (8,388,608 bytes)** per object and **4 GiB (4,294,967,296 bytes)** summed declared package size. Request reads and object reads are bounded even with missing or dishonest `Content-Length`; JSON nesting remains limited to 64. An oversized request returns HTTP `413`; an oversized declaration or manifest returns MCP tool error `stage_too_large`, without a stage or authorization. A 4,096-object, 4 GiB declaration with short paths fits. Every valid declaration returns all object metadata within the **1 MiB structured-JSON result ceiling before SDK text representation**, without truncation or declaration echo. The per-object limit is below Cloudflare's [documented 100 MB minimum plan upload limit](https://developers.cloudflare.com/cache/concepts/default-cache-behavior/#upload-limits); the actual zone Maximum Upload Size can be lower and must be checked by the deployment owner in #57, along with transfer timeouts.
 
-Storage reuses private R2/Active Storage configuration; production fails closed on incomplete R2 configuration, independently of screenshot bearer-token/public-image-base settings. Tests use local private storage. Each attempt gets a fresh private key under its stage/object IDs; no accepted object or other stage can be overwritten. Interrupted reads or storage failures leave declaration and completed objects durable, the affected object incomplete and retryable after restart. Database writes are bounded and storage runs outside transactions. Failed attempts try to remove only their own blob; a crash or failed deletion can retain an unreferenced blob with its stage/object key for future cleanup. Capability expiry does not expire the stage or its stored objects; no automatic playthrough cleanup is introduced here. HLS validation and abandoned-stage retention belong to #56; R2 promotion and release discovery belong to #57; MCP publication and end-to-end verification remain in #46. Existing screenshots, public lookup/release/media JSON and validators are unchanged.
+Storage reuses private R2/Active Storage configuration; production fails closed on incomplete R2 configuration, independently of screenshot bearer-token/public-image-base settings. Tests use local private storage. Each attempt gets a fresh private key under its stage/object IDs; no accepted object or other stage can be overwritten. Interrupted reads or storage failures leave declaration and completed objects durable, the affected object incomplete and retryable after restart. Database writes are bounded and storage runs outside transactions. Failed attempts try to remove only their own blob; a crash or failed deletion can retain an unreferenced blob with its stage/object key for future cleanup. Capability expiry does not expire the stage or its stored objects; no automatic playthrough cleanup is introduced here (#64). Internal HLS validation is described below; R2 promotion and release discovery belong to #57; MCP publication and end-to-end verification remain in #46. Existing screenshots, public lookup/release/media JSON and validators are unchanged.
 
 Begin-tool failures use MCP `isError: true` and `structuredContent: {"error":{"code":"..."}}`: `invalid_declaration`, `not_found`, `target_mismatch`, `stage_conflict` or `stage_too_large`. Missing required arguments are SDK tool errors. HTTP errors use the standard JSON envelope: `400 interrupted_transfer`, `401 unauthorized`, `403 upload_not_authorized`, `404 not_found`, `409 stage_conflict`, `413 stage_too_large`, and `503 authentication_unavailable` or `storage_unavailable`. `/api-docs` documents each endpoint and its schemas. No game-file names or bytes are part of declarations or verification.
+
+### Internal private HLS validation
+
+`PlaythroughValidationService.validate(staging_id:)` validates a complete immutable stage for the authenticated MCP workflow. It adds no HTTP route, upload authorization or publication. The root is always `index.m3u8`; declarations, fingerprints, package digests and PUT receipts retain their existing algorithms and replay rules. All objects, including optional root-level `chapters.vtt`, need completed receipts before any storage reads or parsing. Every object's stored metadata and bytes are then checked against the declaration before HLS interpretation. Reads are bounded by the existing ceilings and stay outside short database transactions. Validation logs, including storage errors, are suppressed without logging paths, checksums, capture evidence, credentials or bodies.
+
+Success persists `validated` and returns this exact result shape (synthetic placeholders below). `manifest`, `capture` and optional verification evidence retain the normalized declaration values. `verification` is null for direct source membership, or the full attestation object above for an offline verified source. The result binds only this staging ID, declaration fingerprint, package digest and stable release; downstream promotion must verify that binding and the bytes again.
+
+```json
+{
+  "staging_id": "opaque-stage-id",
+  "declaration_sha256": "64-lowercase-hex-characters",
+  "package_sha256": "64-lowercase-hex-characters",
+  "manifest": [{"path": "index.m3u8", "byte_size": 123, "sha256": "64-lowercase-hex-characters", "content_type": "application/vnd.apple.mpegurl"}],
+  "release_id": "stable-release-public-id",
+  "source_sha1": "0000000000000000000000000000000000000001",
+  "capture": {"tool": "synthetic-capture", "version": "1", "captured_at": "2026-11-28T08:00:00.000000Z"},
+  "verification": null,
+  "root": "index.m3u8",
+  "duration": "2.5",
+  "video_codec": "h264",
+  "audio_codec": "aac",
+  "chapters_path": "chapters.vtt",
+  "chapters": [{"start": "00:00:00.000", "end": "00:00:02.500", "title": "First chapter"}]
+}
+```
+
+The manifest shown is abbreviated; a valid package also declares every referenced playlist and segment. `duration` is the exact sum of media `EXTINF` durations as a decimal string. `audio_codec` is null for silent H.264. Without chapters, `chapters_path` is null and `chapters` is empty. Chapter times retain the validated `HH:MM:SS.mmm` strings.
+
+Authenticated GET metadata remains `200` for every existing stage. `state` is `incomplete`, `received`, `validated` or `validation_failed`. Only `validated` adds `validation_result` with the shape above; only `validation_failed` adds `validation_error`, a stable string from the terminal codes below. `received` continues to mean stored but unvalidated. MCP begin keeps its bounded upload-progress summary (`incomplete`/`received`) without echoing validation evidence; GET is the source for validation status. All responses remain `no-store`. Validation creates no public object, descriptor, redirect or release pointer, and anonymous responses expose no playthrough metadata.
+
+Internal exceptions carry a stable code as their message, without storage diagnostics or package details:
+
+| Code / exception under `PlaythroughStage` | Durable outcome and retry rule |
+| --- | --- |
+| `not_found` / `NotFound` | Unknown staging ID; no state change. |
+| `stage_incomplete` / `StageIncomplete` | Missing completed receipt; no state change. Finish uploading and retry. This precedes malformed received bytes or wrong role MIME. |
+| `storage_unavailable` / `StorageUnavailable` | Missing or unreadable stored blob; no state change. Restore storage and retry. |
+| `package_integrity_mismatch` / `PackageIntegrityMismatch` | Readable bytes or stored size/hash/MIME metadata disagree with the immutable declaration; terminal `validation_failed`. |
+| `invalid_hls` / `InvalidHls` | Malformed/unsupported graph, transport or chapters, undeclared references, unreachable objects, or a declared MIME wrong for its graph role; terminal `validation_failed`. |
+
+The staging ID is resolved and any persisted terminal outcome replayed **before** completeness or storage checks. Repeated success returns the same persisted result after restart; repeated terminal failure raises its recorded code without reading or parsing again. Concurrent validation cannot replace the first terminal outcome. Correcting invalid immutable input requires a new declaration with a new retry key. Storage outages and incomplete transfers remain retryable on the original stage.
+
+The accepted [RFC 8216](https://www.rfc-editor.org/rfc/rfc8216.html) subset is finite VOD:
+
+- Playlists have MIME `application/vnd.apple.mpegurl`, valid NFC UTF-8 without a BOM or control characters, and LF or CRLF lines. First line is exactly `#EXTM3U`, with exactly one `#EXT-X-VERSION:3` in every playlist. Blank lines and non-tag comments are ignored. Other tags and attributes are rejected.
+- Accept one media playlist or a master whose variants point directly to media playlists. Shared media-playlist references are allowed. Nested masters, cycles, separate audio/subtitle/I-frame renditions, encryption, byte ranges, initialization maps and discontinuities are unsupported. Resolve only relative package-local paths against the referring playlist using the declaration's path grammar; external/absolute URIs, traversal/dot/empty components, percent encoding, query/fragment and undeclared references fail. Every declared object must be reachable, except optional `chapters.vtt`, which is also validated as an explicit dependency.
+- Each media playlist has at least one segment, one positive integer `EXT-X-TARGETDURATION`, one `EXT-X-PLAYLIST-TYPE:VOD` and terminal `EXT-X-ENDLIST`. Optional `EXT-X-MEDIA-SEQUENCE:0` occurs once before segments. Each URI follows one `EXTINF` with a positive finite decimal duration (integer notation allowed), required comma and optional ignored UTF-8 title. Half-up rounding of each duration must not exceed the target. All variants have equal segment counts and numerically equal per-position durations.
+- Master entries use `EXT-X-STREAM-INF` followed by a media URI. Require positive integer `BANDWIDTH`; allow only optional positive `AVERAGE-BANDWIDTH`, quoted comma-separated `CODECS`, and positive `RESOLUTION` dimensions. RFC attribute names, quoting, no-whitespace syntax, unsigned 64-bit integer bounds and uniqueness apply. Codec claims never replace transport inspection.
+- Segments have MIME `video/mp2t` and contain nonzero multiples of 188-byte MPEG-TS packets with sync byte `0x47`. Reject malformed packet/adaptation/PSI lengths, transport-error flags and scrambling. DVB service-information PIDs `0x0010`–`0x001F` (including SDT on `0x0011`) pass packet/adaptation checks, then their payloads are ignored; they may precede the PAT and do not count as elementary streams. CAT and undeclared elementary-stream PIDs remain rejected. Every segment has a complete CRC-checked PAT, then matching PMT, before its first elementary-stream packet. The PAT names exactly one nonzero program. The PMT declares exactly one H.264 video stream (`0x1B`) and optionally one AAC/ADTS audio stream (`0x0F`), with payload for every declared stream and no other elementary streams. Every segment and variant must agree on audio presence. The PMT determines codec classification; full audio/video decoding is outside this validation. This follows the [owner-approved codec profile](https://github.com/arcadary/service/issues/63#issuecomment-7237863060).
+- Optional root `chapters.vtt` has MIME `text/vtt` and valid UTF-8 [WebVTT](https://www.w3.org/TR/webvtt1/), allowing one initial BOM. Require exact `WEBVTT`, a blank line, and 1–256 chronological non-overlapping cues. Each cue has `HH:MM:SS.mmm --> HH:MM:SS.mmm` (two-digit hours; minutes/seconds 00–59), one nonblank title line, and blank separation. Titles contain none of `<`, `&` or `-->`. Reject header text, identifiers, settings, markup, STYLE, REGION and NOTE blocks. Require `0 <= start < end <= duration` and each start at or after the previous end.
+
 
 ## Screenshots
 
