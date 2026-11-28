@@ -1,7 +1,9 @@
 class PlaythroughTransferService
   def self.receive(staging_id:, object_id:, io:, content_type:)
-    stage = PlaythroughStagingService.find_by(staging_id: staging_id)
-    object = stage.objects.find { |entry| entry.public_id == object_id }
+    stage = PlaythroughStage.find_by(public_id: staging_id)
+    raise PlaythroughStage::NotFound unless stage
+
+    object = stage.objects.find_by(public_id: object_id)
     raise PlaythroughStage::NotFound unless object
     raise PlaythroughStage::Conflict unless content_type == object.content_type
 
@@ -9,12 +11,12 @@ class PlaythroughTransferService
     unless bytes.bytesize == object.byte_size && Digest::SHA256.hexdigest(bytes) == object.sha256
       raise PlaythroughStage::Conflict
     end
-    return stage if object.received_at
+    return object if object.received_at
 
     blob = upload(bytes: bytes, object: object, stage: stage)
     begin
       PlaythroughStageObject.transaction do
-        current = PlaythroughStageObject.find(object.id)
+        current = stage.objects.find(object.id)
         current.update!(blob: blob, received_at: Time.current) unless current.received_at
         object = current
       end
@@ -23,7 +25,7 @@ class PlaythroughTransferService
       raise
     end
     discard(blob: blob) if object.blob_id != blob.id
-    PlaythroughStagingService.find_by(staging_id: staging_id)
+    object
   end
 
   def self.upload(bytes:, object:, stage:)

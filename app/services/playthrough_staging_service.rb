@@ -5,7 +5,7 @@ class PlaythroughStagingService
     declaration = PlaythroughDeclarationService.normalize(io: io, verifier: verifier)
     fingerprint = PlaythroughDeclarationService.fingerprint(declaration: declaration)
     retry_key = declaration.fetch("retry_key")
-    PlaythroughStage.transaction do
+    stage = PlaythroughStage.transaction do
       existing = PlaythroughStage.find_by(retry_key: retry_key)
       next replay(stage: existing, fingerprint: fingerprint) if existing
 
@@ -18,12 +18,14 @@ class PlaythroughStagingService
       declaration.fetch("manifest").each { |entry| stage.objects.create!(entry) }
       stage
     end
+    find_by(staging_id: stage.public_id)
   rescue ActiveRecord::RecordNotUnique
-    replay(stage: PlaythroughStage.find_by!(retry_key: retry_key), fingerprint: fingerprint)
+    stage = replay(stage: PlaythroughStage.find_by!(retry_key: retry_key), fingerprint: fingerprint)
+    find_by(staging_id: stage.public_id)
   end
 
   def self.find_by(staging_id:)
-    stage = PlaythroughStage.includes(:release, :objects).find_by(public_id: staging_id)
+    stage = PlaythroughStage.includes(:objects).find_by(public_id: staging_id)
     raise PlaythroughStage::NotFound unless stage
 
     stage

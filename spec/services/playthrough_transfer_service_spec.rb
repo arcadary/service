@@ -9,11 +9,10 @@ RSpec.describe PlaythroughTransferService do
 
   it "verifies bytes before storage and preserves accepted object results on retries" do
     stage = declare_playthrough
-    received = receive_playthrough(stage: stage)
-    object = received.objects.sole
+    object = receive_playthrough(stage: stage)
     expect(object.blob.download).to eq("synthetic segment")
     expect(object.blob.content_type).to eq("video/mp2t")
-    expect(receive_playthrough(stage: stage).objects.sole.attributes).to eq(object.attributes)
+    expect(receive_playthrough(stage: stage).attributes).to eq(object.attributes)
     expect(ActiveStorage::Blob.count).to eq(1)
     [ { bytes: "wrong-size" }, { bytes: "x" * object.byte_size }, { content_type: "video/mp4" } ].each do |change|
       expect { receive_playthrough(stage: stage, **change) }.to raise_error(PlaythroughStage::Conflict)
@@ -36,7 +35,7 @@ RSpec.describe PlaythroughTransferService do
     stage = declare_playthrough(input: playthrough_declaration(release: release, bytes: bytes))
     expect { receive_playthrough(stage: stage, bytes: bytes + "x") }.to raise_error(PlaythroughStage::TooLarge)
     expect(stage.objects.sole.reload.received_at).to be_nil
-    expect(receive_playthrough(stage: stage, bytes: bytes).objects.sole.received_at).to be_present
+    expect(receive_playthrough(stage: stage, bytes: bytes).received_at).to be_present
   end
 
   it "keeps completed progress durable when a read is interrupted and retries using fresh records" do
@@ -51,7 +50,8 @@ RSpec.describe PlaythroughTransferService do
       .to raise_error(PlaythroughStage::InterruptedTransfer)
     reloaded = PlaythroughStagingService.find_by(staging_id: stage.public_id)
     expect(reloaded.objects.map { |object| object.received_at.present? }).to eq([ true, false ])
-    expect(receive_playthrough(stage: reloaded, object: second).objects).to all(have_attributes(received_at: be_present))
+    receive_playthrough(stage: reloaded, object: second)
+    expect(PlaythroughStagingService.find_by(staging_id: stage.public_id).objects).to all(have_attributes(received_at: be_present))
   end
 
   it "leaves a failed storage object incomplete and safely retryable without changing another stage" do
@@ -65,6 +65,6 @@ RSpec.describe PlaythroughTransferService do
     expect(other.objects.sole.reload).to have_attributes(blob_id: nil, received_at: nil)
     expect(stage.objects.sole.reload.attributes).to eq(original)
     allow(ActiveStorage::Blob.service).to receive(:upload).and_call_original
-    expect(receive_playthrough(stage: other).objects.sole.received_at).to be_present
+    expect(receive_playthrough(stage: other).received_at).to be_present
   end
 end

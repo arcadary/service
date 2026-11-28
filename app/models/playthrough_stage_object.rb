@@ -10,4 +10,6 @@ class PlaythroughStageObject < ApplicationRecord
   validates :path, uniqueness: { scope: :playthrough_stage_id }
   validates :byte_size, numericality: { only_integer: true, greater_than: 0, less_than_or_equal_to: 8.megabytes }
   validates :sha256, format: { with: /\A[0-9a-f]{64}\z/ }
+  validates :received_at, presence: true, if: :blob_id?
+  validates :blob_id, presence: true, if: :received_at?
 end

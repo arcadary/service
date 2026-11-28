@@ -21,7 +21,7 @@ module V1
     end
 
     def update
-      render json: PlaythroughStageDecorator.decorate(@stage)
+      render json: PlaythroughStageObjectDecorator.decorate(@object)
     end
 
     private
@@ -35,7 +35,7 @@ module V1
       end
 
       def receive_object
-        @stage = PlaythroughTransferService.receive(staging_id: request.path_parameters[:staging_id].to_s,
+        @object = PlaythroughTransferService.receive(staging_id: request.path_parameters[:staging_id].to_s,
           object_id: request.path_parameters[:stage_object_id].to_s, io: request.body, content_type: request.content_type)
       end
   end

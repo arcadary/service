@@ -101,17 +101,20 @@ RSpec.describe "Private playthrough staging", type: :request do
       response "404", "unknown stage" do
         let(:staging_id) { "unknown" }
         schema type: :object, additionalProperties: false, required: %w[error], properties: { error: { type: :string, enum: %w[not_found] } }
-        run_test!
+        header "Cache-Control", schema: { type: :string, enum: [ "no-store" ] }
+        run_test! { expect(response.headers["Cache-Control"]).to eq("no-store") }
       end
       response "401", "authentication failed" do
         let(:Authorization) { "" }
         schema type: :object, additionalProperties: false, required: %w[error], properties: { error: { type: :string, enum: %w[unauthorized] } }
-        run_test!
+        header "Cache-Control", schema: { type: :string, enum: [ "no-store" ] }
+        run_test! { expect(response.headers["Cache-Control"]).to eq("no-store") }
       end
       response "503", "authentication not configured" do
         before { allow(ENV).to receive(:[]).with("VALIDATION_REVIEWER_PASSWORD").and_return(nil) }
         schema type: :object, additionalProperties: false, required: %w[error], properties: { error: { type: :string, enum: %w[authentication_unavailable] } }
-        run_test!
+        header "Cache-Control", schema: { type: :string, enum: [ "no-store" ] }
+        run_test! { expect(response.headers["Cache-Control"]).to eq("no-store") }
       end
     end
   end
@@ -124,13 +127,15 @@ RSpec.describe "Private playthrough staging", type: :request do
       parameter name: :staging_id, in: :path, required: true, schema: { type: :string }
       parameter name: :stage_object_id, in: :path, required: true, schema: { type: :string }
       parameter name: :segment, in: :body, required: true, schema: { type: :string, format: :binary }
-      description "Raw bytes with the exact declared Content-Type; any valid declared MIME type without parameters is accepted. Exact size and SHA-256 must match, including on successful retries. Reads are bounded at 8 MiB regardless of Content-Length. A successful identical retry preserves the original object receipt. Fresh private storage keys isolate attempts and stages; completion follows storage success. Interrupted reads and storage failure leave the object incomplete and retryable after restart. No HLS validation or playback is performed. The deployment owner must verify the zone upload setting, which can be lower than Cloudflare's documented 100 MB minimum plan limit: https://developers.cloudflare.com/cache/concepts/default-cache-behavior/#upload-limits (#57)."
+      description "Raw bytes with the exact declared Content-Type; any valid declared MIME type without parameters is accepted. Exact size and SHA-256 must match, including on successful retries. Reads are bounded at 8 MiB regardless of Content-Length. Success returns an immutable object_id/received_at receipt; identical retries return exactly that receipt, even after other objects finish. GET stage metadata for aggregate progress. Fresh private storage keys isolate attempts and stages; completion follows storage success. Interrupted reads and storage failure leave the object incomplete and retryable after restart. No HLS validation or playback is performed. The deployment owner must verify the zone upload setting, which can be lower than Cloudflare's documented 100 MB minimum plan limit: https://developers.cloudflare.com/cache/concepts/default-cache-behavior/#upload-limits (#57)."
 
       response "200", "verified object received, or identical successful retry" do
-        schema stage_schema
+        schema type: :object, additionalProperties: false, required: %w[object_id received_at], properties: {
+          object_id: { type: :string }, received_at: { type: :string, format: "date-time" }
+        }
         header "Cache-Control", schema: { type: :string, enum: [ "no-store" ] }
         run_test! do
-          expect(response.parsed_body.fetch("state")).to eq("received")
+          expect(response.parsed_body.fetch("object_id")).to eq(stage_object_id)
           expect(response.headers["Cache-Control"]).to eq("no-store")
         end
       end
@@ -228,5 +233,24 @@ RSpec.describe "Private playthrough staging", type: :request do
     put "/v1/playthrough-stages/#{PlaythroughStage.sole.public_id}/objects/#{PlaythroughStageObject.sole.public_id}.json",
       params: "x" * (8.megabytes + 1), headers: headers.merge("CONTENT_TYPE" => "video/mp2t", "CONTENT_LENGTH" => "1")
     expect(response).to have_http_status(:content_too_large)
+    put "/v1/playthrough-stages/#{PlaythroughStage.sole.public_id}/objects/#{PlaythroughStageObject.sole.public_id}.json",
+      params: segment, headers: headers.merge("CONTENT_TYPE" => "video/mp2t", "CONTENT_LENGTH" => "")
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body.fetch("received_at")).to be_present
+  end
+
+  it "replays the identical object receipt after other objects finish" do
+    declaration["manifest"] << declaration["manifest"].first.merge("path" => "video/next.ts")
+    staged = declare_playthrough
+    first, second = staged.objects.to_a
+    first_path = "/v1/playthrough-stages/#{staged.public_id}/objects/#{first.public_id}.json"
+    put first_path, params: segment, headers: headers.merge("CONTENT_TYPE" => "video/mp2t")
+    original = response.body
+    put "/v1/playthrough-stages/#{staged.public_id}/objects/#{second.public_id}.json", params: segment,
+      headers: headers.merge("CONTENT_TYPE" => "video/mp2t")
+    put first_path, params: segment, headers: headers.merge("CONTENT_TYPE" => "video/mp2t")
+    expect(response.body).to eq(original)
+    get "/v1/playthrough-stages/#{staged.public_id}.json", headers: headers
+    expect(response.parsed_body.fetch("state")).to eq("received")
   end
 end
