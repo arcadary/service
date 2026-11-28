@@ -1,5 +1,5 @@
 class McpCatalogDecorator
-  VERSION = 1
+  VERSION = 2
 
   def self.version
     [ VERSION ]
