@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_28_010000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_28_020000) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.string "name", null: false
     t.string "record_type", null: false
@@ -118,6 +118,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_28_010000) do
     t.string "source_system"
     t.string "source_region"
     t.string "source_revision"
+    t.json "controller_profile"
     t.index ["game_id"], name: "index_releases_on_game_id"
     t.index ["public_id"], name: "index_releases_on_public_id", unique: true
     t.index ["sha1"], name: "index_releases_on_sha1"

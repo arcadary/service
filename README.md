@@ -1,6 +1,6 @@
 # Arcadary service
 
-The remote service for [Arcadary](https://github.com/arcadary/arcadary): a Rails 8.1 application for the project's homepage and launcher JSON API. `GET /v1/lookup/{sha1}.json` identifies a game file and redirects to its release and game, or to all containing releases for a shared file. The offline catalog importer covers eight pinned No-Intro lists (29,336 distinct checksums); two optional homebrew seeds work without those lists. Compatibility, controller-profile and page features are still to be built. Nothing is deployed.
+The remote service for [Arcadary](https://github.com/arcadary/arcadary): a Rails 8.1 application for the project's homepage and launcher JSON API. `GET /v1/lookup/{sha1}.json` identifies a game file and redirects to its release and game, or to all containing releases for a shared file. The offline catalog importer covers eight pinned No-Intro lists (29,336 distinct checksums); two optional homebrew seeds work without those lists. Original controller facts support exact SNES releases; compatibility and page features are still to be built. Nothing is deployed.
 
 ## Setup
 
@@ -56,6 +56,36 @@ The nullable `releases.startup` JSON uses schema 1: `{"schema":1,"boot":"disk-1"
 
 `startup.revision` is lower-case SHA-256 of compact UTF-8 JSON with no whitespace: `{"startup":{"schema":1,"boot":"<effective key>","drives":{...}},"media":["<first sha1>","<second sha1>"]}`. Object keys appear in the order shown, drive slots sort lexicographically and media checksums follow position order. Explicit defaults produce the same revision as null startup. Labels, size and format do not affect it; effective startup and ordered checksums do. The launcher can bind resume states to this revision. Media/startup changes also invalidate response ETags.
 
+### Original controller layout and prompts
+
+An optional `releases.controller_profile` belongs to the stable release ID. Version 1 supports **`snes` only**. A complete authored example using synthetic evidence:
+
+```json
+{
+  "version": 1,
+  "binding": { "system": "snes", "region": "USA", "revision": null },
+  "layout": [
+    { "position": "top", "label": "X", "evidence": ["Synthetic edition: original controller observation"] },
+    { "position": "right", "label": "A", "evidence": ["Synthetic edition: original controller observation"] },
+    { "position": "bottom", "label": "B", "evidence": ["Synthetic edition: original controller observation"] },
+    { "position": "left", "label": "Y", "evidence": ["Synthetic edition: original controller observation"] }
+  ],
+  "prompts": [
+    { "letter": "A", "position": "right", "evidence": ["Synthetic edition: observed gameplay prompt and its action"] }
+  ]
+}
+```
+
+Every shown key is required; no extra keys or other versions are accepted at any level. `version` is the integer `1`. `binding` must exactly equal the release's `system`, `region` and `revision`, including nulls. Each non-null binding string is at most **128 characters**. This checks edition metadata; the stable release ID identifies the owner. No facts are inferred from a title, another edition or a system default.
+
+`layout` has exactly **four** facts, declaring each position (`top`, `right`, `bottom`, `left`) and each original SNES label (`X`, `A`, `B`, `Y`) once. Positions are viewed facing the controller's buttons. The supplied mapping is retained, never filled from defaults. `prompts` has **0–16** facts; each `letter` is one case-sensitive ASCII letter (`A–Z` or `a–z`), unique in that profile, and its `position` must resolve to a declared layout position. An empty prompt list asserts no prompt facts. Literal gameplay prompt letters can differ from original labels and between editions.
+
+Every layout and prompt fact has its own `evidence`: **1–8 nonblank text citations**, each at most **500 characters**, retaining provenance for that exact edition. Citations must contain text only: no images, clips, manual scans, file bytes, file names or game-file download locations. No evidence assets or game files are accepted. All profile collections and strings have finite bounds; wrong types, unsupported fields/versions, invalid references and incompatible bindings fail validation.
+
+Public `release.controller_profile` contains only `version`, `layout` (`position`, `label`) and `prompts` (`letter`, `position`). It is omitted when absent. Binding and evidence stay internal. Each shared-media candidate carries its own optional facts; profiles never select a candidate, combine facts or change redirects and `409 ambiguous_release`. No controller choice, controller identifier or device identity is received. Controller classification, physical label/symbol mapping and local preferences belong to the launcher.
+
+**The Legend of Zelda: A Link to the Past SNES trial remains unconfirmed.** No real Zelda profile is populated. Before trial use, the owner must confirm the exact stable release ID, checksum, edition metadata and textual evidence for that edition's layout and on-screen gameplay prompt letters. Its title is insufficient. This gates trial use only, not PR merge or issue closure. Catalog publication and deployment are outside scope.
+
 ## Catalog authoring
 
 `CatalogAuthoringService.call(operation:, attributes:, expected_revisions:, reason:, idempotency_key:, preview: nil)` is the shared database write contract for future MCP, reviewer and manual-import adapters. It has no HTTP endpoint or UI. Each call requires a nonblank reason and retry key. Configure `CATALOG_ADMIN_NAME` with the single admin's display name as a non-credential environment setting; a missing or blank name fails closed before any write or replay. Never derive it from an HTTP Basic username, token or other credential. Reasons and metadata must contain no credentials or household/device identifiers.
@@ -66,9 +96,9 @@ Operations accept only these creation/correction fields (string or symbol keys);
 | --- | --- |
 | `create_game` | Required `id` (stable public game ID), `title`; optional `title_aliases` (array of distinct nonblank searchable titles). |
 | `create_media` | Required lower-case 40-character `sha1`; optional `size` (nonnegative integer), `format` (lower-case alphanumeric), `crc32` (8 lower-case hex characters), `md5` (32 lower-case hex characters). Only checksum metadata is accepted, never file bytes or names. |
-| `create_release` | Required existing `game_id`, `system` and nonempty ordered `media` array; optional `region`, `revision` and `startup`. The release's stable public ID is generated. Each medium requires `key`, consecutive `position` from 1, `role` (`game` or `save`) and a **new** `sha1`; optional `label` and the initial metadata fields from `create_media` are accepted. No existing checksum may be attached, including one created separately through `create_media`. |
+| `create_release` | Required existing `game_id`, `system` and nonempty ordered `media` array; optional `region`, `revision`, `startup` and `controller_profile`. The release's stable public ID is generated. Each medium requires `key`, consecutive `position` from 1, `role` (`game` or `save`) and a **new** `sha1`; optional `label` and the initial metadata fields from `create_media` are accepted. No existing checksum may be attached, including one created separately through `create_media`. |
 | `correct_game` | Required `id`; one or more of `title`, `title_aliases`. Resolves retired IDs before correction. The alias array replaces the previous aliases. |
-| `correct_release` | Required stable release `id`; one or more of `system`, `region`, `revision`, `startup`, `media`. `region` and release `revision` may be null. `startup` replaces the whole configuration or may be null for system defaults. A `media` replacement requires preview; see below. |
+| `correct_release` | Required stable release `id`; one or more of `system`, `region`, `revision`, `startup`, `controller_profile`, `media`. `region` and release `revision` may be null. `startup` replaces the whole configuration or may be null for system defaults. `controller_profile` replaces the whole profile, including evidence, or null clears it. A `media` replacement requires preview; see below. |
 | `correct_media` | Required existing `sha1`; one or more of `size`, `format`, `crc32`, `md5`, each nullable. Requires preview and covers all containing releases. The checksum itself never changes. |
 | `reassign_release` | Required release `id` and target `game_id`. Resolves the target to its active game and moves just that release. Requires preview. |
 | `merge_games` | Required source `id` and target `into_game_id`. Resolves both IDs first, moves every source release and retires the source into the chosen target. Requires preview. |
@@ -76,7 +106,9 @@ Operations accept only these creation/correction fields (string or symbol keys);
 
 All startup writes use the existing [schema, medium keys and defaults](#ordered-media-and-startup). `correct_release.media` is the complete nonempty resulting array, with required `key`, consecutive `position` from 1, `role` and an **existing** `sha1` in each entry. Optional `label` and checksum metadata (`size`, `format`, `crc32`, `md5`) are accepted. Omitted memberships are removed; new keys attach files already known to the database (create standalone metadata with `create_media` first). A surviving key must retain its checksum and row ID. Optional metadata updates the shared `MediaFile`, not a release-local copy; inconsistent metadata for the same checksum in one request conflicts. Omitted labels on surviving memberships are retained. Startup, system, membership order, roles and labels are validated as one final configuration. A media-only removal leaving a startup reference invalid fails without writes; a coupled startup correction can make the same removal valid. Position swaps preserve surviving keys. Public game/release IDs, media checksums, source fields and importer `GameIdentity` keys cannot be corrected through these operations.
 
-`CatalogAuthoringReadService` returns internal records shaped as `{type, id, authoring_revision, canonical, authored_fields, source}`. `canonical` holds effective values: games include `title` and `title_aliases`; releases include `game_id`, `system`, `region`, release `revision`, ordered media metadata and effective startup with `startup.revision`; media include checksums and metadata. Every game record additionally contains `identity: {state, retired_into_game_id, canonical_game_id, screenshot_licence, catalog_curated, importer_keys}`. State is `active` or `retired`; `retired_into_game_id` is the immediate target, null for active games; `canonical_game_id` is the final active ID. Importer keys belong to that actual identity and are sorted by exact key.
+Profile authoring uses the [version 1 schema and bounds](#original-controller-layout-and-prompts) above. Omission preserves the current profile; null clears it, while `authored_fields` retains that deliberate choice. System/edition corrections validate the existing profile against the resulting binding and require a compatible whole replacement or explicit clearing when incompatible. A profile and `correct_release.media` may change in one complete preview; all final profile, startup and media values validate together. Reassignment, grouping and restoration revalidate profiles and preserve each stable release's own facts and evidence; game identity is not part of the edition binding. They never borrow another release's profile. Invalid/stale writes and persistence failures roll back relationships, profiles, revisions and audits together. Profile changes refresh release and containing-media ETags and Last-Modified; old ETag or Last-Modified validators receive updated `200` content and current validators receive `304`, including with `User-Agent: Arcadary/1.0`. Cache lifetimes remain unchanged. Profile changes do not affect `startup.revision`.
+
+`CatalogAuthoringReadService` returns internal records shaped as `{type, id, authoring_revision, canonical, authored_fields, source}`. `canonical` holds effective values: games include `title` and `title_aliases`; releases include `game_id`, `system`, `region`, release `revision`, ordered media metadata, effective startup with `startup.revision`, and complete `controller_profile` (including binding and evidence), or null; media include checksums and metadata. Every game record additionally contains `identity: {state, retired_into_game_id, canonical_game_id, screenshot_licence, catalog_curated, importer_keys}`. State is `active` or `retired`; `retired_into_game_id` is the immediate target, null for active games; `canonical_game_id` is the final active ID. Importer keys belong to that actual identity and are sorted by exact key.
 
 | Read | Result |
 | --- | --- |
@@ -112,7 +144,7 @@ Each committed `CatalogMutation` stores the admin display name, UTC timestamp, o
 
 Grouping/restoration preserves screenshots, stored images and recorded image licences on stable release IDs and recomputes selected game screenshots on both sides. Public corrections refresh release ETags and Last-Modified values on both sides and for releases containing edited shared media, including shared-media representations. Lookup redirects, unknown checksums and direct-release ambiguity follow current membership. Title, label and checksum-metadata corrections leave `startup.revision` unchanged; effective startup and ordered checksums determine it. With `User-Agent: Arcadary/1.0`, an old ETag receives updated `200` content and the new ETag receives `304` for resources still resolvable. Already cached responses can remain until their TTL expires: **300 seconds for resources and one day for lookup redirects**. No early CDN eviction is promised. Reads remain anonymous and caller-independent.
 
-Reference-import precedence and the manual-import adapter remain #41's work. **Bootstrap reference imports must not run after any merge**, even if a later restore has reactivated an identity: the current importer can retitle or attach releases to a retired identity. Reference imports must also not overwrite authored records pending #41. Its importer must retain original key ownership, resolve canonical targets and never reclaim retired identities. Future adapters reuse this contract; no adapter, new reference source or game-file handling is included here.
+Reference-import precedence and the manual-import adapter remain #41's work. A supported reimport preserves the authored controller profile, evidence, authored-state tracking and stable release identity; an import making its edition binding incompatible fails before writes. This does not expand supported inputs or solve broader precedence. **Bootstrap reference imports must not run after any merge**, even if a later restore has reactivated an identity: the current importer can retitle or attach releases to a retired identity. Reference imports must also not overwrite other authored fields pending #41. Its importer must retain original key ownership, resolve canonical targets and never reclaim retired identities. Future adapters reuse this contract; no adapter, new reference source or game-file handling is included here.
 
 ## Screenshots
 

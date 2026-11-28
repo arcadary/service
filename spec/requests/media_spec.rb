@@ -25,6 +25,18 @@ RSpec.describe "Media", type: :request do
           expect(releases.map { |body| body.fetch("media").size }.sort).to eq([ 1, 2 ])
           expect(response.headers["Set-Cookie"]).to be_nil
         end
+
+        context "with edition-specific profiles" do
+          before do
+            release.update!(system: "snes", controller_profile: build(:controller_profile))
+            shared.release.update!(system: "snes", controller_profile: build(:controller_profile, prompts: []))
+          end
+          run_test! do
+            profiles = response.parsed_body.fetch("releases").to_h { |item| [ item.dig("release", "id"), item.dig("release", "controller_profile") ] }
+            expect(profiles.fetch(release.public_id).fetch("prompts")).to eq([ { "letter" => "A", "position" => "right" } ])
+            expect(profiles.fetch(shared.release.public_id).fetch("prompts")).to eq([])
+          end
+        end
       end
 
       response "400", "malformed SHA-1" do

@@ -9,6 +9,34 @@ RSpec.describe McpCatalogReadService do
     read(tool: tool, cursor: page.fetch("next_cursor"))
   end
 
+  def expand(tool:, value:)
+    return value unless value.is_a?(Hash)
+    return value.transform_values { |child| expand(tool: tool, value: child) } unless value.keys.sort == %w[items next_cursor]
+
+    items = value.fetch("items").map { |child| expand(tool: tool, value: child) }
+    items.concat(expand(tool: tool, value: next_page(tool: tool, page: value))) if value["next_cursor"]
+    items
+  end
+
+  it "continues every profile and evidence array in release records and retained audit snapshots" do
+    allow(ENV).to receive(:[]).and_call_original
+    allow(ENV).to receive(:[]).with("CATALOG_ADMIN_NAME").and_return("Synthetic Owner")
+    profile = build(:controller_profile)
+    release = create(:release, system: "snes", controller_profile: profile)
+    replacement = profile.merge("prompts" => ("A".."C").map { |letter| profile["prompts"].first.merge("letter" => letter) })
+    CatalogAuthoringService.call(operation: :correct_release, attributes: { id: release.public_id, controller_profile: replacement },
+      expected_revisions: { "game:#{release.game.public_id}" => 0, "release:#{release.public_id}" => 0 },
+      reason: "Synthetic profile evidence", idempotency_key: "mcp-profile")
+    data = expand(tool: "get_release", value: read(tool: "get_release", id: release.public_id, limit: 1))
+    expect(data.dig("canonical", "controller_profile")).to eq(replacement)
+    expect(data).to eq(CatalogAuthoringReadService.release(id: release.public_id))
+    history = expand(tool: "get_catalog_history", value: read(tool: "get_catalog_history", limit: 1))
+    expect(history).to eq(CatalogAuthoringReadService.history)
+    change = history.sole.fetch("record_changes").find { |item| item.dig("after", "id") == release.public_id }
+    expect(change.dig("before", "canonical", "controller_profile")).to eq(profile)
+    expect(change.dig("after", "canonical", "controller_profile")).to eq(replacement)
+  end
+
   it "searches aliases and system with deterministic continuation pages" do
     games = 3.times.map { |index| create(:game, public_id: "search-#{index}", title_aliases: [ "Synthetic alias" ]) }
     games.each { |game| create(:release, game: game, system: "c64") }

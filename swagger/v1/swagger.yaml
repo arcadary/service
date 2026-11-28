@@ -10,6 +10,8 @@ info:
 
     The pinned NES DAT includes distinct headered .nes and unheadered .unh releases. A launcher hashing NES payload bytes without the iNES header sends the matching unheadered checksum. All eight lists are covered, including C64 tape metadata; catalog coverage does not imply launcher playback support. No game files or player filenames are received, stored or served.
 
+    Optional release.controller_profile supplies version 1 original SNES face-button positions/labels and literal gameplay prompt letters for that exact stable release only. Each shared-media candidate retains its own facts; missing profiles are omitted, without defaults, candidate selection or edition inference. Public profiles exclude binding and evidence. Internal create_release/correct_release authoring accepts a whole profile or null to clear, under the revision/retry/audit contract; combined media edits require complete preview. The authored schema additionally requires binding matching system/region/revision (nullable edition strings, at most 128 characters) and 1–8 nonblank text citations per fact, each at most 500 characters. No images, clips, manual scans, file bytes, file names or game-file download locations in evidence. See README's Original controller layout and prompts and Catalog authoring sections for the internal contract. Profile corrections refresh release/media ETags and Last-Modified with existing cache lifetimes; reads remain anonymous and caller-independent. Controller classification, physical label/symbol mapping and local preferences belong to the launcher. No device/controller identity or choice is received. No real Zelda profile is populated; owner confirmation of exact identity, edition and textual evidence gates trial use only, not merge or issue closure. Publication and deployment remain outside scope.
+
     Release screenshots are ordered title then gameplay, empty when absent. Embedded game.screenshot is the picture from the lexicographically smallest stable release.id among that game's releases with screenshots, choosing gameplay then title, or null. This ordering does not recommend a release for playback. Each image exposes exactly kind, url, width, height and licence; licence is an empty string when no image licence is granted. Uploading grants no new rights. URLs use SCREENSHOT_PUBLIC_BASE_URL plus /v1/screenshots/{sha256}.png, with SHA-256 measured from the stored PNG, without signed/expiring parameters. Screenshot changes invalidate release and media validators, including sibling releases when the selected game picture changes.
 
     Image credits keyed by game.id: ucity — µCity graphics by AntonioND/SkyLyrac (Antonio Niño Díaz), [CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/), [upstream v1.3 notice](https://github.com/AntonioND/ucity/blob/v1.3/readme.rst#license). tobu-tobu-girl — Tobu Tobu Girl assets by Tangram Games, [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/), [upstream notice](https://github.com/SimonLarsen/tobutobugirl/blob/048a22c2d7ebbe25811322e8692803fa86bb643a/README.md#license). Arcadary re-encodes captures as pixel-only PNGs, removing metadata. Launchers can attribute using game.id and the image's public licence value together with these credits.
@@ -663,6 +665,72 @@ components:
           minimum: 1
         licence:
           type: string
+    ControllerProfile:
+      type: object
+      required:
+      - version
+      - layout
+      - prompts
+      additionalProperties: false
+      description: Optional exact-release original SNES layout and literal gameplay
+        prompt letters. Positions face the controller buttons. No system defaults
+        or edition inference. Binding and text citations remain internal. Controller
+        classification, physical label/symbol mapping and preferences belong to the
+        launcher. The Zelda trial is unconfirmed pending owner confirmation of the
+        stable release ID, checksum, edition and textual evidence; no real trial profile
+        is populated.
+      properties:
+        version:
+          type: integer
+          enum:
+          - 1
+        layout:
+          type: array
+          minItems: 4
+          maxItems: 4
+          items:
+            type: object
+            required:
+            - position
+            - label
+            additionalProperties: false
+            properties:
+              position:
+                type: string
+                enum:
+                - top
+                - right
+                - bottom
+                - left
+              label:
+                type: string
+                enum:
+                - X
+                - A
+                - B
+                - "Y"
+        prompts:
+          type: array
+          maxItems: 16
+          items:
+            type: object
+            required:
+            - letter
+            - position
+            additionalProperties: false
+            properties:
+              letter:
+                type: string
+                pattern: "^[A-Za-z]$"
+                minLength: 1
+                maxLength: 1
+              position:
+                type: string
+                enum:
+                - top
+                - right
+                - bottom
+                - left
     Release:
       type: object
       required:
@@ -705,6 +773,8 @@ components:
             revision:
               type: string
               nullable: true
+            controller_profile:
+              "$ref": "#/components/schemas/ControllerProfile"
             screenshots:
               type: array
               items:
