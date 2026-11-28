@@ -46,7 +46,7 @@ RSpec.describe CatalogAuthoringService do
     create(:media_file, sha1: "a" * 40)
     expect { author(operation: :create_release, attributes: attributes, expected_revisions: { "game:#{game.public_id}" => 0 }) }.to raise_error(described_class::Conflict, /existing media/)
     expect(game.reload.authoring_revision).to eq(0)
-    expect(Release.count).to eq(0)
+    expect(game.releases.count).to eq(0)
     expect(CatalogMutation.count).to eq(0)
   end
 
@@ -89,12 +89,26 @@ RSpec.describe CatalogAuthoringService do
     expect { author(operation: :create_game, attributes: attributes, expected_revisions: revisions, key: "retry") }.to raise_error(described_class::Conflict, /different request/)
   end
 
+  it "replays retry records saved by the original non-preview authoring contract" do
+    legacy = create(:game, public_id: "legacy-game", title: "Corrected", authoring_revision: 1)
+    entry = CatalogMutation.create!(idempotency_key: "legacy-retry",
+      fingerprint: "3f47934474fe8b1e3fb3d7eb9ff7515b30a1542820173add6e65e0ae623f723b",
+      operation: "correct_game", admin_name: "Catalog Owner", reason: "Synthetic catalog correction")
+    entry.update!(result: { "audit_id" => entry.id, "records" => [ CatalogAuthoringReadService.record(legacy) ] })
+    legacy.update!(title: "Subsequent correction", authoring_revision: 2)
+    replay = author(operation: :correct_game, attributes: { id: legacy.public_id, title: "Corrected" },
+      expected_revisions: { "game:legacy-game" => 0 }, key: "legacy-retry")
+    expect(replay).to eq(entry.result)
+    expect(legacy.reload.title).to eq("Subsequent correction")
+    expect(CatalogMutation.count).to eq(1)
+  end
+
   it "replays release creation without creating duplicate media or advancing its parent again" do
     attributes = { game_id: game.public_id, system: "gb", media: [ { sha1: "a" * 40, key: "main", position: 1, role: "game" } ] }
     revisions = { "game:#{game.public_id}" => 0 }
     result = author(operation: :create_release, attributes: attributes, expected_revisions: revisions, key: "new-release")
     expect(author(operation: :create_release, attributes: attributes, expected_revisions: revisions, key: "new-release")).to eq(result)
-    expect([ Release.count, MediaFile.count, CatalogMutation.count, game.reload.authoring_revision ]).to eq([ 1, 1, 1, 1 ])
+    expect([ game.releases.count, MediaFile.where(sha1: "a" * 40).count, CatalogMutation.count, game.reload.authoring_revision ]).to eq([ 1, 1, 1, 1 ])
     expect { author(operation: :create_release, attributes: attributes, expected_revisions: revisions) }.to raise_error(described_class::Conflict, /stale/)
   end
 
@@ -123,7 +137,7 @@ RSpec.describe CatalogAuthoringService do
   it "rolls invalid release creation back without creating files or advancing the game" do
     attributes = { game_id: game.public_id, system: "c64", startup: { schema: 1, boot: "missing", drives: { "8" => "missing" } }, media: [ { key: "main", position: 1, role: "game", sha1: "a" * 40 } ] }
     expect { author(operation: :create_release, attributes: attributes, expected_revisions: revisions_for(record: game)) }.to raise_error(ActiveRecord::RecordInvalid)
-    expect([ Release.count, MediaFile.count, CatalogMutation.count, game.reload.authoring_revision ]).to eq([ 0, 0, 0, 0 ])
+    expect([ game.releases.count, MediaFile.where(sha1: "a" * 40).count, CatalogMutation.count, game.reload.authoring_revision ]).to eq([ 0, 0, 0, 0 ])
   end
 
   it "fails closed for blank admin name, reason or retry key" do

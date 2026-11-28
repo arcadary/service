@@ -77,4 +77,34 @@ RSpec.describe ScreenshotService do
     release.game.update!(screenshot_licence: "CC-BY-4.0")
     expect(upload_screenshot(release: release).licence).to eq("CC-BY-4.0")
   end
+
+  it "preserves release-scoped images and licences while regrouping and restoring screenshot selection on both games" do
+    allow(ENV).to receive(:[]).and_call_original
+    allow(ENV).to receive(:[]).with("CATALOG_ADMIN_NAME").and_return("Catalog Owner")
+    source = create(:game, screenshot_licence: "CC-BY-4.0")
+    target = create(:game, screenshot_licence: "CC-BY-4.0")
+    moving = create(:release, public_id: "a", game: source)
+    staying = create(:release, public_id: "b", game: source)
+    existing = create(:release, public_id: "z", game: target)
+    moved = upload_screenshot(release: moving)
+    stayed = upload_screenshot(release: staying)
+    prior = upload_screenshot(release: existing)
+    images = Screenshot.order(:id).map(&:attributes)
+    bytes = moved.blob.download
+    operations = [
+      [ :reassign_release, { id: moving.public_id, game_id: target.public_id } ],
+      [ :merge_games, { id: source.public_id, into_game_id: target.public_id } ],
+      [ :restore_game, { id: source.public_id, canonical_game_id: target.public_id, release_ids: [ moving.public_id, staying.public_id ] } ]
+    ]
+    operations.each_with_index do |(operation, attributes), index|
+      proposal = CatalogAuthoringService.preview(operation: operation, attributes: attributes)
+      CatalogAuthoringService.call(operation: operation, attributes: attributes, preview: proposal,
+        expected_revisions: proposal.fetch("expected_revisions"), reason: "Synthetic screenshot regrouping", idempotency_key: SecureRandom.uuid)
+      expect(Screenshot.order(:id).map(&:attributes)).to eq(images)
+      expect(moved.blob.download).to eq(bytes)
+      expect(described_class.selected_for(game: source.reload)).to eq([ stayed, nil, moved ][index])
+      expect(described_class.selected_for(game: target.reload)).to eq([ moved, moved, prior ][index])
+    end
+    expect(moved.reload).to have_attributes(release_id: moving.id, licence: "CC-BY-4.0")
+  end
 end
