@@ -6,6 +6,7 @@ class PlaythroughStage < ApplicationRecord
   class NotFound < StandardError; end
   class InterruptedTransfer < StandardError; end
   class StorageUnavailable < StandardError; end
+  class UploadNotAuthorized < StandardError; end
   class StageIncomplete < StandardError; end
   class InvalidHls < StandardError; end
   class PackageIntegrityMismatch < StandardError; end

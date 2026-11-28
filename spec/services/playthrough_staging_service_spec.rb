@@ -50,14 +50,11 @@ RSpec.describe PlaythroughStagingService do
     end
   end
 
-  it "rejects absent capture provenance, multiple targets and duplicate JSON keys" do
+  it "rejects absent capture provenance and multiple targets" do
     [ declaration.except("capture"), declaration.merge("capture" => { "tool" => "", "version" => "1", "captured_at" => "today" }),
       declaration.merge("release_id" => [ release.public_id, "other" ]) ].each do |input|
       expect { declare_playthrough(input: input) }.to raise_error(PlaythroughStage::InvalidDeclaration)
     end
-    json = JSON.generate(declaration).sub('"release_id":', '"release_id":"other","release_id":')
-    expect { described_class.create(io: StringIO.new(json), content_type: "application/json", verifier: "synthetic-admin") }
-      .to raise_error(PlaythroughStage::InvalidDeclaration)
   end
 
   it "computes the specified bytewise manifest identity and replays normalized declarations without adding accounting" do
@@ -113,12 +110,5 @@ RSpec.describe PlaythroughStagingService do
     expect { declare_playthrough }.to raise_error(PlaythroughStage::TooLarge)
     declaration["manifest"] = [ entry.merge("byte_size" => 8.megabytes) ]
     expect(declare_playthrough.objects.sole.byte_size).to eq(8.megabytes)
-  end
-
-  it "bounds actual declaration reads and accepts exactly 1 MiB" do
-    json = JSON.generate(declaration)
-    expect(described_class.create(io: StringIO.new(json.ljust(1.megabyte)), content_type: "application/json", verifier: "synthetic-admin")).to be_persisted
-    expect { described_class.create(io: StringIO.new(json.ljust(1.megabyte + 1)), content_type: "application/json", verifier: "synthetic-admin") }
-      .to raise_error(PlaythroughStage::TooLarge)
   end
 end

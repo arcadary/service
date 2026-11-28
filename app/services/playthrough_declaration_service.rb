@@ -1,19 +1,12 @@
 class PlaythroughDeclarationService
-  class UniqueObject < Hash
-    def []=(key, value)
-      raise PlaythroughStage::InvalidDeclaration if key?(key)
-
-      super
-    end
-  end
-
   SHA1 = /\A[0-9a-f]{40}\z/
   SHA256 = /\A[0-9a-f]{64}\z/
   CONTENT_TYPE = %r{\A[a-z0-9!#$&^_.+-]+/[a-z0-9!#$&^_.+-]+\z}
 
-  def self.normalize(io:, verifier:)
-    bytes = PlaythroughStageInputService.read(io: io, limit: PlaythroughStageInputService::DECLARATION_BYTES)
-    input = canonical(value: JSON.parse(bytes, object_class: UniqueObject))
+  def self.normalize(declaration:, verifier:)
+    raise PlaythroughStage::TooLarge if JSON.generate(declaration).bytesize > PlaythroughStageInputService::DECLARATION_BYTES
+
+    input = canonical(value: declaration.deep_stringify_keys)
     exact_keys!(input, required: %w[retry_key release_id source_sha1 capture manifest], optional: %w[verification])
     text!(input["retry_key"], maximum: 200)
     text!(input["release_id"], maximum: 200)
@@ -26,7 +19,7 @@ class PlaythroughDeclarationService
     input["manifest"] = manifest!(input.fetch("manifest"))
     input["verification"] = verification!(input.fetch("verification"), source_sha1: input.fetch("source_sha1"), verifier: verifier) if input.key?("verification")
     input
-  rescue JSON::ParserError, JSON::NestingError, ArgumentError, EncodingError
+  rescue JSON::GeneratorError, ArgumentError, EncodingError
     raise PlaythroughStage::InvalidDeclaration
   end
 

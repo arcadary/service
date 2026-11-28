@@ -49,35 +49,7 @@ RSpec.configure do |config|
       components: {
         securitySchemes: { capture_token: { type: :http, scheme: :bearer }, private_service_basic: { type: :http, scheme: :basic } },
         schemas: {
-          playthrough_declaration: {
-            type: :object, additionalProperties: false, required: %w[retry_key release_id source_sha1 capture manifest],
-            properties: {
-              retry_key: { type: :string, minLength: 1, maxLength: 200 }, release_id: { type: :string, minLength: 1, maxLength: 200 },
-              source_sha1: { type: :string, pattern: '^[0-9a-f]{40}$' },
-              capture: {
-                type: :object, additionalProperties: false, required: %w[tool version captured_at],
-                properties: { tool: { type: :string, minLength: 1, maxLength: 200 }, version: { type: :string, minLength: 1, maxLength: 200 },
-                  captured_at: { type: :string, format: 'date-time' } }
-              },
-              verification: {
-                type: :object, additionalProperties: false, required: %w[source_sha1 payload_sha1 relationship method result verifier verified_at evidence],
-                properties: {
-                  source_sha1: { type: :string, pattern: '^[0-9a-f]{40}$' }, payload_sha1: { type: :string, pattern: '^[0-9a-f]{40}$' },
-                  relationship: { type: :string, enum: %w[trailing_padding verified_equivalence] }, removed_bytes: { type: :integer, minimum: 1 },
-                  method: { type: :string, minLength: 1, maxLength: 8000 }, result: { type: :string, enum: %w[success] },
-                  verifier: { type: :string, minLength: 1, maxLength: 8000 }, verified_at: { type: :string, format: 'date-time' },
-                  evidence: { type: :string, minLength: 1, maxLength: 8000 }
-                }
-              },
-              manifest: {
-                type: :array, minItems: 1, maxItems: 4096,
-                items: { type: :object, additionalProperties: false, required: %w[path byte_size sha256 content_type], properties: {
-                  path: { type: :string, minLength: 1, maxLength: 1024 }, byte_size: { type: :integer, minimum: 1, maximum: 8_388_608 },
-                  sha256: { type: :string, pattern: '^[0-9a-f]{64}$' }, content_type: { type: :string, minLength: 1, maxLength: 200 }
-                } }
-              }
-            }
-          },
+          playthrough_declaration: McpPlaythroughToolsService.input_schema,
           Screenshot: screenshot_schema,
           ControllerProfile: {
             type: :object, required: %w[version layout prompts], additionalProperties: false,

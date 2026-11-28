@@ -89,14 +89,12 @@ paths:
       summary: Authenticated stateless MCP Streamable HTTP
       security:
       - private_service_basic: []
-      description: Catalog read tools and staged screenshot publication over MCP 1.11.0;
-        see https://github.com/arcadary/service/blob/main/docs/mcp.md for schemas,
-        targeting, expiry, retries, pagination, protocol versions, client setup and
-        deployment exclusions. PNG bytes use the separate authenticated HTTP staging
-        route. Every method and subtree authenticates before parsing and sends no-store.
-        No OAuth discovery or login. POST bodies are limited to 65536 bytes and JSON
-        nesting to 64; finite JSON replies only, without SSE subscriptions or persistent
-        sessions.
+      description: |
+        Catalog reads, staged screenshot publication and private HLS intake over MCP 1.11.0. See https://github.com/arcadary/service/blob/main/docs/mcp.md for discoverable input/output schemas, targeting, expiry, retries, pagination and client setup. Every method and subtree requires current shared admin Basic credentials before parsing and returns no-store. No OAuth discovery/login, SSE subscriptions or persistent sessions.
+
+        Complete HTTP request bodies are bounded at 2 MiB (2097152 bytes) regardless of Content-Length; an oversized request returns HTTP 413. JSON nesting remains limited to 64. begin_playthrough_staging arguments follow the playthrough_declaration schema: stable release public_id, exact source_sha1, capture provenance, retry_key, immutable manifest and explicit authenticated mismatch-verification evidence when needed. Limits apply together: 1 MiB (1048576 bytes) UTF-8 compact argument JSON before normalization, excluding the JSON-RPC envelope; 4096 objects; 8 MiB (8388608 bytes) each; 4 GiB (4294967296 bytes) total. A 4096-object, 4 GiB declaration with short paths fits. Over-limit declarations return MCP tool error stage_too_large without a stage or authorization.
+
+        Begin returns staging_id, release_id, package_sha256, state, every object's {object_id, path, received}, capability and expires_at, within 1 MiB of structured JSON before SDK text representation. No declaration echo, bulk bytes, credentials or signed upload URLs. Identical normalized replay retains stage/package/progress and issues a fresh capability; changed declarations conflict. Capabilities bind that exact release, stage, immutable manifest and declared objects and expire exactly 900 seconds after issuance, invalid at or after expires_at. Earlier tokens retain their expiry. Raw object PUT requires current Basic credentials plus X-Arcadary-Upload-Capability, never a URL token. Missing, expired or mismatched tokens return 403 upload_not_authorized before application transfer reads or storage access, including accepted-object retries. Metadata GET never mints or renews authorization; standalone HTTP stage POST is removed. No staged-byte playback/download route or public exposure. PNG bytes retain their separate authenticated HTTP staging route. No footage publication, provisioning or deployment is performed.
       parameters:
       - name: Authorization
         in: header
@@ -175,6 +173,43 @@ paths:
                     type: string
                     enum:
                     - authentication_unavailable
+        '413':
+          description: complete HTTP request exceeds 2 MiB
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - jsonrpc
+                - error
+                properties:
+                  jsonrpc:
+                    type: string
+                    enum:
+                    - '2.0'
+                  id:
+                    type: integer
+                    nullable: true
+                  error:
+                    type: object
+                    additionalProperties: false
+                    required:
+                    - code
+                    - message
+                    properties:
+                      code:
+                        type: integer
+                        enum:
+                        - -32600
+                      message:
+                        type: string
       requestBody:
         content:
           application/json:
@@ -281,206 +316,6 @@ paths:
                     type: string
                     enum:
                     - not_found
-  "/v1/playthrough-stages.json":
-    post:
-      summary: Declare a private release-bound playthrough package
-      security:
-      - private_service_basic: []
-      parameters: []
-      description: |
-        Authenticated by shared admin Basic before parsing, body reads or logging. A strict single-target declaration binds a stable release public_id, capture source SHA-1, provenance and immutable manifest. Unknown fields and duplicate JSON keys are rejected. SHA-1s and SHA-256s are lowercase. Capture and verification times require ISO 8601 with an explicit timezone and normalize to UTC microseconds.
-
-        The source must belong to the named release, or carry a single offline successful verification attestation whose payload belongs to that release. The verifier must equal the authenticated admin username. Evidence must name exactly the source and payload SHA-1s, with no other checksum proposals. trailing_padding requires a positive removed_bytes, including 127 for the trial when verified; verified_equivalence accepts other byte-verified relationships without removed_bytes. No game bytes are accepted, no title matching or launcher-checksum inference occurs.
-
-        Each entry has a unique package-relative path, positive byte_size, lowercase sha256 and exact MIME content_type without parameters. Paths exclude absolute paths, URLs, traversal/dot/empty components, whitespace, backslashes, colon, percent, query/fragment and control characters. Package identity is SHA-256 of UTF-8 compact JSON of [path, byte_size, sha256, content_type] arrays sorted bytewise by path. Reordering manifest entries or JSON keys and equivalent timestamp offsets replay the original stage; changing the normalized declaration with the same retry_key conflicts. Successful replays return 201 with current progress.
-
-        Ceilings: 1 MiB actual declaration bytes, 4096 objects, 8 MiB per object, 4 GiB summed declared bytes. Actual reads are bounded independently of Content-Length. All responses are no-store and log-suppressed across the complete subtree. No download, playback, redirect, direct-upload capability or public storage route exists. received means all objects stored, still unvalidated. Internal validation fixes the root at index.m3u8 without changing declaration or package identity. Terminal validated/validation_failed states and their persisted result/error are replayed in metadata. No HTTP validation route exists; publication/cleanup and private delivery/trial checks remain separate. Catalog and screenshot licences grant no video rights; commercial footage remains private and absent from anonymous responses.
-      responses:
-        '201':
-          description: declaration persisted or identical replay
-          headers:
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                - no-store
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: false
-                required:
-                - staging_id
-                - package_sha256
-                - declaration
-                - state
-                - objects
-                properties:
-                  staging_id:
-                    type: string
-                  package_sha256:
-                    type: string
-                    pattern: "^[0-9a-f]{64}$"
-                  declaration:
-                    "$ref": "#/components/schemas/playthrough_declaration"
-                  state:
-                    type: string
-                    enum:
-                    - incomplete
-                    - received
-                    - validated
-                    - validation_failed
-                  validation_result:
-                    "$ref": "#/components/schemas/playthrough_validation_result"
-                  validation_error:
-                    type: string
-                    enum:
-                    - invalid_hls
-                    - package_integrity_mismatch
-                  objects:
-                    type: array
-                    items:
-                      type: object
-                      additionalProperties: false
-                      required:
-                      - object_id
-                      - path
-                      - received
-                      properties:
-                        object_id:
-                          type: string
-                        path:
-                          type: string
-                        received:
-                          type: boolean
-        '400':
-          description: invalid declaration or interrupted read
-          headers:
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                - no-store
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: false
-                required:
-                - error
-                properties:
-                  error:
-                    type: string
-                    enum:
-                    - invalid_declaration
-                    - interrupted_transfer
-        '401':
-          description: authentication failed
-          headers:
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                - no-store
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: false
-                required:
-                - error
-                properties:
-                  error:
-                    type: string
-                    enum:
-                    - unauthorized
-        '404':
-          description: release not found
-          headers:
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                - no-store
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: false
-                required:
-                - error
-                properties:
-                  error:
-                    type: string
-                    enum:
-                    - not_found
-        '409':
-          description: target mismatch or changed retry declaration
-          headers:
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                - no-store
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: false
-                required:
-                - error
-                properties:
-                  error:
-                    type: string
-                    enum:
-                    - target_mismatch
-                    - stage_conflict
-        '413':
-          description: declaration or package exceeds a ceiling
-          headers:
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                - no-store
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: false
-                required:
-                - error
-                properties:
-                  error:
-                    type: string
-                    enum:
-                    - stage_too_large
-        '503':
-          description: authentication not configured
-          headers:
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                - no-store
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: false
-                required:
-                - error
-                properties:
-                  error:
-                    type: string
-                    enum:
-                    - authentication_unavailable
-      requestBody:
-        content:
-          application/json:
-            schema:
-              "$ref": "#/components/schemas/playthrough_declaration"
-        required: true
   "/v1/playthrough-stages/{staging_id}.json":
     get:
       summary: Read private declaration and durable object progress
@@ -516,12 +351,15 @@ paths:
                 additionalProperties: false
                 required:
                 - staging_id
+                - release_id
                 - package_sha256
                 - declaration
                 - state
                 - objects
                 properties:
                   staging_id:
+                    type: string
+                  release_id:
                     type: string
                   package_sha256:
                     type: string
@@ -634,17 +472,29 @@ paths:
         required: true
         schema:
           type: string
-      description: 'Raw bytes with the exact declared Content-Type; any valid declared
-        MIME type without parameters is accepted. Exact size and SHA-256 must match,
-        including on successful retries. Reads are bounded at 8 MiB regardless of
-        Content-Length. Success returns an immutable object_id/received_at receipt;
-        identical retries return exactly that receipt, even after other objects finish.
-        GET stage metadata for aggregate progress. Fresh private storage keys isolate
-        attempts and stages; completion follows storage success. Interrupted reads
-        and storage failure leave the object incomplete and retryable after restart.
-        No HLS validation or playback is performed. The deployment owner must verify
-        the zone upload setting, which can be lower than Cloudflare''s documented
-        100 MB minimum plan limit: https://developers.cloudflare.com/cache/concepts/default-cache-behavior/#upload-limits
+      - name: X-Arcadary-Upload-Capability
+        in: header
+        required: true
+        schema:
+          type: string
+      description: 'Requires current shared Basic credentials plus X-Arcadary-Upload-Capability
+        from MCP begin_playthrough_staging. Capabilities bind the exact release, stage,
+        immutable manifest and declared objects, never travel in URLs, and expire
+        exactly 900 seconds after issuance (invalid at or after expires_at). Identical
+        begin replay renews without extending older capabilities; HTTP metadata reads
+        never renew. Missing, expired or mismatched authorization returns 403 upload_not_authorized
+        before application body or storage reads, including accepted-object retries.
+        Raw bytes with the exact declared Content-Type; any valid declared MIME type
+        without parameters is accepted. Exact size and SHA-256 must match, including
+        on successful retries. Reads are bounded at 8 MiB regardless of Content-Length.
+        Success returns an immutable object_id/received_at receipt; identical retries
+        return exactly that receipt, even after other objects finish. GET stage metadata
+        for aggregate progress. Fresh private storage keys isolate attempts and stages;
+        completion follows storage success. Interrupted reads and storage failure
+        leave the object incomplete and retryable after restart. No HLS validation
+        or playback is performed. The deployment owner must verify the zone upload
+        setting, which can be lower than Cloudflare''s documented 100 MB minimum plan
+        limit: https://developers.cloudflare.com/cache/concepts/default-cache-behavior/#upload-limits
         (#57).'
       responses:
         '200':
@@ -709,8 +559,8 @@ paths:
                     type: string
                     enum:
                     - unauthorized
-        '404':
-          description: stage or declared object not found
+        '403':
+          description: missing, expired or mismatched upload capability
           headers:
             Cache-Control:
               schema:
@@ -728,7 +578,7 @@ paths:
                   error:
                     type: string
                     enum:
-                    - not_found
+                    - upload_not_authorized
         '409':
           description: bytes, size or content type mismatch
           headers:
@@ -1389,9 +1239,12 @@ components:
           type: string
           minLength: 1
           maxLength: 200
+          description: Stable release public_id, never a title or checksum selector.
         source_sha1:
           type: string
           pattern: "^[0-9a-f]{40}$"
+          minLength: 40
+          maxLength: 40
         capture:
           type: object
           additionalProperties: false
@@ -1411,6 +1264,7 @@ components:
             captured_at:
               type: string
               format: date-time
+              maxLength: 64
         verification:
           type: object
           additionalProperties: false
@@ -1427,9 +1281,13 @@ components:
             source_sha1:
               type: string
               pattern: "^[0-9a-f]{40}$"
+              minLength: 40
+              maxLength: 40
             payload_sha1:
               type: string
               pattern: "^[0-9a-f]{40}$"
+              minLength: 40
+              maxLength: 40
             relationship:
               type: string
               enum:
@@ -1453,6 +1311,7 @@ components:
             verified_at:
               type: string
               format: date-time
+              maxLength: 64
             evidence:
               type: string
               minLength: 1
@@ -1481,6 +1340,8 @@ components:
               sha256:
                 type: string
                 pattern: "^[0-9a-f]{64}$"
+                minLength: 64
+                maxLength: 64
               content_type:
                 type: string
                 minLength: 1
@@ -1784,6 +1645,8 @@ components:
               sha256:
                 type: string
                 pattern: "^[0-9a-f]{64}$"
+                minLength: 64
+                maxLength: 64
               content_type:
                 type: string
                 minLength: 1
@@ -1792,9 +1655,12 @@ components:
           type: string
           minLength: 1
           maxLength: 200
+          description: Stable release public_id, never a title or checksum selector.
         source_sha1:
           type: string
           pattern: "^[0-9a-f]{40}$"
+          minLength: 40
+          maxLength: 40
         capture:
           type: object
           additionalProperties: false
@@ -1814,6 +1680,7 @@ components:
             captured_at:
               type: string
               format: date-time
+              maxLength: 64
         verification:
           type: object
           additionalProperties: false
@@ -1830,9 +1697,13 @@ components:
             source_sha1:
               type: string
               pattern: "^[0-9a-f]{40}$"
+              minLength: 40
+              maxLength: 40
             payload_sha1:
               type: string
               pattern: "^[0-9a-f]{40}$"
+              minLength: 40
+              maxLength: 40
             relationship:
               type: string
               enum:
@@ -1856,6 +1727,7 @@ components:
             verified_at:
               type: string
               format: date-time
+              maxLength: 64
             evidence:
               type: string
               minLength: 1
