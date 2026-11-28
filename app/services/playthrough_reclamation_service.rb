@@ -5,21 +5,27 @@ class PlaythroughReclamationService
       current = stage.attempts.find(attempt.id)
       next if referenced?(stage: stage, attempt: current, reclaim: claim.present?)
 
-      if stage.expired_at
-        stage.objects.where(blob_id: current.blob_identity).each { |object| object.update!(blob_id: nil, received_at: nil) }
-      end
-      current.update!(cleanup_pending: true, absence_checked_at: nil)
-      stage.update!(reclaimed_at: nil) if stage.reclaimed_at
       current
     end
     return unless work
 
     begin
+      service = ActiveStorage::Blob.services.fetch(work.service_name)
+      if claim && work.absence_checked_at && !work.cleanup_pending &&
+          !ActiveStorage::Blob.exists?(id: work.blob_identity, key: work.private_key) && !service.exist?(work.private_key)
+        return
+      end
+
       PlaythroughLifecycleService.synchronize(stage_id: attempt.playthrough_stage_id) do |stage|
         PlaythroughAttemptService.require_live!(stage: stage, attempt: claim) if claim
         raise PlaythroughStage::Conflict if referenced?(stage: stage, attempt: work, reclaim: claim.present?)
+
+        if stage.expired_at
+          stage.objects.where(blob_id: work.blob_identity).each { |object| object.update!(blob_id: nil, received_at: nil) }
+        end
+        stage.attempts.find(work.id).update!(cleanup_pending: true, absence_checked_at: nil)
+        stage.update!(reclaimed_at: nil) if stage.reclaimed_at
       end
-      service = ActiveStorage::Blob.services.fetch(work.service_name)
       service.delete(work.private_key)
       raise PlaythroughStage::StorageUnavailable if service.exist?(work.private_key)
     rescue PlaythroughStage::Conflict

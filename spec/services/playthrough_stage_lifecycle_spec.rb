@@ -94,6 +94,26 @@ RSpec.describe "Playthrough stage lifecycle" do
     end
   end
 
+  it "preserves reclaimed receipts throughout clean tombstone revisits" do
+    freeze_time do
+      stage = declare_playthrough
+      receive_playthrough(stage: stage)
+      travel 24.hours
+      PlaythroughStageCleanupService.call
+      reclaimed_at = stage.reload.reclaimed_at
+      attempt = stage.attempts.find_by!(kind: "transfer")
+      travel 1.hour
+      service = ActiveStorage::Blob.service
+      allow(service).to receive(:exist?).with(attempt.private_key).and_wrap_original do |method, key|
+        expect(stage.reload.reclaimed_at).to eq(reclaimed_at)
+        expect(attempt.reload.cleanup_pending).to be(false)
+        method.call(key)
+      end
+      PlaythroughStageCleanupService.call
+      expect(stage.reload.reclaimed_at).to eq(reclaimed_at)
+    end
+  end
+
   it "revisits reclaimed tombstones after a late write and failed self-deletion" do
     freeze_time do
       stage = declare_playthrough
@@ -114,6 +134,11 @@ RSpec.describe "Playthrough stage lifecycle" do
       expect(service.exist?(attempt.private_key)).to be(false)
       expect(stage.objects.find(object.id).blob_id).to be_nil
       service.upload(attempt.private_key, StringIO.new("crashed before recording pending work"))
+      allow(service).to receive(:delete).with(attempt.private_key).and_wrap_original do |method, key|
+        expect(stage.reload.reclaimed_at).to be_nil
+        expect(attempt.reload.cleanup_pending).to be(true)
+        method.call(key)
+      end
       PlaythroughStageCleanupService.call
       expect(service.exist?(attempt.private_key)).to be(false)
       expect(stage.attempts.find(attempt.id).private_key).to eq(attempt.private_key)
@@ -171,7 +196,7 @@ RSpec.describe "Playthrough stage lifecycle" do
       expect(stage.reload.reclaimed_at).to be_nil
       expect(stage.objects.where.not(blob_id: nil).count).to eq(1)
       PlaythroughStageCleanupService.call
-      expect(ActiveStorage::Blob.service).to have_received(:delete).exactly(1000).times
+      expect(ActiveStorage::Blob.service).to have_received(:delete).exactly(501).times
       expect(stage.reload.reclaimed_at).to be_present
       expect(stage.attempts.where(kind: "transfer").count).to eq(501)
     end

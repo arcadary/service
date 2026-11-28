@@ -4,6 +4,6 @@ class PlaythroughStageCleanupJob < ApplicationJob
   end
 
   def perform
-    Rails.logger.silence(Logger::UNKNOWN) { PlaythroughStageCleanupService.call }
+    PlaythroughStageCleanupService.call
   end
 end
