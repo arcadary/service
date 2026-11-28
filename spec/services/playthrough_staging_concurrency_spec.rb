@@ -351,9 +351,142 @@ RSpec.describe "Concurrent playthrough staging" do
     cleanup_playthrough(release: release) if release
   end
 
+  it "serializes identical promotion claims and refuses a competing binding" do
+    release = create(:release)
+    files = hls_files
+    stage = declare_hls(release: release, files: files)
+    receive_hls(stage: stage, files: files)
+    PlaythroughValidationService.validate(staging_id: stage.public_id)
+    ready, start = Queue.new, Queue.new
+    threads = [ stage.package_sha256, stage.package_sha256, "0" * 64 ].map do |package|
+      Thread.new do
+        ActiveRecord::Base.connection_pool.with_connection do
+          ready.push(true)
+          start.pop
+          PlaythroughPromotionService.claim_promotion(staging_id: stage.public_id, release_id: release.public_id, package_sha256: package)
+        rescue PlaythroughStage::Conflict => error
+          error
+        end
+      end
+    end
+    Timeout.timeout(10) { 3.times { ready.pop } }
+    3.times { start.push(true) }
+    results = threads.map(&:value)
+    expect(results.first(2).uniq.size).to eq(1)
+    expect(results.last).to be_a(PlaythroughStage::Conflict)
+    expect(stage.promotion_claims.count).to eq(1)
+    expect(stage.reload.promotion_state).to eq("promoting")
+  ensure
+    3.times { start.push(true) } if start
+    threads&.each(&:join)
+    cleanup_playthrough(release: release) if release
+  end
+
+  it "rechecks protection when cleanup selected a stage before its promotion transaction committed" do
+    freeze_time
+    release = create(:release)
+    files = hls_files
+    stage = declare_hls(release: release, files: files)
+    receive_hls(stage: stage, files: files)
+    PlaythroughValidationService.validate(staging_id: stage.public_id)
+    pinned, commit, selected, reclaim = Queue.new, Queue.new, Queue.new, Queue.new
+    allow(PlaythroughLifecycleService).to receive(:synchronize).and_wrap_original do |method, **arguments, &operation|
+      method.call(**arguments) do |current|
+        result = operation.call(current)
+        if Thread.current[:claiming_promotion]
+          pinned.push(true)
+          commit.pop
+        end
+        result
+      end
+    end
+    allow(PlaythroughStageCleanupService).to receive(:claim).and_wrap_original do |method, **arguments|
+      selected.push(true)
+      reclaim.pop
+      method.call(**arguments)
+    end
+    promoter = Thread.new do
+      Thread.current[:claiming_promotion] = true
+      ActiveRecord::Base.connection_pool.with_connection do
+        PlaythroughPromotionService.claim_promotion(staging_id: stage.public_id, release_id: release.public_id, package_sha256: stage.package_sha256)
+      end
+    end
+    Timeout.timeout(10) { pinned.pop }
+    travel 24.hours
+    cleaner = Thread.new { ActiveRecord::Base.connection_pool.with_connection { PlaythroughStageCleanupService.call } }
+    Timeout.timeout(10) { selected.pop }
+    commit.push(true)
+    expect(promoter.value).to be_a(String)
+    reclaim.push(true)
+    cleaner.value
+    expect(stage.reload).to have_attributes(promotion_state: "promoting", expired_at: nil, reclaimed_at: nil, cleanup_visits: 0)
+    expect(stage.objects.reload.map(&:blob_id)).to all(be_present)
+  ensure
+    commit&.push(true)
+    reclaim&.push(true)
+    promoter&.join
+    cleaner&.join
+    travel_back
+    cleanup_playthrough(release: release) if release
+  end
+
+  %w[completed released].each do |outcome|
+    it "protects a fake publisher paused before copying and completion across expiry until #{outcome}" do
+      freeze_time
+      release = create(:release)
+      files = hls_files
+      stage = declare_hls(release: release, files: files)
+      receive_hls(stage: stage, files: files)
+      result = PlaythroughValidationService.validate(staging_id: stage.public_id)
+      claimed, copy, copied, finish = Queue.new, Queue.new, Queue.new, Queue.new
+      publisher = lambda do
+        token = PlaythroughPromotionService.claim_promotion(staging_id: stage.public_id, release_id: release.public_id, package_sha256: stage.package_sha256)
+        claimed.push(token)
+        copy.pop
+        expect(ActiveRecord::Base.connection.transaction_open?).to be(false)
+        copied.push(stage.objects.reload.to_h { |object| [ object.path, object.blob.download.b ] })
+        finish.pop
+        raise IOError, "synthetic copy failure" if outcome == "released"
+
+        PlaythroughStage.transaction { PlaythroughPromotionService.complete_promotion(claim: token) }
+      rescue IOError
+        PlaythroughPromotionService.release_promotion(claim: token)
+      end
+      thread = Thread.new { ActiveRecord::Base.connection_pool.with_connection { publisher.call } }
+      token = Timeout.timeout(10) { claimed.pop }
+      PlaythroughStageCleanupService.call
+      travel 24.hours
+      PlaythroughStageCleanupService.call
+      expect(stage.reload).to have_attributes(promotion_state: "promoting", expired_at: nil, cleanup_visits: 0)
+      expect(PlaythroughPromotionService.claim_promotion(staging_id: stage.public_id, release_id: release.public_id, package_sha256: stage.package_sha256)).to eq(token)
+      copy.push(true)
+      expect(Timeout.timeout(10) { copied.pop }).to eq(files.transform_values(&:b))
+      PlaythroughStageCleanupService.call
+      expect(stage.reload.validation_result).to eq(result)
+      finish.push(true)
+      thread.value
+      PlaythroughStageCleanupService.call
+      if outcome == "completed"
+        expect(stage.reload).to have_attributes(promotion_state: "published", expired_at: nil, reclaimed_at: nil, cleanup_visits: 0)
+        expect(stage.objects.reload.map(&:blob_id)).to all(be_present)
+        expect(stage.validation_result).to eq(result)
+      else
+        expect(stage.reload).to have_attributes(promotion_state: nil, expired_at: stage.declared_at + 24.hours, reclaimed_at: be_present)
+        expect(stage.objects.reload.map(&:blob_id)).to all(be_nil)
+      end
+    ensure
+      copy&.push(true)
+      finish&.push(true)
+      thread&.join
+      travel_back
+      cleanup_playthrough(release: release) if release
+    end
+  end
+
   def cleanup_playthrough(release:)
     stages = PlaythroughStage.where(release: release)
     stages.each do |stage|
+      PlaythroughPromotionClaim.where(playthrough_stage: stage).delete_all
       PlaythroughStageAttempt.where(playthrough_stage: stage).delete_all
       PlaythroughStageObject.where(playthrough_stage: stage).delete_all
       ActiveStorage::Blob.where("key LIKE ?", "playthrough-stages/#{stage.public_id}/%").each(&:purge)
