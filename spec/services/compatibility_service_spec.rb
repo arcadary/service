@@ -42,6 +42,18 @@ RSpec.describe CompatibilityService do
       expect(CompatibilityResult.count).to eq(1)
     end
 
+    it "replays a result recorded before playthrough attachments were supported" do
+      payload = arguments.except(:owns_file).merge(sha1: release.sha1, tested_at: "2026-11-20T18:00:00.000000Z", requires_input: []).stringify_keys
+      first = create(:compatibility_result, **payload.except("release_id"), release: release,
+        fingerprint: Digest::SHA256.hexdigest(JSON.generate(payload.sort.to_h)))
+
+      expect(described_class.record(**arguments)).to eq(first)
+      expect(described_class.record(**arguments(playthrough_ids: []))).to eq(first)
+      playthrough = create(:playthrough, release: release)
+      expect { described_class.record(**arguments(playthrough_ids: [ playthrough.public_id ])) }.to raise_error(CompatibilityResult::RetryConflict)
+      expect(CompatibilityResult.count).to eq(1)
+    end
+
     it "refuses an unknown release, a file outside it and a launch configuration that is no longer current" do
       expect { described_class.record(**arguments(release_id: "unknown")) }.to raise_error(Release::ReleaseNotFound)
       expect { described_class.record(**arguments(sha1: create(:release).sha1)) }.to raise_error(CompatibilityResult::TargetMismatch)

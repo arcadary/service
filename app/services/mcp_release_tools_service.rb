@@ -1,7 +1,7 @@
 class McpReleaseToolsService
   ERRORS = {
     CatalogAuthoringService::InvalidInput => "invalid_input", CatalogAuthoringService::Conflict => "conflict",
-    CatalogAuthoringService::MissingAdminName => "admin_unavailable"
+    CatalogAuthoringService::MissingAdminName => "admin_unavailable", ActiveRecord::RecordInvalid => "invalid_input"
   }.freeze
   REASON = McpToolService::TEXT.merge(maxLength: 2000, description: "Why, for the audit history.").freeze
   MEDIUM = {
@@ -9,7 +9,7 @@ class McpReleaseToolsService
     properties: {
       sha1: McpToolService::SHA1, size: { type: "integer", minimum: 0 },
       crc32: { type: "string", pattern: "^[0-9a-f]{8}$" }, md5: { type: "string", pattern: "^[0-9a-f]{32}$" },
-      format: { type: "string", pattern: "^[a-z0-9]+$" }, label: McpToolService::TEXT,
+      format: { type: "string", pattern: "^[a-z0-9]+$" }, label: McpToolService::TEXT.merge(maxLength: 80),
       key: { type: "string", pattern: "^[a-z0-9-]{1,32}$", description: "Defaults to medium-1, medium-2 and so on." },
       role: { type: "string", enum: %w[game save], description: "Defaults to game." }
     }

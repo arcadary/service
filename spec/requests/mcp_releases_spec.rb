@@ -30,4 +30,19 @@ RSpec.describe "Registering releases through MCP", type: :request do
     expect(mcp_tool(name: "register_release", **registration, idempotency_key: "register-3").fetch("code")).to eq("conflict")
     expect(Game.where(public_id: "synthetic-homebrew").count).to eq(1)
   end
+
+  it "returns invalid_input for duplicate medium keys and rolls back the new game and its audit history" do
+    result = nil
+    expect do
+      result = mcp_tool(name: "register_release", **registration,
+        media: [ { sha1: sha1, key: "disk" }, { sha1: "f" * 40, key: "disk" } ])
+    end.not_to change { [ Game.count, Release.count, MediaFile.count, CatalogMutation.count ] }
+    expect(result.fetch("code")).to eq("invalid_input")
+  end
+
+  it "refuses a medium label longer than the model permits" do
+    result = mcp_tool(name: "register_release", **registration, media: [ { sha1: sha1, label: "a" * 81 } ])
+    expect(result.fetch("code")).to eq("invalid_input")
+    expect(Game.exists?(public_id: "synthetic-homebrew")).to be(false)
+  end
 end

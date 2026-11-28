@@ -8,7 +8,8 @@ class CompatibilityService
 
   def self.record(**arguments)
     attributes = normalize(arguments: arguments.stringify_keys)
-    fingerprint = Digest::SHA256.hexdigest(JSON.generate(attributes.sort.to_h))
+    fingerprint_attributes = attributes.fetch("playthrough_ids").empty? ? attributes.except("playthrough_ids") : attributes
+    fingerprint = Digest::SHA256.hexdigest(JSON.generate(fingerprint_attributes.sort.to_h))
     CompatibilityResult.transaction do
       existing = CompatibilityResult.find_by(retry_key: attributes.fetch("retry_key"))
       next replay(result: existing, fingerprint: fingerprint) if existing

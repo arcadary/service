@@ -57,7 +57,7 @@ Tool errors use `isError: true` and `structuredContent: {"error":{"code":"..."}}
 
 ## Device compatibility
 
-`record_compatibility_result` appends what a named reviewer saw after playing one exact file of one stable release on one device class. Every argument except `reason` and `requires_input` is required, and no others are accepted:
+`record_compatibility_result` appends what a named reviewer saw after playing one exact file of one stable release on one device class. Every argument except `reason`, `requires_input` and `playthrough_ids` is required, and no others are accepted:
 
 | Argument | Meaning |
 | --- | --- |
@@ -81,6 +81,8 @@ Success returns `{"data":{"release_id","result","current"}}`: the stored history
 `requires_input` (at most two values) and `playthrough_ids` (at most twenty) are the plain arrays in these results, never paginated; the `history` page continues with `cursor` like every other collection. Results are append-only: a retest or correction is a new result, and earlier ones stay in `get_compatibility`'s history with their reviewer and `recorded_at`. Public `release.compatibility` has exactly two keys, `steam_machine` and `steam_deck`. Each is the newest result for that device whose `startup_revision` equals the release's current one, as `{status, reason, core, core_version, startup_revision, tested_at, observed, limits, requires_input}`, or `{"status":"unknown"}` when there is none, when the newest is a withdrawal, or after a media or startup correction changes the revision. One device class never stands in for the other. Recording touches the release, so its release and media ETags and Last-Modified change at once; CDN copies may stay up to their 300 seconds. Unknown never stops a launch.
 
 ## Registering releases
+
+Each medium's `label` is at most 80 characters.
 
 `register_release` takes a `reason`, an `idempotency_key`, `game_id` or `new_game` `{id, title}`, the `system`, optional `region` and `revision`, and `media` (`sha1` with optional `size`, `crc32`, `md5`, `format`, `label`, `key`, `role`). It returns the new release as `get_release` does. It runs `create_game` when it names a `new_game`, then `create_release`, in one transaction, so a failure leaves neither. It takes the game's existing records at their current revisions and raises them, as any release creation does. Retrying with the same `idempotency_key` and arguments returns the same release. Errors are `invalid_input` (including an unknown `game_id`), `conflict` (an existing checksum or game id, or a reused `idempotency_key` with different arguments) and `admin_unavailable` (`CATALOG_ADMIN_NAME` is not configured).
 
