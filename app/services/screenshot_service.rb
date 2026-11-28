@@ -8,11 +8,7 @@ class ScreenshotService
     begin
       old_blob = nil
       screenshot = Screenshot.transaction do
-        selected = selected_attributes(game_id: release.game_id)
-        record = Screenshot.find_or_initialize_by(release: release, kind: kind)
-        old_blob = record.blob if record.persisted?
-        record.update!(png.except(:bytes).merge(blob: blob, licence: release.game.screenshot_licence))
-        release.game.releases.touch_all if selected != selected_attributes(game_id: release.game_id)
+        record, old_blob = replace(release: release, kind: kind, blob: blob, png: png)
         record
       end
     rescue StandardError
@@ -21,6 +17,15 @@ class ScreenshotService
     end
     old_blob&.purge_later
     screenshot
+  end
+
+  def self.replace(release:, kind:, blob:, png:)
+    selected = selected_attributes(game_id: release.game_id)
+    record = Screenshot.find_or_initialize_by(release: release, kind: kind)
+    old_blob = record.blob if record.persisted?
+    record.update!(png.except(:bytes).merge(blob: blob, licence: release.game.screenshot_licence))
+    release.game.releases.touch_all if selected != selected_attributes(game_id: release.game_id)
+    [ record, old_blob ]
   end
 
   def self.remove(public_id:, kind:)
@@ -68,8 +73,7 @@ class ScreenshotService
     blob.upload_without_unfurling(StringIO.new(bytes))
     blob
   rescue StandardError
-    blob&.purge_later
+    blob&.purge
     raise Screenshot::StorageUnavailable
   end
-  private_class_method :upload
 end
