@@ -21,7 +21,7 @@ RSpec.describe "Bundled homebrew seeds", type: :request do
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body).to include(
         "game" => { "id" => public_id, "title" => title, "screenshot" => nil },
-        "release" => { "id" => Release.find_by!(sha1: sha1).public_id, "sha1" => sha1, "system" => system, "region" => nil, "revision" => nil, "screenshots" => [], "compatibility" => { "steam_machine" => { "status" => "unknown" }, "steam_deck" => { "status" => "unknown" } } },
+        "release" => { "id" => Release.find_by!(sha1: sha1).public_id, "sha1" => sha1, "system" => system, "region" => nil, "revision" => nil, "screenshots" => [], "compatibility" => { "steam_machine" => { "status" => "unknown" }, "steam_deck" => { "status" => "unknown" } }, "videos" => [] },
         "media" => [ { "key" => "main", "position" => 1, "label" => nil, "role" => "game", "sha1" => sha1, "size" => nil, "format" => nil } ],
         "startup" => { "schema" => 1, "boot" => "main", "drives" => {}, "revision" => match(/\A[0-9a-f]{64}\z/) }
       )

@@ -1,4 +1,4 @@
-class PlaythroughChaptersService
+class VideoChaptersService
   TIMESTAMP = "[0-9]{2}:[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}"
   TIMING = /\A(#{TIMESTAMP}) --> (#{TIMESTAMP})\z/
 
@@ -19,7 +19,7 @@ class PlaythroughChaptersService
       start_time = seconds(timestamp: timing[1])
       end_time = seconds(timestamp: timing[2])
       invalid! unless start_time >= previous_end && start_time < end_time && end_time <= duration
-      cues << { "start" => timing[1], "end" => timing[2], "title" => title }
+      cues << { "start" => start_time.to_f, "end" => end_time.to_f, "title" => title }
       invalid! if cues.length > 256
       previous_end = end_time
     end
@@ -34,7 +34,7 @@ class PlaythroughChaptersService
   private_class_method :seconds
 
   def self.invalid!
-    raise Playthrough::InvalidHls, "invalid_hls"
+    raise Video::InvalidHls, "invalid_hls"
   end
   private_class_method :invalid!
 end

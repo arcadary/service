@@ -1,4 +1,4 @@
-module PlaythroughHlsHelpers
+module VideoHlsHelpers
   def hls_media(segments: [ [ "segment.ts", "2.5" ] ], target: 3)
     [ "#EXTM3U", "#EXT-X-VERSION:3", "#EXT-X-TARGETDURATION:#{target}", "#EXT-X-PLAYLIST-TYPE:VOD",
       "#EXT-X-MEDIA-SEQUENCE:0", *segments.flat_map { |path, duration| [ "#EXTINF:#{duration},Synthetic café title", path ] },
@@ -21,7 +21,42 @@ module PlaythroughHlsHelpers
   end
 
   def hls_content_type(name)
-    { ".m3u8" => "application/vnd.apple.mpegurl", ".ts" => "video/mp2t", ".vtt" => "text/vtt" }.fetch(File.extname(name))
+    { ".m3u8" => "application/vnd.apple.mpegurl", ".ts" => "video/mp2t", ".mp4" => "video/mp4", ".m4s" => "video/mp4", ".vtt" => "text/vtt" }.fetch(File.extname(name))
+  end
+
+  def mp4_box(type, payload = "")
+    [ 8 + payload.bytesize, type ].pack("Na4") + payload.b
+  end
+
+  def fmp4_init
+    mp4_box("ftyp", "iso6\x00\x00\x00\x00iso6cmfc") + mp4_box("moov", mp4_box("mvhd", "\x00" * 100))
+  end
+
+  def fmp4_fragment
+    mp4_box("moof", mp4_box("mfhd", "\x00" * 8)) + mp4_box("mdat", "synthetic sample")
+  end
+
+  def fmp4_part(name:, init: nil)
+    fragments = [ fmp4_fragment, fmp4_fragment ]
+    start = init ? 0 : fmp4_init.bytesize
+    map = init ? %(#EXT-X-MAP:URI="#{init}") : %(#EXT-X-MAP:URI="#{name}",BYTERANGE="#{fmp4_init.bytesize}@0")
+    lines = [ map, "#EXTINF:1.500000,", "#EXT-X-BYTERANGE:#{fragments.first.bytesize}@#{start}", name,
+              "#EXTINF:1.0,", "#EXT-X-BYTERANGE:#{fragments.last.bytesize}", name ]
+    files = init ? { init => fmp4_init, name => fragments.join } : { name => fmp4_init + fragments.join }
+    [ lines, files ]
+  end
+
+  def hls_fmp4_files(parts: [ { name: "index.mp4" } ])
+    lines = []
+    files = {}
+    parts.each_with_index do |part, index|
+      part_lines, part_files = fmp4_part(**part)
+      lines.push(*("#EXT-X-DISCONTINUITY" if index.positive?), *part_lines)
+      files.merge!(part_files)
+    end
+    playlist = [ "#EXTM3U", "#EXT-X-VERSION:7", "#EXT-X-TARGETDURATION:2", "#EXT-X-MEDIA-SEQUENCE:0", "#EXT-X-PLAYLIST-TYPE:VOD",
+                 *lines, "#EXT-X-ENDLIST", "" ].join("\n")
+    { "index.m3u8" => playlist }.merge(files)
   end
 
   def hls_transport(audio: true, streams: nil, programs: [ [ 1, 0x100 ] ])

@@ -90,7 +90,7 @@ class UploadService
   end
 
   def self.handler(upload:)
-    { "screenshot" => ScreenshotService, "video" => PlaythroughService }.fetch(upload.kind)
+    { "screenshot" => ScreenshotService, "video" => VideoService }.fetch(upload.kind)
   end
   private_class_method :handler
 

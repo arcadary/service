@@ -15,6 +15,11 @@ RSpec.describe UploadFile, type: :model do
   end
 end
 
-RSpec.describe Playthrough, type: :model do
-  it { is_expected.to belong_to(:release) }
+RSpec.describe Video, type: :model do
+  subject { build(:video) }
+
+  it { is_expected.to belong_to(:release).touch(true) }
+  it { is_expected.to validate_uniqueness_of(:kind).scoped_to(:release_id) }
+  it { is_expected.to have_and_belong_to_many(:compatibility_results) }
+  it { is_expected.to validate_inclusion_of(:kind).in_array(Video::KINDS) }
 end

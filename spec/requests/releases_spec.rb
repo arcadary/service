@@ -6,7 +6,7 @@ RSpec.describe "Release", type: :request do
   let(:url) { "/v1/releases/#{release.sha1}.json" }
   let(:expected_payload) do
     {
-      "release" => { "id" => release.public_id, "sha1" => release.sha1, "system" => "c64", "region" => nil, "revision" => nil, "screenshots" => [], "compatibility" => { "steam_machine" => { "status" => "unknown" }, "steam_deck" => { "status" => "unknown" } } },
+      "release" => { "id" => release.public_id, "sha1" => release.sha1, "system" => "c64", "region" => nil, "revision" => nil, "screenshots" => [], "compatibility" => { "steam_machine" => { "status" => "unknown" }, "steam_deck" => { "status" => "unknown" } }, "videos" => [] },
       "game" => { "id" => "lookup-game", "title" => "A game", "screenshot" => nil },
       "media" => [ { "key" => "main", "position" => 1, "label" => nil, "role" => "game", "sha1" => release.sha1, "size" => nil, "format" => nil } ],
       "startup" => { "schema" => 1, "boot" => "main", "drives" => { "8" => "main" }, "revision" => "20ac504497948774502ee889d50c8b20f4dcb493ee0a66f064e818b91cb8c9ff" }
@@ -40,6 +40,20 @@ RSpec.describe "Release", type: :request do
               "steam_machine" => { "status" => "does_not_work", "reason" => "Hangs after loading.", "core" => "vice", "core_version" => "3.9", "startup_revision" => expected_payload.dig("startup", "revision"),
                 "tested_at" => "2026-11-20T18:00:00Z", "observed" => "Hangs after loading.", "limits" => "Only the first disk tried.", "requires_input" => [] },
               "steam_deck" => { "status" => "unknown" })
+          end
+        end
+
+        context "with a playthrough" do
+          before do
+            create(:video, release: release, public_id: "synthetic-video", media: { "format" => "fmp4", "audio" => true, "duration" => 5400.25,
+              "chapters" => [ { "start" => 0.0, "end" => 600.5, "title" => "World 1" } ] })
+          end
+
+          run_test! do
+            expect(response.parsed_body.dig("release", "videos")).to eq([
+              { "kind" => "playthrough", "url" => "https://media.example/videos/synthetic-video/index.m3u8", "duration" => 5400.25,
+                "chapters" => [ { "start" => 0.0, "end" => 600.5, "title" => "World 1" } ] }
+            ])
           end
         end
 

@@ -102,7 +102,7 @@ class McpCatalogReadService
     end
 
     def compatibility_history(release:, before: nil)
-      results = release.compatibility_results.includes(:playthroughs).reorder(id: :desc)
+      results = release.compatibility_results.includes(:videos).reorder(id: :desc)
       results = results.where("id < ?", before) if before
       relation_page(records: results, kind: "compatibility", key: "id", owner: release.public_id) { |record| CompatibilityResultDecorator.decorate(record).history_json }
     end

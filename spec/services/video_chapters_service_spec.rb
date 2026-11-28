@@ -1,11 +1,11 @@
 require "rails_helper"
 
-RSpec.describe PlaythroughChaptersService do
+RSpec.describe VideoChaptersService do
   let(:chapter) { "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nFirst chapter\n" }
 
   it "accepts chronological adjacent cues, UTF-8 titles and CRLF with an initial BOM" do
     bytes = "\uFEFF#{chapter}\n00:00:01.000 --> 00:00:02.500\nCafé\n".gsub("\n", "\r\n")
-    expect(described_class.parse(bytes: bytes, duration: BigDecimal("2.5")).last).to eq("start" => "00:00:01.000", "end" => "00:00:02.500", "title" => "Café")
+    expect(described_class.parse(bytes: bytes, duration: BigDecimal("2.5")).last).to eq("start" => 1.0, "end" => 2.5, "title" => "Café")
     expect(described_class.parse(bytes: chapter.gsub("\n", "\r").sub("First chapter", "First\tchapter"), duration: BigDecimal("2.5")).sole.fetch("title")).to eq("First\tchapter")
   end
 
@@ -31,12 +31,12 @@ RSpec.describe PlaythroughChaptersService do
     "no cues" => ->(text) { "WEBVTT\n\n" }
   }.each do |name, corrupt|
     it "rejects #{name}" do
-      expect { described_class.parse(bytes: corrupt.call(chapter), duration: BigDecimal("2.5")) }.to raise_error(Playthrough::InvalidHls)
+      expect { described_class.parse(bytes: corrupt.call(chapter), duration: BigDecimal("2.5")) }.to raise_error(Video::InvalidHls)
     end
   end
 
   it "rejects 257 cues within an otherwise valid timeline" do
     cues = 257.times.map { |index| "00:00:#{format('%02d', index / 10)}.#{index % 10}00 --> 00:00:#{format('%02d', (index + 1) / 10)}.#{(index + 1) % 10}00\nChapter\n" }
-    expect { described_class.parse(bytes: "WEBVTT\n\n#{cues.join("\n")}", duration: BigDecimal("30")) }.to raise_error(Playthrough::InvalidHls)
+    expect { described_class.parse(bytes: "WEBVTT\n\n#{cues.join("\n")}", duration: BigDecimal("30")) }.to raise_error(Video::InvalidHls)
   end
 end

@@ -3,9 +3,10 @@ class McpUploadToolsService
     Upload::InvalidInput => "invalid_input", Screenshot::InvalidKind => "invalid_input",
     Upload::NotFound => "not_found", Release::ReleaseNotFound => "not_found",
     Upload::Expired => "upload_expired", Upload::Conflict => "upload_conflict",
-    Screenshot::InvalidImage => "upload_rejected", Playthrough::TargetMismatch => "target_mismatch",
+    Screenshot::InvalidImage => "upload_rejected", Video::TargetMismatch => "target_mismatch",
     Upload::StorageDisabled => "uploads_disabled",
-    Upload::StorageUnavailable => "storage_unavailable", Screenshot::StorageUnavailable => "storage_unavailable"
+    Upload::StorageUnavailable => "storage_unavailable", Screenshot::StorageUnavailable => "storage_unavailable",
+    Video::StorageUnavailable => "storage_unavailable"
   }.freeze
   UPLOAD_ID = McpToolService::TEXT.merge(description: "upload_id returned by request_upload.").freeze
   FILE = McpToolService.object_schema(properties: {
@@ -17,9 +18,10 @@ class McpUploadToolsService
   }).freeze
   TOOLS = {
     "request_upload" => {
-      description: "Start an upload of a screenshot (one PNG) or a playthrough video (an HLS package: index.m3u8, optional " \
-        "variant playlists, .ts segments and an optional chapters.vtt). PUT each file to upload_url followed by its " \
-        "package-relative name, with the same Basic credentials, its Content-Type and its SHA-256 in Content-Digest " \
+      description: "Start an upload of a screenshot (one PNG) or a video (an HLS package: index.m3u8 with MPEG-TS or " \
+        "fragmented MP4 media and an optional chapters.vtt, see " \
+        "https://github.com/arcadary/service/blob/main/docs/mcp.md#video-packages). PUT each file to upload_url followed " \
+        "by its package-relative name, with the same Basic credentials, its Content-Type and its SHA-256 in Content-Digest " \
         "(sha-256=:BASE64:), within limits. Then call confirm_upload. Expires 24 hours after this call.",
       input: { type: { type: "string", enum: Upload::LIMITS.keys } },
       output: McpToolService.object_schema(properties: {
@@ -30,9 +32,9 @@ class McpUploadToolsService
     },
     "confirm_upload" => {
       description: "Close an upload to further files and check it as a whole in the background: one PNG, or an HLS package " \
-        "whose playlists, segments and chapters agree, which is then stored privately. Returns state checking; call it " \
-        "again until it is confirmed, or rejected with rejection_reason (its files are deleted). Back at receiving means " \
-        "the check could not finish: confirm again.",
+        "whose playlists, segments and chapters agree, which is then copied to the public media bucket, not yet linked from " \
+        "any release. Returns state checking; call it again until it is confirmed, or rejected with rejection_reason (its " \
+        "files are deleted). Back at receiving means the check could not finish: confirm again.",
       input: { upload_id: UPLOAD_ID },
       output: UPLOAD,
       annotations: { read_only_hint: false, destructive_hint: false, idempotent_hint: true }
@@ -45,14 +47,15 @@ class McpUploadToolsService
       annotations: { read_only_hint: false, destructive_hint: true, idempotent_hint: false }
     },
     "upload_video" => {
-      description: "Make a confirmed video upload a private playthrough of the release. source_sha1 is the captured medium's " \
-        "SHA-1 and must belong to the release, unless verification attests how it differs from a release medium. " \
-        "Nothing is published.",
-      input: { upload_id: UPLOAD_ID, release_id: McpToolService::RELEASE_ID, source_sha1: McpToolService::SHA1,
-               capture: PlaythroughService::CAPTURE, verification: PlaythroughService::VERIFICATION },
+      description: "Link a confirmed video upload to the release as its video of the given kind (playthrough: a complete " \
+        "playthrough), replacing and deleting the previous one of that kind. The release's public JSON links it for anyone to " \
+        "watch. source_sha1 is the captured medium's SHA-1 and must belong to the release, unless verification attests how it " \
+        "differs from a release medium.",
+      input: { upload_id: UPLOAD_ID, release_id: McpToolService::RELEASE_ID, kind: { type: "string", enum: Video::KINDS },
+               source_sha1: McpToolService::SHA1, capture: VideoService::CAPTURE, verification: VideoService::VERIFICATION },
       optional: %w[verification],
-      output: { type: "object", required: %w[playthrough], properties: { playthrough: { type: "object" } } },
-      annotations: { read_only_hint: false, destructive_hint: false, idempotent_hint: false }
+      output: McpToolService.object_schema(properties: { release_id: { type: "string" }, video: McpVideoToolsService::VIDEO }),
+      annotations: { read_only_hint: false, destructive_hint: true, idempotent_hint: false }
     }
   }.freeze
 
@@ -72,7 +75,8 @@ class McpUploadToolsService
       screenshot = ScreenshotService.create(**arguments)
       { "release_id" => arguments.fetch(:release_id), "screenshot" => ScreenshotDecorator.decorate(screenshot).as_json }
     when "upload_video"
-      { "playthrough" => PlaythroughDecorator.decorate(PlaythroughService.create(**arguments, verifier: context.fetch(:admin))).as_json }
+      video = VideoService.create(**arguments, verifier: context.fetch(:admin))
+      { "release_id" => arguments.fetch(:release_id), "video" => VideoDecorator.decorate(video).internal_json }
     end
   end
   private_class_method :perform
