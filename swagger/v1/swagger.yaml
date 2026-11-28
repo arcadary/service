@@ -4,15 +4,15 @@ info:
   title: Arcadary service API
   version: v1
   description: |-
-    Public, anonymous reads for the Arcadary launcher; authenticated capture-device uploads and private admin staging. JSON routes end in .json; screenshot delivery ends in .png. Generated from the request specs in spec/requests; do not edit swagger/ by hand.
+    Public, anonymous reads for the Arcadary launcher, and authenticated admin uploads. JSON routes end in .json. Generated from the request specs in spec/requests; do not edit swagger/ by hand.
 
-    Catalog data originates from [No-Intro](https://no-intro.org/), sourced through [libretro-database at f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029](https://github.com/libretro/libretro-database/tree/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/metadat/no-intro). Arcadary imports checksum metadata, groups releases into games, normalizes titles/regions/revisions and applies explicit launcher identity mappings. The entire service catalog, including project corrections, additions and later metadata fields, is licensed under [CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/), as is the [upstream source at the pin](https://github.com/libretro/libretro-database/blob/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/LICENSE). Screenshot images and all video are excluded: each medium's own rights apply. Catalog and screenshot licences grant no video rights. The owner-approved exception permits authenticated private HLS staging and delivery, including the private Donkey Kong trial, without public commercial-footage distribution or anonymous playthrough metadata. Internal HLS validation leaves all bytes private; expiry and bounded private reclamation retain terminal receipts; publication and delivery arrive separately. Application code remains MIT.
+    Catalog data originates from [No-Intro](https://no-intro.org/), sourced through [libretro-database at f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029](https://github.com/libretro/libretro-database/tree/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/metadat/no-intro). Arcadary imports checksum metadata, groups releases into games, normalizes titles/regions/revisions and applies explicit launcher identity mappings. The entire service catalog, including project corrections, additions and later metadata fields, is licensed under [CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/), as is the [upstream source at the pin](https://github.com/libretro/libretro-database/blob/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/LICENSE). Screenshot images and all video are excluded: each medium's own rights apply. Catalog and screenshot licences grant no video rights. The owner-approved exception permits authenticated private HLS uploads, including the private Donkey Kong trial, without public commercial-footage distribution or anonymous playthrough metadata; uploaded playthroughs stay private. Application code remains MIT.
 
     The pinned NES DAT includes distinct headered .nes and unheadered .unh releases. A launcher hashing NES payload bytes without the iNES header sends the matching unheadered checksum. All eight lists are covered, including C64 tape metadata; catalog coverage does not imply launcher playback support. No game files or player filenames are received, stored or served.
 
     Optional release.controller_profile supplies version 1 original SNES face-button positions/labels and literal gameplay prompt letters for that exact stable release only. Each shared-media candidate retains its own facts; missing profiles are omitted, without defaults, candidate selection or edition inference. Public profiles exclude binding and evidence. Internal create_release/correct_release authoring accepts a whole profile or null to clear, under the revision/retry/audit contract; combined media edits require complete preview. The authored schema additionally requires binding matching system/region/revision (nullable edition strings, at most 128 characters) and 1–8 nonblank text citations per fact, each at most 500 characters. No images, clips, manual scans, file bytes, file names or game-file download locations in evidence. See README's Original controller layout and prompts and Catalog authoring sections for the internal contract. Profile corrections refresh release/media ETags and Last-Modified with existing cache lifetimes; reads remain anonymous and caller-independent. Controller classification, physical label/symbol mapping and local preferences belong to the launcher. No device/controller identity or choice is received. No real Zelda profile is populated; owner confirmation of exact identity, edition and textual evidence gates trial use only, not merge or issue closure. Publication and deployment remain outside scope.
 
-    Release screenshots are ordered title then gameplay, empty when absent. Embedded game.screenshot is the picture from the lexicographically smallest stable release.id among that game's releases with screenshots, choosing gameplay then title, or null. This ordering does not recommend a release for playback. Each image exposes exactly kind, url, width, height and licence; licence is an empty string when no image licence is granted. Uploading grants no new rights. URLs use SCREENSHOT_PUBLIC_BASE_URL plus /v1/screenshots/{sha256}.png, with SHA-256 measured from the stored PNG, without signed/expiring parameters. Screenshot changes invalidate release and media validators, including sibling releases when the selected game picture changes.
+    Release screenshots are ordered title then gameplay, empty when absent. Embedded game.screenshot is the picture from the lexicographically smallest stable release.id among that game's releases with screenshots, choosing gameplay then title, or null. This ordering does not recommend a release for playback. Each image exposes exactly kind, url, width, height and licence; licence is an empty string when no image licence is granted. Uploading grants no new rights. URLs are the public media host (https://media.arcadary.org in production) plus /screenshots/{sha256}.png, with SHA-256 measured from the stored PNG, without signed/expiring parameters. Screenshot changes invalidate release and media validators, including sibling releases when the selected game picture changes.
 
     Image credits keyed by game.id: ucity — µCity graphics by AntonioND/SkyLyrac (Antonio Niño Díaz), [CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/), [upstream v1.3 notice](https://github.com/AntonioND/ucity/blob/v1.3/readme.rst#license). tobu-tobu-girl — Tobu Tobu Girl assets by Tangram Games, [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/), [upstream notice](https://github.com/SimonLarsen/tobutobugirl/blob/048a22c2d7ebbe25811322e8692803fa86bb643a/README.md#license). Arcadary re-encodes captures as pixel-only PNGs, removing metadata. Launchers can attribute using game.id and the image's public licence value together with these credits.
 
@@ -90,11 +90,9 @@ paths:
       security:
       - private_service_basic: []
       description: |
-        Catalog reads, staged screenshot publication and private HLS intake over MCP 1.11.0. See https://github.com/arcadary/service/blob/main/docs/mcp.md for discoverable input/output schemas, targeting, expiry, retries, pagination and client setup. Every method and subtree requires current shared admin Basic credentials before parsing and returns no-store. No OAuth discovery/login, SSE subscriptions or persistent sessions.
+        Catalog reads and uploads over MCP 1.11.0. See https://github.com/arcadary/service/blob/main/docs/mcp.md for discoverable input/output schemas, targeting, pagination and client setup. Every method and subtree requires current shared admin Basic credentials before parsing and returns no-store. No OAuth discovery/login, SSE subscriptions or persistent sessions.
 
-        Complete HTTP request bodies are bounded at 2 MiB (2097152 bytes) regardless of Content-Length; an oversized request returns HTTP 413. JSON nesting remains limited to 64. begin_playthrough_staging arguments follow the playthrough_declaration schema: stable release public_id, exact source_sha1, capture provenance, retry_key, immutable manifest and explicit authenticated mismatch-verification evidence when needed. Limits apply together: 1 MiB (1048576 bytes) UTF-8 compact argument JSON before normalization, excluding the JSON-RPC envelope; 4096 objects; 8 MiB (8388608 bytes) each; 4 GiB (4294967296 bytes) total. A 4096-object, 4 GiB declaration with short paths fits. Over-limit declarations return MCP tool error stage_too_large without a stage or authorization.
-
-        Begin returns staging_id, release_id, package_sha256, state, every object's {object_id, path, received}, declared_at, stage_expires_at, capability and expires_at, within 1 MiB of structured JSON before SDK text representation. No declaration echo, bulk bytes, credentials or signed upload URLs. Identical normalized replay before declared_at plus 24 hours retains stage/package/progress/deadline and issues a fresh capability. At that deadline it returns stage_expired without authorization; changed input returns stage_conflict even after manifest pruning, with retry keys reserved. The capability lifetime stays exactly 900 seconds even beyond the stage deadline. Capabilities bind that exact release, stage, immutable manifest and declared objects and expire exactly 900 seconds after issuance, invalid at or after expires_at. Earlier tokens retain their expiry. Raw object PUT requires current Basic credentials plus X-Arcadary-Upload-Capability, never a URL token. Missing, expired or mismatched tokens return 403 upload_not_authorized before application transfer reads or storage access, including accepted-object retries. Authenticated metadata GET remains 200 with expired/reclaimed receipts, original declaration/deadline, fingerprint and provenance; reclaimed receipts omit object lists and manifests. Per-attempt renewable fenced leases protect concurrent work and hourly bounded cleanup retains key tombstones for late-write recovery. Metadata GET never mints or renews authorization; standalone HTTP stage POST is removed. No staged-byte playback/download route or public exposure. PNG bytes retain their separate authenticated HTTP staging route. No footage publication, provisioning or deployment is performed.
+        Complete HTTP request bodies are bounded at 2 MiB (2097152 bytes) regardless of Content-Length; an oversized request returns HTTP 413. JSON nesting remains limited to 64. request_upload returns an upload_id and the upload_url its files are PUT to; confirm_upload checks the upload as a whole; upload_screenshot and upload_video turn a confirmed upload into a release's screenshot or a private playthrough. File bytes never travel through MCP.
       parameters:
       - name: Authorization
         in: header
@@ -316,494 +314,6 @@ paths:
                     type: string
                     enum:
                     - not_found
-  "/v1/playthrough-stages/{staging_id}.json":
-    get:
-      summary: Read private declaration and durable object progress
-      security:
-      - private_service_basic: []
-      parameters:
-      - name: staging_id
-        in: path
-        required: true
-        schema:
-          type: string
-      description: |
-        declared_at is the original declaration/creation time; stage_expires_at is exactly 24 hours later. At that deadline every stage closes staging writes and internal validation rejects before replay. Unprotected stages expire on access; promoting/published retain their state without expired_at or reclaimed_at. GET remains 200: expired includes expired_at equal to the deadline; reclaimed adds reclaimed_at only after all associated reclaimable keys are confirmed absent with no deletion work pending. Receipts retain retry/stage identity, declaration fingerprint/package digest, exact release, source, capture and full mismatch evidence. Reclaimed receipts omit objects and manifests, including nested copies, and have no media attachments or bytes. Identical normalized begin replay returns stage_expired without authorization after the deadline; changed input returns stage_conflict even after pruning, with the retry key reserved.
-
-        Transfers and validators have independent renewable fenced 15-minute leases. Concurrent different-object transfers proceed independently; same-object transfers return the winning receipt and delete only their own loser keys. Concurrent live validators replay the first terminal outcome, including conflicting local outcomes. Heartbeats renew during blocking upload/download and validation, without extending the declaration deadline. At lease equality abandoned attempts are fenced; stale attachment, validation commit/replay or renewal fails stage_conflict, or stage_expired after the deadline. Hourly cleanup at minute 5 after screenshot cleanup handles at most 100 stages and 500 keys with durable fair progress, skips live transfer/validation owners and uses renewable fenced claims. It deletes only owned private staging keys after reference rechecks; legacy bytes wait for the retained owning stage's original deadline. Failed deletion stays pending with retryable storage_unavailable while other work continues. Transfer key/blob identities and fencing tombstones persist with the stage, even after reclamation. Fenced late writers record pending work and delete only their own keys; failed deletion clears reclaimed_at until absence is reconfirmed. Cleanup revisits reclaimed tombstones even when a late writer crashes before recording pending work. Staging never reopens. All private HTTP, validation, cleanup and ownership failures suppress logs.
-
-        Existing stages always return 200. incomplete means missing receipts; received means stored but unvalidated. validated, promoting and published include validation_result; promoting/published retain the exact validated payload, objects and declaration with only state changed, even after the deadline. They add no publication timestamp, claim data or terminal-expiry timestamps. validation_failed includes validation_error (invalid_hls or package_integrity_mismatch). Other states omit both validation fields. Results bind this exact staging ID, immutable normalized manifest/declaration fingerprint/package digest, stable release ID, source SHA-1 and capture/verification evidence. duration is exact summed decimal seconds, audio_codec is null for silent H.264, and absent chapters use chapters_path:null and chapters:[]. Before the deadline, promoting/published validation replays without storage reads, PUT retains identical receipts and MCP begin retains the same stage/objects/received summary with a fresh capability. No public object, descriptor, redirect or playback is created.
-
-        Internal PlaythroughPromotionService.claim_promotion(staging_id:, release_id:, package_sha256:) verifies persisted validation/stage/stable-release/package bindings and atomically pins an unexpired validated stage as promoting. Identical active requests return the same durable opaque claim, even after the deadline; active claims never time out. complete_promotion(claim:) records published; release_promotion(claim:) restores validated before the original deadline or expired at/after it. Matching terminal outcomes replay after restart; crossed operations, wrong/stale claims, ineligible/published stages and changed bindings fail stage_conflict. Unknown stages raise not_found; expired/reclaimed stages reject claims with stage_expired. A fresh claim after release has a new identity; repeating the old release is a no-op. Promotion uses the same atomic exclusion as expiry, attachment, validation finalization and reclamation. Cleanup excludes promoting/published stages from selection and visit counts; published staging objects, blobs and complete manifests remain indefinitely, even after pointer replacement. The #57 publisher must complete inside its successful release-pointer transaction (completion rolls back with it), release only after copying stops, and own historical successful-publication retries. Storage stays outside transactions; claims and private failures are never logged or exposed. No copying, release pointer, validation/promotion HTTP route or MCP publication tool is added here.
-
-        PlaythroughValidationService.validate(staging_id:) is an internal operation for the authenticated MCP workflow, without a validation HTTP route. Unknown IDs raise not_found. Before the declaration deadline, persisted success or terminal failure replays before completeness or storage checks, including after restart; concurrent live validation cannot overwrite it. stage_incomplete is retryable and precedes all byte reads/parsing, including malformed received playlists or wrong role MIME. All completed objects are then read and verified before HLS interpretation: missing/unreadable blobs raise retryable storage_unavailable; readable bytes or stored size/hash/MIME disagreement raises terminal package_integrity_mismatch. Wrong declared role MIME, undeclared references, malformed/unsupported HLS, transport or chapters raises terminal invalid_hls. Retryable failures leave state unchanged; terminal failures require a new declaration/retry key to correct bytes. PUT receipts and declaration replays stay immutable. Internal validation suppresses logs, including failures.
-
-        Restricted RFC 8216 profile: UTF-8 NFC, no BOM/control characters, LF or CRLF, first-line EXTM3U, exactly one EXT-X-VERSION:3 in every playlist. One media playlist or one master directly referencing media playlists, with shared media references allowed; no nested masters, alternate renditions or other tags/attributes. Masters require positive unsigned 64-bit BANDWIDTH; optional positive AVERAGE-BANDWIDTH, quoted CODECS list and positive RESOLUTION dimensions use RFC syntax and unique attributes. Media requires segments, a single positive unsigned 64-bit TARGETDURATION, PLAYLIST-TYPE:VOD, terminal ENDLIST and optional single MEDIA-SEQUENCE:0 before segments. Every URI follows one positive finite decimal EXTINF and required comma; optional UTF-8 titles are ignored. Half-up rounded durations cannot exceed target. Variant segment counts and numeric duration sequences must match. References use declaration path grammar relative to their playlist; every declared object must be reachable except optional root chapters.vtt, which is also required and validated. MIME roles: application/vnd.apple.mpegurl, video/mp2t, text/vtt.
-
-        Each MPEG-TS segment is nonempty, 188-byte framed with sync 0x47, valid packet/adaptation/PSI lengths, no transport errors/scrambling, and complete CRC-checked PAT then matching PMT before elementary payload. DVB service-information PIDs 0x0010–0x001F (including SDT on 0x0011) pass packet/adaptation checks, then their payloads are ignored; they may precede the PAT and do not count as elementary streams. CAT and undeclared elementary-stream PIDs remain rejected. One nonzero program, exactly one H.264 stream (0x1B), optionally one AAC/ADTS (0x0F), no other elementary streams, with payload for every declared stream. Audio presence must agree across the package. PMT determines codecs; full decoding is outside validation. chapters.vtt permits one initial UTF-8 BOM, exact WEBVTT then blank line, and 1–256 chronological non-overlapping cues within summed duration. Each cue is HH:MM:SS.mmm --> HH:MM:SS.mmm (two-digit hours, minutes/seconds 00–59), one nonblank title without <, & or -->, and blank separation. No header text, identifiers, settings, markup or STYLE/REGION/NOTE blocks.
-      responses:
-        '200':
-          description: metadata only; no bytes or storage URLs
-          headers:
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                - no-store
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: false
-                required:
-                - staging_id
-                - release_id
-                - package_sha256
-                - declaration
-                - state
-                - declared_at
-                - stage_expires_at
-                properties:
-                  staging_id:
-                    type: string
-                  release_id:
-                    type: string
-                  package_sha256:
-                    type: string
-                    pattern: "^[0-9a-f]{64}$"
-                  declaration:
-                    oneOf:
-                    - "$ref": "#/components/schemas/playthrough_declaration"
-                    - type: object
-                      additionalProperties: false
-                      required:
-                      - retry_key
-                      - release_id
-                      - source_sha1
-                      - capture
-                      properties:
-                        retry_key:
-                          type: string
-                          minLength: 1
-                          maxLength: 200
-                        release_id:
-                          type: string
-                          minLength: 1
-                          maxLength: 200
-                          description: Stable release public_id, never a title or
-                            checksum selector.
-                        source_sha1:
-                          type: string
-                          pattern: "^[0-9a-f]{40}$"
-                          minLength: 40
-                          maxLength: 40
-                        capture:
-                          type: object
-                          additionalProperties: false
-                          required:
-                          - tool
-                          - version
-                          - captured_at
-                          properties:
-                            tool:
-                              type: string
-                              minLength: 1
-                              maxLength: 200
-                            version:
-                              type: string
-                              minLength: 1
-                              maxLength: 200
-                            captured_at:
-                              type: string
-                              format: date-time
-                              maxLength: 64
-                        verification:
-                          type: object
-                          additionalProperties: false
-                          required:
-                          - source_sha1
-                          - payload_sha1
-                          - relationship
-                          - method
-                          - result
-                          - verifier
-                          - verified_at
-                          - evidence
-                          properties:
-                            source_sha1:
-                              type: string
-                              pattern: "^[0-9a-f]{40}$"
-                              minLength: 40
-                              maxLength: 40
-                            payload_sha1:
-                              type: string
-                              pattern: "^[0-9a-f]{40}$"
-                              minLength: 40
-                              maxLength: 40
-                            relationship:
-                              type: string
-                              enum:
-                              - trailing_padding
-                              - verified_equivalence
-                            removed_bytes:
-                              type: integer
-                              minimum: 1
-                            method:
-                              type: string
-                              minLength: 1
-                              maxLength: 8000
-                            result:
-                              type: string
-                              enum:
-                              - success
-                            verifier:
-                              type: string
-                              minLength: 1
-                              maxLength: 8000
-                            verified_at:
-                              type: string
-                              format: date-time
-                              maxLength: 64
-                            evidence:
-                              type: string
-                              minLength: 1
-                              maxLength: 8000
-                  state:
-                    type: string
-                    enum:
-                    - incomplete
-                    - received
-                    - validated
-                    - validation_failed
-                    - promoting
-                    - published
-                    - expired
-                    - reclaimed
-                  declared_at:
-                    type: string
-                    format: date-time
-                  stage_expires_at:
-                    type: string
-                    format: date-time
-                  expired_at:
-                    type: string
-                    format: date-time
-                  reclaimed_at:
-                    type: string
-                    format: date-time
-                  declaration_sha256:
-                    type: string
-                    pattern: "^[0-9a-f]{64}$"
-                  validation_result:
-                    "$ref": "#/components/schemas/playthrough_validation_result"
-                  validation_error:
-                    type: string
-                    enum:
-                    - invalid_hls
-                    - package_integrity_mismatch
-                  objects:
-                    type: array
-                    items:
-                      type: object
-                      additionalProperties: false
-                      required:
-                      - object_id
-                      - path
-                      - received
-                      properties:
-                        object_id:
-                          type: string
-                        path:
-                          type: string
-                        received:
-                          type: boolean
-        '404':
-          description: unknown stage
-          headers:
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                - no-store
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: false
-                required:
-                - error
-                properties:
-                  error:
-                    type: string
-                    enum:
-                    - not_found
-        '401':
-          description: authentication failed
-          headers:
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                - no-store
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: false
-                required:
-                - error
-                properties:
-                  error:
-                    type: string
-                    enum:
-                    - unauthorized
-        '503':
-          description: authentication not configured
-          headers:
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                - no-store
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: false
-                required:
-                - error
-                properties:
-                  error:
-                    type: string
-                    enum:
-                    - authentication_unavailable
-  "/v1/playthrough-stages/{staging_id}/objects/{stage_object_id}.json":
-    put:
-      summary: Receive one declared private object
-      security:
-      - private_service_basic: []
-      parameters:
-      - name: staging_id
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: stage_object_id
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: X-Arcadary-Upload-Capability
-        in: header
-        required: true
-        schema:
-          type: string
-      description: 'Requires current shared Basic credentials plus X-Arcadary-Upload-Capability
-        from MCP begin_playthrough_staging. Capabilities bind the exact release, stage,
-        immutable manifest and declared objects, never travel in URLs, and expire
-        exactly 900 seconds after issuance (invalid at or after expires_at). Identical
-        begin replay renews before the 24-hour declaration deadline without extending
-        older capabilities or the stage deadline; HTTP metadata reads never renew.
-        After Basic authentication, missing, invalid, expired or mismatched capabilities
-        and unknown object IDs return 403 upload_not_authorized first. Valid declared-object
-        authorization on an expired/reclaimed stage returns 410 stage_expired, including
-        accepted-object retries, before application body or storage reads. Capability
-        expiry remains issuance plus 900 seconds even beyond the stage deadline. Raw
-        bytes with the exact declared Content-Type; any valid declared MIME type without
-        parameters is accepted. Exact size and SHA-256 must match, including on successful
-        retries. Reads are bounded at 8 MiB regardless of Content-Length. Success
-        returns an immutable object_id/received_at receipt; identical retries return
-        exactly that receipt, even after other objects finish. GET stage metadata
-        for aggregate progress. Fresh private storage keys isolate attempts and stages;
-        completion follows storage success. Interrupted reads and storage failure
-        leave the object incomplete and retryable after restart. No HLS validation
-        or playback is performed. The deployment owner must verify the zone upload
-        setting, which can be lower than Cloudflare''s documented 100 MB minimum plan
-        limit: https://developers.cloudflare.com/cache/concepts/default-cache-behavior/#upload-limits
-        (#57).'
-      responses:
-        '200':
-          description: verified object received, or identical successful retry
-          headers:
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                - no-store
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: false
-                required:
-                - object_id
-                - received_at
-                properties:
-                  object_id:
-                    type: string
-                  received_at:
-                    type: string
-                    format: date-time
-        '400':
-          description: interrupted read
-          headers:
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                - no-store
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: false
-                required:
-                - error
-                properties:
-                  error:
-                    type: string
-                    enum:
-                    - interrupted_transfer
-        '401':
-          description: authentication failed
-          headers:
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                - no-store
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: false
-                required:
-                - error
-                properties:
-                  error:
-                    type: string
-                    enum:
-                    - unauthorized
-        '403':
-          description: missing, expired or mismatched upload capability
-          headers:
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                - no-store
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: false
-                required:
-                - error
-                properties:
-                  error:
-                    type: string
-                    enum:
-                    - upload_not_authorized
-        '409':
-          description: bytes, size or content type mismatch
-          headers:
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                - no-store
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: false
-                required:
-                - error
-                properties:
-                  error:
-                    type: string
-                    enum:
-                    - stage_conflict
-        '410':
-          description: authorized object on an expired stage
-          headers:
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                - no-store
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: false
-                required:
-                - error
-                properties:
-                  error:
-                    type: string
-                    enum:
-                    - stage_expired
-        '413':
-          description: actual bytes exceed 8 MiB
-          headers:
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                - no-store
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: false
-                required:
-                - error
-                properties:
-                  error:
-                    type: string
-                    enum:
-                    - stage_too_large
-        '503':
-          description: storage or authentication unavailable
-          headers:
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                - no-store
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: false
-                required:
-                - error
-                properties:
-                  error:
-                    type: string
-                    enum:
-                    - storage_unavailable
-                    - authentication_unavailable
-      requestBody:
-        content:
-          video/mp2t:
-            schema:
-              type: string
-              format: binary
-          application/vnd.apple.mpegurl:
-            schema:
-              type: string
-              format: binary
-          video/mp4:
-            schema:
-              type: string
-              format: binary
-          application/json:
-            schema:
-              type: string
-              format: binary
-        required: true
   "/v1/releases/{sha1}.json":
     get:
       summary: A release and its game, by the SHA-1 of its game file
@@ -904,40 +414,38 @@ paths:
                     type: string
                     enum:
                     - ambiguous_release
-  "/v1/screenshot-stages/{release_id}/{source_sha1}/{kind}.json":
-    post:
-      summary: Stage a private screenshot for MCP publication
+  "/v1/uploads/{upload_id}/files/{name}":
+    put:
+      summary: Store one file of an upload
       security:
       - private_service_basic: []
+      description: 'Stores one file, exactly as sent, on the service host''s own disk
+        until the upload is confirmed, used or expires 24 hours after request_upload.
+        The upload_id comes from the MCP tool request_upload, whose limits apply;
+        name is the file''s package-relative path. Send the file''s Content-Type and
+        its SHA-256 in Content-Digest (sha-256=:BASE64:). Each file is checked on
+        arrival: digest, size and file type. Sending the same name with the same digest
+        again changes nothing.'
       parameters:
-      - name: release_id
+      - name: upload_id
         in: path
         required: true
         schema:
           type: string
-      - name: source_sha1
+      - name: name
         in: path
         required: true
         schema:
           type: string
-          pattern: "^[0-9a-fA-F]{40}$"
-      - name: kind
-        in: path
+      - name: Content-Digest
+        in: header
         required: true
         schema:
           type: string
-          enum:
-          - title
-          - gameplay
-      description: |
-        Raw PNG bytes, protected by shared single-admin HTTP Basic before parsing, logging or mutation; no capture token required. The stable release public ID, exact source-medium SHA-1 and kind are bound before decoding. Secondary and shared media are accepted only for the explicit containing release. Uses capture's 8 MiB input ceiling, system dimension ceilings, full PNG validation and pixel-only re-encoding.
-
-        Returns only an opaque staging_id and expires_at, exactly 24 hours after successful ingest. Staging never changes public JSON, validators or PNG delivery and exposes no anonymous stage/read/redirect route. Missing or malformed public-base configuration or incomplete production R2 configuration disables ingest before PNG processing. All responses and the complete staging subtree are no-store and excluded from application logs; hosted proxy/CDN cache, access-log, body/header and tracing exclusions are required too.
-
-        Call MCP publish_screenshot with staging_id and the same release_id, source_sha1 and kind. It rechecks membership, adopts the canonical blob without copying, uses the game image licence at publication and atomically consumes the ID. Before expiry a repeated successful-target call returns staged_image_consumed, even after replacement/removal; at expiry it returns staged_image_unavailable. Failed attempts leave the stage retryable and do not extend expiry. The hourly cleanup job processes bounded batches of expired stages/receipts and purges unconsumed blobs, never transferred screenshot blobs. Solid Queue workers and its recurring scheduler must run. No explicit discard API exists. Publication errors: invalid_input, not_found, target_mismatch, staged_image_unavailable, staged_image_consumed, uploads_disabled, storage_unavailable.
+          pattern: "^sha-256=:[A-Za-z0-9+/]{43}=:$"
       responses:
-        '201':
-          description: private stage created
+        '200':
+          description: file stored, or the same file sent again
           headers:
             Cache-Control:
               schema:
@@ -947,19 +455,9 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                additionalProperties: false
-                required:
-                - staging_id
-                - expires_at
-                properties:
-                  staging_id:
-                    type: string
-                  expires_at:
-                    type: string
-                    format: date-time
+                "$ref": "#/components/schemas/UploadFile"
         '400':
-          description: malformed target
+          description: interrupted read
           headers:
             Cache-Control:
               schema:
@@ -970,16 +468,16 @@ paths:
             application/json:
               schema:
                 type: object
-                additionalProperties: false
                 required:
                 - error
+                additionalProperties: false
                 properties:
                   error:
                     type: string
                     enum:
-                    - invalid_input
+                    - interrupted_transfer
         '401':
-          description: missing or wrong shared credentials
+          description: authentication failed
           headers:
             Cache-Control:
               schema:
@@ -990,16 +488,16 @@ paths:
             application/json:
               schema:
                 type: object
-                additionalProperties: false
                 required:
                 - error
+                additionalProperties: false
                 properties:
                   error:
                     type: string
                     enum:
                     - unauthorized
         '404':
-          description: unknown release public ID
+          description: unknown upload
           headers:
             Cache-Control:
               schema:
@@ -1010,16 +508,17 @@ paths:
             application/json:
               schema:
                 type: object
-                additionalProperties: false
                 required:
                 - error
+                additionalProperties: false
                 properties:
                   error:
                     type: string
                     enum:
                     - not_found
         '409':
-          description: checksum outside this release
+          description: upload no longer takes files, or the name holds a different
+            file
           headers:
             Cache-Control:
               schema:
@@ -1030,16 +529,36 @@ paths:
             application/json:
               schema:
                 type: object
-                additionalProperties: false
                 required:
                 - error
+                additionalProperties: false
                 properties:
                   error:
                     type: string
                     enum:
-                    - target_mismatch
+                    - upload_conflict
+        '410':
+          description: the 24-hour lease ran out
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - error
+                additionalProperties: false
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - upload_expired
         '413':
-          description: input exceeds 8 MiB
+          description: a file or the upload exceeds its cap
           headers:
             Cache-Control:
               schema:
@@ -1050,16 +569,16 @@ paths:
             application/json:
               schema:
                 type: object
-                additionalProperties: false
                 required:
                 - error
+                additionalProperties: false
                 properties:
                   error:
                     type: string
                     enum:
-                    - screenshot_too_large
+                    - upload_too_large
         '422':
-          description: invalid PNG, animation, content type or dimensions
+          description: digest, size, name, type or file check failed
           headers:
             Cache-Control:
               schema:
@@ -1070,16 +589,16 @@ paths:
             application/json:
               schema:
                 type: object
-                additionalProperties: false
                 required:
                 - error
+                additionalProperties: false
                 properties:
                   error:
                     type: string
                     enum:
-                    - invalid_screenshot
+                    - upload_rejected
         '503':
-          description: authentication, uploads or storage unavailable
+          description: storage unavailable
           headers:
             Cache-Control:
               schema:
@@ -1090,261 +609,83 @@ paths:
             application/json:
               schema:
                 type: object
-                additionalProperties: false
                 required:
                 - error
+                additionalProperties: false
                 properties:
                   error:
                     type: string
                     enum:
-                    - authentication_unavailable
-                    - uploads_disabled
                     - storage_unavailable
+        '507':
+          description: stored uploads already total 10 GB
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - error
+                additionalProperties: false
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - uploads_full
       requestBody:
         content:
           image/png:
             schema:
               type: string
               format: binary
-        required: true
-  "/v1/releases/{sha1}/screenshots/{kind}.json":
-    put:
-      summary: Publish a capture-device screenshot
-      security:
-      - capture_token: []
-      parameters:
-      - name: sha1
-        in: path
-        required: true
-        schema:
-          type: string
-          pattern: "^[0-9a-fA-F]{40}$"
-      - name: kind
-        in: path
-        required: true
-        schema:
-          type: string
-          enum:
-          - title
-          - gameplay
-      description: |
-        Raw image/png body, authenticated before decoding or storing. A secondary-disk checksum targets its containing release; shared checksums are ambiguous. Success replaces only this release/kind; failure preserves its previous image. The service copies game screenshot_licence, never a client-supplied licence. Upload grants no rights. All responses are no-store.
-
-        Maximum input: 8 MiB (8,388,608 bytes). PNG only; malformed and animated PNGs are rejected. Dimensions are positive and checked before decoding, followed by full decoding and pixel-only PNG re-encoding. Fixed capture ceilings, independent of crop, overscan, borders or interlace:
-
-        | System | Maximum width | Maximum height |
-        | --- | ---: | ---: |
-        | nes | 1024 | 960 |
-        | snes | 2048 | 1912 |
-        | gb | 640 | 576 |
-        | gbc | 640 | 576 |
-        | megadrive | 1280 | 1920 |
-        | pcengine | 2048 | 960 |
-        | atari2600 | 640 | 768 |
-        | c64 | 1536 | 1088 |
-
-        Unset/empty SCREENSHOT_CAPTURE_TOKEN or incomplete production R2/public-origin configuration disables uploads. URLs use the configured HTTPS origin, never request headers, R2 URLs or signed URLs.
-      responses:
-        '200':
-          description: screenshot published
-          headers:
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                - no-store
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/Screenshot"
-        '400':
-          description: malformed SHA-1
-          headers:
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                - no-store
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - error
-                additionalProperties: false
-                properties:
-                  error:
-                    type: string
-                    enum:
-                    - invalid_sha1
-        '401':
-          description: missing or wrong capture token
-          headers:
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                - no-store
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - error
-                additionalProperties: false
-                properties:
-                  error:
-                    type: string
-                    enum:
-                    - unauthorized
-        '404':
-          description: unknown release
-          headers:
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                - no-store
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - error
-                additionalProperties: false
-                properties:
-                  error:
-                    type: string
-                    enum:
-                    - release_not_found
-        '409':
-          description: checksum shared by releases
-          headers:
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                - no-store
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - error
-                additionalProperties: false
-                properties:
-                  error:
-                    type: string
-                    enum:
-                    - ambiguous_release
-        '413':
-          description: input exceeds 8 MiB
-          headers:
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                - no-store
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - error
-                additionalProperties: false
-                properties:
-                  error:
-                    type: string
-                    enum:
-                    - screenshot_too_large
-        '422':
-          description: invalid kind, PNG, animation or dimensions
-          headers:
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                - no-store
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - error
-                additionalProperties: false
-                properties:
-                  error:
-                    type: string
-                    enum:
-                    - invalid_screenshot
-        '503':
-          description: uploads disabled or storage unavailable
-          headers:
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                - no-store
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - error
-                additionalProperties: false
-                properties:
-                  error:
-                    type: string
-                    enum:
-                    - uploads_disabled
-                    - storage_unavailable
-      requestBody:
-        content:
-          image/png:
+          application/vnd.apple.mpegurl:
+            schema:
+              type: string
+              format: binary
+          video/mp2t:
+            schema:
+              type: string
+              format: binary
+          text/vtt:
             schema:
               type: string
               format: binary
         required: true
-  "/v1/screenshots/{sha256}.png":
+  "/v1/uploads/{upload_id}.json":
     get:
-      summary: Read a published screenshot
-      description: Anonymous Rails-origin PNG delivery. Content-addressed URLs cache
-        publicly for 31,536,000 seconds. A missing or unreferenced image returns JSON
-        with no-store. Origin removal cannot erase CDN or client cached copies.
+      summary: An upload's state and files
+      security:
+      - private_service_basic: []
+      description: 'Lists the files stored so far, so an interrupted upload resumes
+        by sending the missing ones. States: requested, receiving, checking (confirm_upload
+        is checking it in the background), confirmed, rejected (with rejection_reason)
+        and used.'
       parameters:
-      - name: sha256
+      - name: upload_id
         in: path
         required: true
         schema:
           type: string
-          pattern: "^[0-9a-f]{64}$"
       responses:
         '200':
-          description: stored PNG
-          content:
-            image/png:
-              schema:
-                type: string
-                format: binary
-          headers:
-            Content-Type:
-              schema:
-                type: string
-                enum:
-                - image/png
-            Cache-Control:
-              schema:
-                type: string
-                enum:
-                - max-age=31536000, public
-        '404':
-          description: missing or unreferenced image
+          description: upload
           headers:
             Cache-Control:
               schema:
                 type: string
                 enum:
                 - no-store
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Upload"
+        '404':
+          description: unknown upload
           content:
             application/json:
               schema:
@@ -1356,141 +697,13 @@ paths:
                   error:
                     type: string
                     enum:
-                    - screenshot_not_found
+                    - not_found
 components:
   securitySchemes:
-    capture_token:
-      type: http
-      scheme: bearer
     private_service_basic:
       type: http
       scheme: basic
   schemas:
-    playthrough_declaration:
-      type: object
-      additionalProperties: false
-      required:
-      - retry_key
-      - release_id
-      - source_sha1
-      - capture
-      - manifest
-      properties:
-        retry_key:
-          type: string
-          minLength: 1
-          maxLength: 200
-        release_id:
-          type: string
-          minLength: 1
-          maxLength: 200
-          description: Stable release public_id, never a title or checksum selector.
-        source_sha1:
-          type: string
-          pattern: "^[0-9a-f]{40}$"
-          minLength: 40
-          maxLength: 40
-        capture:
-          type: object
-          additionalProperties: false
-          required:
-          - tool
-          - version
-          - captured_at
-          properties:
-            tool:
-              type: string
-              minLength: 1
-              maxLength: 200
-            version:
-              type: string
-              minLength: 1
-              maxLength: 200
-            captured_at:
-              type: string
-              format: date-time
-              maxLength: 64
-        verification:
-          type: object
-          additionalProperties: false
-          required:
-          - source_sha1
-          - payload_sha1
-          - relationship
-          - method
-          - result
-          - verifier
-          - verified_at
-          - evidence
-          properties:
-            source_sha1:
-              type: string
-              pattern: "^[0-9a-f]{40}$"
-              minLength: 40
-              maxLength: 40
-            payload_sha1:
-              type: string
-              pattern: "^[0-9a-f]{40}$"
-              minLength: 40
-              maxLength: 40
-            relationship:
-              type: string
-              enum:
-              - trailing_padding
-              - verified_equivalence
-            removed_bytes:
-              type: integer
-              minimum: 1
-            method:
-              type: string
-              minLength: 1
-              maxLength: 8000
-            result:
-              type: string
-              enum:
-              - success
-            verifier:
-              type: string
-              minLength: 1
-              maxLength: 8000
-            verified_at:
-              type: string
-              format: date-time
-              maxLength: 64
-            evidence:
-              type: string
-              minLength: 1
-              maxLength: 8000
-        manifest:
-          type: array
-          minItems: 1
-          maxItems: 4096
-          items:
-            type: object
-            additionalProperties: false
-            required:
-            - path
-            - byte_size
-            - sha256
-            - content_type
-            properties:
-              path:
-                type: string
-                minLength: 1
-                maxLength: 1024
-              byte_size:
-                type: integer
-                minimum: 1
-                maximum: 8388608
-              sha256:
-                type: string
-                pattern: "^[0-9a-f]{64}$"
-                minLength: 64
-                maxLength: 64
-              content_type:
-                type: string
-                minLength: 1
-                maxLength: 200
     Screenshot:
       type: object
       required:
@@ -1518,6 +731,74 @@ components:
           minimum: 1
         licence:
           type: string
+    Upload:
+      type: object
+      additionalProperties: false
+      required:
+      - upload_id
+      - type
+      - state
+      - expires_at
+      - rejection_reason
+      - files
+      properties:
+        upload_id:
+          type: string
+        type:
+          type: string
+          enum:
+          - screenshot
+          - video
+        state:
+          type: string
+          enum:
+          - requested
+          - receiving
+          - checking
+          - confirmed
+          - rejected
+          - used
+        expires_at:
+          type: string
+          format: date-time
+        rejection_reason:
+          type:
+          - string
+          - 'null'
+        files:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required:
+            - name
+            - size
+            - sha256
+            properties:
+              name:
+                type: string
+              size:
+                type: integer
+                minimum: 1
+              sha256:
+                type: string
+                pattern: "^[0-9a-f]{64}$"
+    UploadFile:
+      type: object
+      additionalProperties: false
+      required:
+      - name
+      - size
+      - sha256
+      properties:
+        name:
+          type: string
+        size:
+          type: integer
+          minimum: 1
+        sha256:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
     ControllerProfile:
       type: object
       required:
@@ -1739,188 +1020,5 @@ components:
             revision:
               type: string
               pattern: "^[0-9a-f]{64}$"
-    playthrough_validation_result:
-      type: object
-      additionalProperties: false
-      required:
-      - staging_id
-      - declaration_sha256
-      - package_sha256
-      - manifest
-      - release_id
-      - source_sha1
-      - capture
-      - verification
-      - root
-      - duration
-      - video_codec
-      - audio_codec
-      - chapters_path
-      - chapters
-      properties:
-        staging_id:
-          type: string
-        declaration_sha256:
-          type: string
-          pattern: "^[0-9a-f]{64}$"
-        package_sha256:
-          type: string
-          pattern: "^[0-9a-f]{64}$"
-        manifest:
-          type: array
-          minItems: 1
-          maxItems: 4096
-          items:
-            type: object
-            additionalProperties: false
-            required:
-            - path
-            - byte_size
-            - sha256
-            - content_type
-            properties:
-              path:
-                type: string
-                minLength: 1
-                maxLength: 1024
-              byte_size:
-                type: integer
-                minimum: 1
-                maximum: 8388608
-              sha256:
-                type: string
-                pattern: "^[0-9a-f]{64}$"
-                minLength: 64
-                maxLength: 64
-              content_type:
-                type: string
-                minLength: 1
-                maxLength: 200
-        release_id:
-          type: string
-          minLength: 1
-          maxLength: 200
-          description: Stable release public_id, never a title or checksum selector.
-        source_sha1:
-          type: string
-          pattern: "^[0-9a-f]{40}$"
-          minLength: 40
-          maxLength: 40
-        capture:
-          type: object
-          additionalProperties: false
-          required:
-          - tool
-          - version
-          - captured_at
-          properties:
-            tool:
-              type: string
-              minLength: 1
-              maxLength: 200
-            version:
-              type: string
-              minLength: 1
-              maxLength: 200
-            captured_at:
-              type: string
-              format: date-time
-              maxLength: 64
-        verification:
-          type: object
-          additionalProperties: false
-          required:
-          - source_sha1
-          - payload_sha1
-          - relationship
-          - method
-          - result
-          - verifier
-          - verified_at
-          - evidence
-          properties:
-            source_sha1:
-              type: string
-              pattern: "^[0-9a-f]{40}$"
-              minLength: 40
-              maxLength: 40
-            payload_sha1:
-              type: string
-              pattern: "^[0-9a-f]{40}$"
-              minLength: 40
-              maxLength: 40
-            relationship:
-              type: string
-              enum:
-              - trailing_padding
-              - verified_equivalence
-            removed_bytes:
-              type: integer
-              minimum: 1
-            method:
-              type: string
-              minLength: 1
-              maxLength: 8000
-            result:
-              type: string
-              enum:
-              - success
-            verifier:
-              type: string
-              minLength: 1
-              maxLength: 8000
-            verified_at:
-              type: string
-              format: date-time
-              maxLength: 64
-            evidence:
-              type: string
-              minLength: 1
-              maxLength: 8000
-          nullable: true
-        root:
-          type: string
-          enum:
-          - index.m3u8
-        duration:
-          type: string
-          pattern: "^[0-9]+\\.[0-9]+$"
-          description: Exact summed EXTINF seconds as a decimal string.
-        video_codec:
-          type: string
-          enum:
-          - h264
-        audio_codec:
-          type: string
-          nullable: true
-          enum:
-          - aac
-          -
-        chapters_path:
-          type: string
-          nullable: true
-          enum:
-          - chapters.vtt
-          -
-        chapters:
-          type: array
-          maxItems: 256
-          items:
-            type: object
-            additionalProperties: false
-            required:
-            - start
-            - end
-            - title
-            properties:
-              start:
-                type: string
-                pattern: "^[0-9]{2}:[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}$"
-              end:
-                type: string
-                pattern: "^[0-9]{2}:[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}$"
-              title:
-                type: string
-                minLength: 1
 servers:
 - url: "/"

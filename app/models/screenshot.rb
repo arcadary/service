@@ -1,9 +1,6 @@
 class Screenshot < ApplicationRecord
   class InvalidImage < StandardError; end
-  class TooLarge < StandardError; end
   class InvalidKind < StandardError; end
-  class UploadsDisabled < StandardError; end
-  class Unauthorized < StandardError; end
   class NotFound < StandardError; end
   class StorageUnavailable < StandardError; end
 

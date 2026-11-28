@@ -2,15 +2,12 @@ Rails.application.routes.draw do
   mount ->(env) { McpTransportService.call(env: env) }, at: "/mcp"
 
   scope "v1", module: "v1", format: false, defaults: { format: :json }, constraints: { sha1: /[^\/]+/ } do
-    get "playthrough-stages/:staging_id.json", to: "playthrough_stages#show"
-    put "playthrough-stages/:staging_id/objects/:stage_object_id.json", to: "playthrough_stages#update"
-    post "screenshot-stages/:release_id/:source_sha1/:kind.json", to: "screenshot_stages#create", constraints: { release_id: /[^\/]+/, source_sha1: /[^\/]+/, kind: /[^\/]+/ }
+    get "uploads/:upload_id.json", to: "uploads#show", constraints: { upload_id: /[^\/]+/ }
+    put "uploads/:upload_id/files/*name", to: "uploads#update", constraints: { upload_id: /[^\/]+/, name: /.+/ }
     get "lookup/:sha1.json", to: "lookups#show", as: :lookup
     get "releases/:sha1.json", to: "releases#show", as: :release
     get "media/:sha1.json", to: "media#show", as: :media
-    put "releases/:sha1/screenshots/:kind.json", to: "screenshot_uploads#update", constraints: { kind: /[^\/]+/ }
   end
-  get "v1/screenshots/:sha256.png", to: "v1/screenshots#show", format: false, constraints: { sha256: /[^\/]+/ }
 
   mount Rswag::Ui::Engine => "/api-docs"
   mount Rswag::Api::Engine => "/api-docs"

@@ -18,7 +18,7 @@ class PlaythroughPlaylistService
   end
 
   def self.invalid!
-    raise PlaythroughStage::InvalidHls, "invalid_hls"
+    raise Playthrough::InvalidHls, "invalid_hls"
   end
 
   def initialize(bytes:)

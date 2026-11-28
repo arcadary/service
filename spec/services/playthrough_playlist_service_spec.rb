@@ -39,7 +39,7 @@ RSpec.describe PlaythroughPlaylistService do
     "mixed master/media" => ->(text) { text.sub("#EXTINF", "#EXT-X-STREAM-INF:BANDWIDTH=100\nother.m3u8\n#EXTINF") }
   }.each do |name, corrupt|
     it "rejects #{name}" do
-      expect { described_class.parse(bytes: corrupt.call(hls_media)) }.to raise_error(PlaythroughStage::InvalidHls, "invalid_hls")
+      expect { described_class.parse(bytes: corrupt.call(hls_media)) }.to raise_error(Playthrough::InvalidHls, "invalid_hls")
     end
   end
 
@@ -49,7 +49,7 @@ RSpec.describe PlaythroughPlaylistService do
     'BANDWIDTH=1,AUDIO="audio"', "BANDWIDTH=1," ].each do |attributes|
     it "rejects malformed or unsupported stream attributes #{attributes.inspect}" do
       text = "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-STREAM-INF:#{attributes}\nmedia.m3u8\n"
-      expect { described_class.parse(bytes: text) }.to raise_error(PlaythroughStage::InvalidHls)
+      expect { described_class.parse(bytes: text) }.to raise_error(Playthrough::InvalidHls)
     end
   end
 end

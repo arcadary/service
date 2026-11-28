@@ -30,15 +30,15 @@ RSpec.configure do |config|
         title: 'Arcadary service API',
         version: 'v1',
         description: <<~TEXT.strip
-          Public, anonymous reads for the Arcadary launcher; authenticated capture-device uploads and private admin staging. JSON routes end in .json; screenshot delivery ends in .png. Generated from the request specs in spec/requests; do not edit swagger/ by hand.
+          Public, anonymous reads for the Arcadary launcher, and authenticated admin uploads. JSON routes end in .json. Generated from the request specs in spec/requests; do not edit swagger/ by hand.
 
-          Catalog data originates from [No-Intro](https://no-intro.org/), sourced through [libretro-database at f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029](https://github.com/libretro/libretro-database/tree/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/metadat/no-intro). Arcadary imports checksum metadata, groups releases into games, normalizes titles/regions/revisions and applies explicit launcher identity mappings. The entire service catalog, including project corrections, additions and later metadata fields, is licensed under [CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/), as is the [upstream source at the pin](https://github.com/libretro/libretro-database/blob/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/LICENSE). Screenshot images and all video are excluded: each medium's own rights apply. Catalog and screenshot licences grant no video rights. The owner-approved exception permits authenticated private HLS staging and delivery, including the private Donkey Kong trial, without public commercial-footage distribution or anonymous playthrough metadata. Internal HLS validation leaves all bytes private; expiry and bounded private reclamation retain terminal receipts; publication and delivery arrive separately. Application code remains MIT.
+          Catalog data originates from [No-Intro](https://no-intro.org/), sourced through [libretro-database at f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029](https://github.com/libretro/libretro-database/tree/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/metadat/no-intro). Arcadary imports checksum metadata, groups releases into games, normalizes titles/regions/revisions and applies explicit launcher identity mappings. The entire service catalog, including project corrections, additions and later metadata fields, is licensed under [CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/), as is the [upstream source at the pin](https://github.com/libretro/libretro-database/blob/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/LICENSE). Screenshot images and all video are excluded: each medium's own rights apply. Catalog and screenshot licences grant no video rights. The owner-approved exception permits authenticated private HLS uploads, including the private Donkey Kong trial, without public commercial-footage distribution or anonymous playthrough metadata; uploaded playthroughs stay private. Application code remains MIT.
 
           The pinned NES DAT includes distinct headered .nes and unheadered .unh releases. A launcher hashing NES payload bytes without the iNES header sends the matching unheadered checksum. All eight lists are covered, including C64 tape metadata; catalog coverage does not imply launcher playback support. No game files or player filenames are received, stored or served.
 
           Optional release.controller_profile supplies version 1 original SNES face-button positions/labels and literal gameplay prompt letters for that exact stable release only. Each shared-media candidate retains its own facts; missing profiles are omitted, without defaults, candidate selection or edition inference. Public profiles exclude binding and evidence. Internal create_release/correct_release authoring accepts a whole profile or null to clear, under the revision/retry/audit contract; combined media edits require complete preview. The authored schema additionally requires binding matching system/region/revision (nullable edition strings, at most 128 characters) and 1–8 nonblank text citations per fact, each at most 500 characters. No images, clips, manual scans, file bytes, file names or game-file download locations in evidence. See README's Original controller layout and prompts and Catalog authoring sections for the internal contract. Profile corrections refresh release/media ETags and Last-Modified with existing cache lifetimes; reads remain anonymous and caller-independent. Controller classification, physical label/symbol mapping and local preferences belong to the launcher. No device/controller identity or choice is received. No real Zelda profile is populated; owner confirmation of exact identity, edition and textual evidence gates trial use only, not merge or issue closure. Publication and deployment remain outside scope.
 
-          Release screenshots are ordered title then gameplay, empty when absent. Embedded game.screenshot is the picture from the lexicographically smallest stable release.id among that game's releases with screenshots, choosing gameplay then title, or null. This ordering does not recommend a release for playback. Each image exposes exactly kind, url, width, height and licence; licence is an empty string when no image licence is granted. Uploading grants no new rights. URLs use SCREENSHOT_PUBLIC_BASE_URL plus /v1/screenshots/{sha256}.png, with SHA-256 measured from the stored PNG, without signed/expiring parameters. Screenshot changes invalidate release and media validators, including sibling releases when the selected game picture changes.
+          Release screenshots are ordered title then gameplay, empty when absent. Embedded game.screenshot is the picture from the lexicographically smallest stable release.id among that game's releases with screenshots, choosing gameplay then title, or null. This ordering does not recommend a release for playback. Each image exposes exactly kind, url, width, height and licence; licence is an empty string when no image licence is granted. Uploading grants no new rights. URLs are the public media host (https://media.arcadary.org in production) plus /screenshots/{sha256}.png, with SHA-256 measured from the stored PNG, without signed/expiring parameters. Screenshot changes invalidate release and media validators, including sibling releases when the selected game picture changes.
 
           Image credits keyed by game.id: ucity — µCity graphics by AntonioND/SkyLyrac (Antonio Niño Díaz), [CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/), [upstream v1.3 notice](https://github.com/AntonioND/ucity/blob/v1.3/readme.rst#license). tobu-tobu-girl — Tobu Tobu Girl assets by Tangram Games, [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/), [upstream notice](https://github.com/SimonLarsen/tobutobugirl/blob/048a22c2d7ebbe25811322e8692803fa86bb643a/README.md#license). Arcadary re-encodes captures as pixel-only PNGs, removing metadata. Launchers can attribute using game.id and the image's public licence value together with these credits.
 
@@ -47,10 +47,11 @@ RSpec.configure do |config|
       },
       paths: {},
       components: {
-        securitySchemes: { capture_token: { type: :http, scheme: :bearer }, private_service_basic: { type: :http, scheme: :basic } },
+        securitySchemes: { private_service_basic: { type: :http, scheme: :basic } },
         schemas: {
-          playthrough_declaration: McpPlaythroughToolsService.input_schema,
           Screenshot: screenshot_schema,
+          Upload: McpUploadToolsService::UPLOAD,
+          UploadFile: McpUploadToolsService::FILE,
           ControllerProfile: {
             type: :object, required: %w[version layout prompts], additionalProperties: false,
             description: 'Optional exact-release original SNES layout and literal gameplay prompt letters. Positions face the controller buttons. No system defaults or edition inference. Binding and text citations remain internal. Controller classification, physical label/symbol mapping and preferences belong to the launcher. The Zelda trial is unconfirmed pending owner confirmation of the stable release ID, checksum, edition and textual evidence; no real trial profile is populated.',
@@ -116,28 +117,6 @@ RSpec.configure do |config|
       servers: [
         { url: '/' }
       ]
-    }
-  }
-
-  schemas = config.openapi_specs.fetch('v1/swagger.yaml').fetch(:components).fetch(:schemas)
-  declaration_properties = schemas.fetch(:playthrough_declaration).fetch(:properties)
-  schemas[:playthrough_validation_result] = {
-    type: :object, additionalProperties: false,
-    required: %w[staging_id declaration_sha256 package_sha256 manifest release_id source_sha1 capture verification root duration video_codec audio_codec chapters_path chapters],
-    properties: {
-      staging_id: { type: :string }, declaration_sha256: { type: :string, pattern: '^[0-9a-f]{64}$' },
-      package_sha256: { type: :string, pattern: '^[0-9a-f]{64}$' }, manifest: declaration_properties.fetch(:manifest),
-      release_id: declaration_properties.fetch(:release_id), source_sha1: declaration_properties.fetch(:source_sha1),
-      capture: declaration_properties.fetch(:capture), verification: declaration_properties.fetch(:verification).merge(nullable: true),
-      root: { type: :string, enum: [ 'index.m3u8' ] }, duration: { type: :string, pattern: '^[0-9]+\.[0-9]+$', description: 'Exact summed EXTINF seconds as a decimal string.' },
-      video_codec: { type: :string, enum: [ 'h264' ] }, audio_codec: { type: :string, nullable: true, enum: [ 'aac', nil ] },
-      chapters_path: { type: :string, nullable: true, enum: [ 'chapters.vtt', nil ] },
-      chapters: { type: :array, maxItems: 256, items: {
-        type: :object, additionalProperties: false, required: %w[start end title], properties: {
-          start: { type: :string, pattern: '^[0-9]{2}:[0-5][0-9]:[0-5][0-9]\.[0-9]{3}$' },
-          end: { type: :string, pattern: '^[0-9]{2}:[0-5][0-9]:[0-5][0-9]\.[0-9]{3}$' }, title: { type: :string, minLength: 1 }
-        }
-      } }
     }
   }
 

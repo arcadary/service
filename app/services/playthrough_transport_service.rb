@@ -184,6 +184,6 @@ class PlaythroughTransportService
   end
 
   def invalid!
-    raise PlaythroughStage::InvalidHls, "invalid_hls"
+    raise Playthrough::InvalidHls, "invalid_hls"
   end
 end
