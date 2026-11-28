@@ -1,7 +1,8 @@
 # Review the exact candidate
 
-Read the original issue requirements and acceptance criteria, the assigned candidate
-SHA, code, diff, and candidate-specific check evidence. Check the current PR head
+Read the intent and acceptance criteria in the PR's description, the corpus pages
+the change touches, the assigned candidate SHA, code, diff, and candidate-specific
+check evidence. Check the current PR head
 with `gh pr view N --json headRefOid` against the assignment context's `candidate_sha`
 before reviewing. Report blocked if they differ.
 
