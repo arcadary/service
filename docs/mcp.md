@@ -117,7 +117,12 @@ env_http_headers = { Authorization = "ARCADARY_CATALOG_AUTHORIZATION" }
 
 `.mcp.json` carries the same server for Claude Code, with `headers.Authorization` set to `${ARCADARY_CATALOG_AUTHORIZATION:-}`. Without the variable, both clients reach only the `401` challenge.
 
-The owner keeps the header in its own fnox file, `~/.config/fnox/arcadary-mcp.toml`, outside every project, so fnox's shell hook never exports it. Clients started through it are the only processes that get it: `fnox -c ~/.config/fnox/arcadary-mcp.toml exec -- claude`, or `-- codex`. The agent loop never has it.
+`fnox.toml` holds the header as `ARCADARY_CATALOG_AUTHORIZATION`, encrypted with age. fnox's shell hook exports it with the other secrets in this checkout, so Claude Code or Codex started from a shell there connects. Anything else started from such a shell inherits it as well, including the agent loop, just as it already inherits the shared login. After rotating the login, store the new header too:
+
+```bash
+fnox exec -- sh -c 'printf "Basic %s" "$(printf "%s:%s" "$VALIDATION_REVIEWER_USERNAME" "$VALIDATION_REVIEWER_PASSWORD" | base64 | tr -d "\n")"' \
+  | fnox set ARCADARY_CATALOG_AUTHORIZATION
+```
 
 Provision `ARCADARY_CATALOG_AUTHORIZATION` in the **intended Codex process's environment** through a secure secret manager or launcher. Its complete value must be the Basic scheme plus the base64 encoding of the configured username, a colon and password. Base64 is reversible. Do not print the value, put it in shell history, commit it, store it in a URL, or paste it into this TOML. Restart the intended client with its refreshed environment after rotation. Configuring a terminal environment alone does not configure a separately launched app. Do not use `codex mcp login`: there is no OAuth login here.
 
