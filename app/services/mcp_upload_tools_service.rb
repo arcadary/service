@@ -3,7 +3,7 @@ class McpUploadToolsService
     Upload::InvalidInput => "invalid_input", Screenshot::InvalidKind => "invalid_input",
     Upload::NotFound => "not_found", Release::ReleaseNotFound => "not_found",
     Upload::Expired => "upload_expired", Upload::Conflict => "upload_conflict",
-    Screenshot::InvalidImage => "upload_rejected", Playthrough::TargetMismatch => "target_mismatch",
+    Screenshot::InvalidImage => "upload_rejected", Screenshot::LimitReached => "screenshot_limit_reached", Playthrough::TargetMismatch => "target_mismatch",
     Upload::StorageDisabled => "uploads_disabled",
     Upload::StorageUnavailable => "storage_unavailable", Screenshot::StorageUnavailable => "storage_unavailable"
   }.freeze
@@ -38,10 +38,12 @@ class McpUploadToolsService
       annotations: { read_only_hint: false, destructive_hint: false, idempotent_hint: true }
     },
     "upload_screenshot" => {
-      description: "Make a confirmed screenshot upload the release's title or gameplay screenshot, replacing the previous one. " \
-        "The PNG must decode within the release system's size limits. Uses the game's image licence; grants no new rights.",
+      description: "Add a confirmed screenshot upload to the release. kind title replaces the release's title screenshot; " \
+        "gameplay goes after its last gameplay screenshot, at most #{Screenshot::GAMEPLAY_LIMIT} (screenshot_limit_reached). An image the release " \
+        "already has, of either kind, returns that screenshot unchanged. The PNG must decode within the release system's " \
+        "size limits. Uses the game's image licence; grants no new rights.",
       input: { upload_id: UPLOAD_ID, release_id: McpToolService::RELEASE_ID, kind: { type: "string", enum: Screenshot::KINDS } },
-      output: { type: "object", required: %w[release_id screenshot], properties: { release_id: { type: "string" }, screenshot: { type: "object" } } },
+      output: McpToolService.object_schema(properties: { release_id: { type: "string" }, screenshot: McpScreenshotToolsService::SCREENSHOT }),
       annotations: { read_only_hint: false, destructive_hint: true, idempotent_hint: false }
     },
     "upload_video" => {
@@ -70,7 +72,7 @@ class McpUploadToolsService
       UploadDecorator.decorate(UploadService.confirm(**arguments)).as_json
     when "upload_screenshot"
       screenshot = ScreenshotService.create(**arguments)
-      { "release_id" => arguments.fetch(:release_id), "screenshot" => ScreenshotDecorator.decorate(screenshot).as_json }
+      { "release_id" => arguments.fetch(:release_id), "screenshot" => ScreenshotDecorator.decorate(screenshot).admin_json }
     when "upload_video"
       { "playthrough" => PlaythroughDecorator.decorate(PlaythroughService.create(**arguments, verifier: context.fetch(:admin))).as_json }
     end

@@ -14,6 +14,14 @@ module ScreenshotHelpers
     ScreenshotPngService::SIGNATURE + png_chunk("IHDR", header) + chunks.join + png_chunk("IDAT", Zlib.deflate(rows)) + png_chunk("IEND", "")
   end
 
+  def red_png
+    png(pixel: "\xff\0\0\xff".b)
+  end
+
+  def green_png
+    png(pixel: "\0\xff\0\xff".b)
+  end
+
   def confirmed_screenshot(bytes: png)
     confirmed_upload(kind: "screenshot", files: { "screenshot.png" => [ bytes, "image/png" ] })
   end

@@ -18,4 +18,8 @@ class ScreenshotDecorator
       "url" => "#{StorageConfigurationService.media_base_url}/#{ScreenshotService.key(sha256: @screenshot.sha256)}"
     )
   end
+
+  def admin_json
+    as_json.merge("id" => @screenshot.public_id, "sha256" => @screenshot.sha256, "created_at" => @screenshot.created_at.utc.iso8601(6))
+  end
 end

@@ -11,7 +11,7 @@ class Release < ApplicationRecord
   belongs_to :game, touch: true
   has_many :release_media, -> { order(:position) }, dependent: :destroy, inverse_of: :release
   has_many :media_files, through: :release_media
-  has_many :screenshots, dependent: :restrict_with_exception
+  has_many :screenshots, -> { in_order_of(:kind, %w[title gameplay]).order(:id) }, dependent: :restrict_with_exception, inverse_of: :release
   has_many :playthroughs, dependent: :restrict_with_exception
   has_many :compatibility_results, -> { order(:id) }, dependent: :restrict_with_exception, inverse_of: :release
   accepts_nested_attributes_for :release_media, allow_destroy: true
