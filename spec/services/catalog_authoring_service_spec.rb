@@ -89,6 +89,20 @@ RSpec.describe CatalogAuthoringService do
     expect { author(operation: :create_game, attributes: attributes, expected_revisions: revisions, key: "retry") }.to raise_error(described_class::Conflict, /different request/)
   end
 
+  it "replays retry records saved by the original non-preview authoring contract" do
+    legacy = create(:game, public_id: "legacy-game", title: "Corrected", authoring_revision: 1)
+    entry = CatalogMutation.create!(idempotency_key: "legacy-retry",
+      fingerprint: "3f47934474fe8b1e3fb3d7eb9ff7515b30a1542820173add6e65e0ae623f723b",
+      operation: "correct_game", admin_name: "Catalog Owner", reason: "Synthetic catalog correction")
+    entry.update!(result: { "audit_id" => entry.id, "records" => [ CatalogAuthoringReadService.record(legacy) ] })
+    legacy.update!(title: "Subsequent correction", authoring_revision: 2)
+    replay = author(operation: :correct_game, attributes: { id: legacy.public_id, title: "Corrected" },
+      expected_revisions: { "game:legacy-game" => 0 }, key: "legacy-retry")
+    expect(replay).to eq(entry.result)
+    expect(legacy.reload.title).to eq("Subsequent correction")
+    expect(CatalogMutation.count).to eq(1)
+  end
+
   it "replays release creation without creating duplicate media or advancing its parent again" do
     attributes = { game_id: game.public_id, system: "gb", media: [ { sha1: "a" * 40, key: "main", position: 1, role: "game" } ] }
     revisions = { "game:#{game.public_id}" => 0 }
