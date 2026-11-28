@@ -26,9 +26,8 @@ class CompatibilityService
     Release.includes(:compatibility_results, release_media: :media_file).find_by(public_id: release_id) || raise(Release::ReleaseNotFound)
   end
 
-  def self.current(release:)
-    revision = ReleaseStartupService.revision(release: release)
-    applying = release.compatibility_results.select { |result| result.startup_revision == revision }
+  def self.current(release:, startup_revision: ReleaseStartupService.revision(release: release))
+    applying = release.compatibility_results.select { |result| result.startup_revision == startup_revision }
     CompatibilityResult::DEVICES.index_with do |device|
       applying.select { |result| result.device == device }.max_by(&:id)
     end

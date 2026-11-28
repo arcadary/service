@@ -112,77 +112,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_28_160000) do
     t.index ["sha1"], name: "index_media_files_on_sha1", unique: true
   end
 
-  create_table "playthrough_promotion_claims", force: :cascade do |t|
-    t.integer "playthrough_stage_id", null: false
-    t.string "token", null: false
-    t.string "validation_sha256", null: false
-    t.string "state", default: "active", null: false
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["playthrough_stage_id"], name: "index_playthrough_promotion_claims_active_stage", unique: true, where: "state = 'active'"
-    t.index ["playthrough_stage_id"], name: "index_playthrough_promotion_claims_on_playthrough_stage_id"
-    t.index ["token"], name: "index_playthrough_promotion_claims_on_token", unique: true
-  end
-
-  create_table "playthrough_stage_attempts", force: :cascade do |t|
-    t.integer "playthrough_stage_id", null: false
-    t.string "kind", null: false
-    t.string "token", null: false
-    t.integer "generation", default: 1, null: false
-    t.string "state", default: "active", null: false
-    t.datetime "lease_expires_at", null: false
-    t.bigint "blob_identity"
-    t.string "private_key"
-    t.string "service_name"
-    t.boolean "cleanup_pending", default: false, null: false
-    t.datetime "absence_checked_at"
-    t.integer "cleanup_visits", default: 0, null: false
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["playthrough_stage_id", "kind", "state"], name: "index_playthrough_attempt_owners"
-    t.index ["playthrough_stage_id"], name: "index_playthrough_stage_attempts_on_playthrough_stage_id"
-    t.index ["private_key"], name: "index_playthrough_stage_attempts_on_private_key", unique: true
-  end
-
-  create_table "playthrough_stage_objects", force: :cascade do |t|
-    t.integer "playthrough_stage_id", null: false
-    t.string "public_id", null: false
-    t.string "path"
-    t.bigint "byte_size"
-    t.string "sha256"
-    t.string "content_type"
-    t.integer "blob_id"
-    t.datetime "received_at"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.datetime "pruned_at"
-    t.index ["blob_id"], name: "index_playthrough_stage_objects_on_blob_id"
-    t.index ["playthrough_stage_id", "path"], name: "idx_on_playthrough_stage_id_path_e253008c66", unique: true
-    t.index ["playthrough_stage_id"], name: "index_playthrough_stage_objects_on_playthrough_stage_id"
-    t.index ["public_id"], name: "index_playthrough_stage_objects_on_public_id", unique: true
-  end
-
-  create_table "playthrough_stages", force: :cascade do |t|
+  create_table "playthroughs", force: :cascade do |t|
     t.string "public_id", null: false
     t.integer "release_id", null: false
-    t.string "retry_key", null: false
-    t.string "declaration_sha256", null: false
-    t.string "package_sha256", null: false
-    t.json "declaration", null: false
+    t.string "source_sha1", null: false
+    t.json "capture", null: false
+    t.json "verification"
+    t.json "files", null: false
+    t.json "media", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.string "validation_state"
-    t.json "validation_result"
-    t.string "validation_error"
-    t.datetime "declared_at", null: false
-    t.datetime "expired_at"
-    t.datetime "reclaimed_at"
-    t.integer "cleanup_visits", default: 0, null: false
-    t.string "promotion_state"
-    t.index ["cleanup_visits", "id"], name: "index_playthrough_stages_on_cleanup_visits_and_id"
-    t.index ["public_id"], name: "index_playthrough_stages_on_public_id", unique: true
-    t.index ["release_id"], name: "index_playthrough_stages_on_release_id"
-    t.index ["retry_key"], name: "index_playthrough_stages_on_retry_key", unique: true
+    t.index ["public_id"], name: "index_playthroughs_on_public_id", unique: true
+    t.index ["release_id"], name: "index_playthroughs_on_release_id"
   end
 
   create_table "release_media", force: :cascade do |t|
@@ -224,24 +165,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_28_160000) do
     t.index ["source_game_id"], name: "index_releases_on_source_game_id"
   end
 
-  create_table "screenshot_stages", force: :cascade do |t|
-    t.string "public_id", null: false
-    t.string "release_public_id", null: false
-    t.string "source_sha1", null: false
-    t.string "kind", null: false
-    t.integer "blob_id"
-    t.string "sha256", null: false
-    t.integer "width", null: false
-    t.integer "height", null: false
-    t.datetime "expires_at", null: false
-    t.datetime "consumed_at"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["blob_id"], name: "index_screenshot_stages_on_blob_id"
-    t.index ["expires_at"], name: "index_screenshot_stages_on_expires_at"
-    t.index ["public_id"], name: "index_screenshot_stages_on_public_id", unique: true
-  end
-
   create_table "screenshots", force: :cascade do |t|
     t.integer "release_id", null: false
     t.integer "blob_id", null: false
@@ -258,21 +181,41 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_28_160000) do
     t.index ["sha256"], name: "index_screenshots_on_sha256"
   end
 
+  create_table "upload_files", force: :cascade do |t|
+    t.integer "upload_id", null: false
+    t.string "name", null: false
+    t.bigint "byte_size", null: false
+    t.string "sha256", null: false
+    t.string "content_type", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["upload_id", "name"], name: "index_upload_files_on_upload_id_and_name", unique: true
+  end
+
+  create_table "uploads", force: :cascade do |t|
+    t.string "public_id", null: false
+    t.string "kind", null: false
+    t.string "state", null: false
+    t.string "rejection_reason"
+    t.json "media"
+    t.datetime "expires_at", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["expires_at"], name: "index_uploads_on_expires_at"
+    t.index ["public_id"], name: "index_uploads_on_public_id", unique: true
+  end
+
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "compatibility_results", "releases"
   add_foreign_key "game_identities", "games"
   add_foreign_key "games", "games", column: "retired_into_game_id"
-  add_foreign_key "playthrough_promotion_claims", "playthrough_stages"
-  add_foreign_key "playthrough_stage_attempts", "playthrough_stages"
-  add_foreign_key "playthrough_stage_objects", "active_storage_blobs", column: "blob_id"
-  add_foreign_key "playthrough_stage_objects", "playthrough_stages"
-  add_foreign_key "playthrough_stages", "releases"
+  add_foreign_key "playthroughs", "releases"
   add_foreign_key "release_media", "media_files"
   add_foreign_key "release_media", "releases"
   add_foreign_key "releases", "games"
   add_foreign_key "releases", "games", column: "source_game_id"
-  add_foreign_key "screenshot_stages", "active_storage_blobs", column: "blob_id"
   add_foreign_key "screenshots", "active_storage_blobs", column: "blob_id"
   add_foreign_key "screenshots", "releases"
+  add_foreign_key "upload_files", "uploads"
 end

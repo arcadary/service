@@ -7,50 +7,45 @@ RSpec.describe ScreenshotService do
 
   let(:release) { create(:release, system: "gb") }
 
-  it "replaces one kind atomically and purges its previous bytes" do
+  it "stores the PNG under its content address, replaces one kind atomically and purges the previous bytes" do
     previous = upload_screenshot(release: release)
     old_blob = previous.blob
-    old_hash = previous.sha256
+    expect(old_blob.key).to eq("screenshots/#{previous.sha256}.png")
     perform_enqueued_jobs do
       screenshot = upload_screenshot(release: release, bytes: png(pixel: "\xff\0\0\xff".b))
       expect(screenshot.id).to eq(previous.id)
-      expect(screenshot.sha256).not_to eq(old_hash)
+      expect(screenshot.blob.key).to eq("screenshots/#{screenshot.sha256}.png")
       expect(Screenshot.where(release: release, kind: "gameplay").count).to eq(1)
-      expect { described_class.find_by(sha256: old_hash) }.to raise_error(Screenshot::NotFound)
     end
     expect(old_blob.service.exist?(old_blob.key)).to be(false)
+    expect(ActiveStorage::Blob.exists?(old_blob.id)).to be(false)
   end
 
-  it "preserves the record, bytes and references on validation and storage failure" do
+  it "keeps the screenshot and leaves the upload confirmed for a retry when the PNG exceeds the system or storage fails" do
     previous = upload_screenshot(release: release)
     attributes = previous.attributes
-    bytes = previous.blob.download
-    expect { upload_screenshot(release: release, bytes: "broken") }.to raise_error(Screenshot::InvalidImage)
-    allow(ActiveStorage::Blob.service).to receive(:upload).and_raise(IOError)
+    oversized = confirmed_screenshot(bytes: png(width: 641))
+    expect { described_class.create(upload_id: oversized.public_id, release_id: release.public_id, kind: "gameplay") }.to raise_error(Screenshot::InvalidImage)
+    expect(oversized.reload.state).to eq("confirmed")
+    upload = confirmed_screenshot(bytes: png(pixel: "\xff\0\0\xff".b))
+    allow(ActiveStorage::Blob.services.fetch(:test_media)).to receive(:upload).and_raise(IOError)
     perform_enqueued_jobs do
-      expect { upload_screenshot(release: release, bytes: png(pixel: "\xff\0\0\xff".b)) }.to raise_error(Screenshot::StorageUnavailable)
+      expect { described_class.create(upload_id: upload.public_id, release_id: release.public_id, kind: "gameplay") }.to raise_error(Screenshot::StorageUnavailable)
     end
+    expect(upload.reload.state).to eq("confirmed")
     expect(previous.reload.attributes).to eq(attributes)
-    expect(previous.blob.download).to eq(bytes)
-    expect(described_class.find_by(sha256: previous.sha256)).to eq(bytes)
     expect(ActiveStorage::Blob.count).to eq(1)
   end
 
-  it "removes by stable public ID and preserves identical bytes referenced by another release" do
+  it "removes by stable public ID and keeps identical pixels another release still shows" do
     first = upload_screenshot(release: release)
     shared = create(:release, game: release.game, system: "gb", sha1: release.sha1)
     second = upload_screenshot(release: shared)
-    expect(first.sha256).to eq(second.sha256)
-    perform_enqueued_jobs do
-      described_class.remove(public_id: release.public_id, kind: "gameplay")
-    end
-    expect(first.blob.service.exist?(first.blob.key)).to be(false)
-    expect(described_class.find_by(sha256: second.sha256)).to eq(second.blob.download)
-    perform_enqueued_jobs do
-      described_class.remove(public_id: shared.public_id, kind: "gameplay")
-    end
+    expect(second.blob).to eq(first.blob)
+    perform_enqueued_jobs { described_class.remove(public_id: release.public_id, kind: "gameplay") }
+    expect(second.blob.service.exist?(second.blob.key)).to be(true)
+    perform_enqueued_jobs { described_class.remove(public_id: shared.public_id, kind: "gameplay") }
     expect(second.blob.service.exist?(second.blob.key)).to be(false)
-    expect { described_class.find_by(sha256: second.sha256) }.to raise_error(Screenshot::NotFound)
   end
 
   it "selects the smallest stable release ID, prefers gameplay there and ignores media order and equal first checksums" do

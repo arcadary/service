@@ -34,7 +34,7 @@ class PlaythroughChaptersService
   private_class_method :seconds
 
   def self.invalid!
-    raise PlaythroughStage::InvalidHls, "invalid_hls"
+    raise Playthrough::InvalidHls, "invalid_hls"
   end
   private_class_method :invalid!
 end

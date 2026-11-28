@@ -21,7 +21,11 @@ Rails.application.configure do
   # Enable serving of images, stylesheets, and JavaScripts from an asset server.
   # config.asset_host = "http://assets.example.com"
 
-  config.active_storage.service = :r2 if %w[R2_BUCKET R2_ENDPOINT R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY].all? { |name| ENV[name].present? }
+  if %w[R2_BUCKET R2_PUBLIC_BUCKET R2_ENDPOINT R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY].all? { |name| ENV[name].present? }
+    config.active_storage.service = :r2
+    config.x.media_service = :r2_media
+  end
+  config.x.media_base_url = "https://media.arcadary.org"
 
   # Assume all access to the app is happening through a SSL-terminating reverse proxy.
   config.assume_ssl = true

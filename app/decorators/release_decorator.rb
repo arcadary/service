@@ -12,7 +12,7 @@ class ReleaseDecorator
   def initialize(release, sha1:)
     @release, @sha1 = release, sha1
     @startup = ReleaseStartupService.for_release(release: release)
-    @compatibility = CompatibilityResultDecorator.current(CompatibilityService.current(release: release))
+    @compatibility = CompatibilityResultDecorator.current(CompatibilityService.current(release: release, startup_revision: @startup.fetch("revision")))
   end
 
   def as_json(*)

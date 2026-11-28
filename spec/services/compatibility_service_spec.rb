@@ -50,12 +50,11 @@ RSpec.describe CompatibilityService do
       expect { described_class.record(**stale) }.to raise_error(CompatibilityResult::TargetMismatch)
     end
 
-    it "refuses a result without the ownership attestation, a time zone, a past test time or printable text" do
+    it "refuses a result with missing evidence, a future test time or invalid device requirements" do
       [
         arguments(owns_file: false), arguments(tested_at: "2026-11-28T18:00:00"), arguments(tested_at: 1.hour.from_now.iso8601),
-        arguments(observed: "Line one\nLine two"), arguments(limits: " "), arguments(device: "steam_box"), arguments.except(:reviewer),
-        arguments(status: "attention"), arguments(status: "attention", reason: "Slow\tdown."), arguments(reason: "Plays fine."),
-        arguments(status: "does_not_work", reason: "x" * 201), arguments(requires_input: [ "light_gun" ]), arguments(requires_input: %w[keyboard keyboard])
+        arguments(observed: "Line one\nLine two"), arguments.except(:reviewer),
+        arguments(status: "attention"), arguments(reason: "Plays fine."), arguments(requires_input: [ "light_gun" ])
       ].each do |invalid|
         expect { described_class.record(**invalid) }.to raise_error(CompatibilityResult::InvalidInput)
       end

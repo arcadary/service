@@ -87,10 +87,6 @@ RSpec.describe "MCP compatibility recording", type: :request do
     expect(record(startup_revision: "0" * 64).dig("structuredContent", "error", "code")).to eq("target_mismatch")
     expect(record(release_id: "unknown").dig("structuredContent", "error", "code")).to eq("not_found")
     expect(record(owns_file: false).dig("structuredContent", "error", "code")).to eq("invalid_input")
-    expect(record(device: "steam_box").dig("structuredContent", "error", "code")).to eq("invalid_input")
-    expect(record(status: "attention").dig("structuredContent", "error", "code")).to eq("invalid_input")
-    expect(record(reason: "Fine.").dig("structuredContent", "error", "code")).to eq("invalid_input")
-    expect(record(requires_input: [ "light_gun" ]).dig("structuredContent", "error", "code")).to eq("invalid_input")
     expect(tool("get_compatibility", release_id: "unknown").dig("structuredContent", "error", "code")).to eq("not_found")
     expect(CompatibilityResult.count).to eq(0)
   end

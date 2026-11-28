@@ -16,7 +16,7 @@ class McpCatalogToolsService
         annotations: { read_only_hint: true, destructive_hint: false, idempotent_hint: true, open_world_hint: false }) do |server_context: nil, **arguments|
         McpCatalogToolsService.call(tool: name, arguments: arguments)
       end
-    end + McpScreenshotToolsService.tools + McpPlaythroughToolsService.tools + McpCompatibilityToolsService.tools
+    end + McpUploadToolsService.tools + McpCompatibilityToolsService.tools
   end
 
   def self.call(tool:, arguments:)
@@ -45,7 +45,6 @@ class McpCatalogToolsService
 
     MCP::Tool::Response.new([ { type: "text", text: serialized } ], error: error, structured_content: result)
   end
-  private_class_method :response
 
   def self.input_schema(name:)
     properties = {
@@ -100,7 +99,6 @@ class McpCatalogToolsService
   def self.object_schema(properties:)
     { type: "object", additionalProperties: false, required: properties.keys.map(&:to_s), properties: properties }
   end
-  private_class_method :object_schema
 
   def self.page_schema(items:)
     object_schema(properties: {

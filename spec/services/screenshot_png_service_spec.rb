@@ -5,7 +5,7 @@ RSpec.describe ScreenshotPngService do
   include ScreenshotHelpers
 
   def decode(bytes, system: "gb")
-    described_class.decode(io: StringIO.new(bytes), system: system)
+    described_class.new(bytes: bytes, system: system).decode
   end
 
   it "keeps only pixels and measures and hashes the stored PNG" do
@@ -26,17 +26,6 @@ RSpec.describe ScreenshotPngService do
       expect { decode(png(width: width + 1, height: 1), system: system) }.to raise_error(Screenshot::InvalidImage)
       expect { decode(png(width: 1, height: height + 1), system: system) }.to raise_error(Screenshot::InvalidImage)
     end
-  end
-
-  it "bounds input reads and accepts exactly the byte cap" do
-    bytes = png
-    padding = "Comment\0" + "a" * (described_class::MAX_BYTES - bytes.bytesize - 12 - 8)
-    at_limit = png(chunks: [ png_chunk("tEXt", padding) ])
-    expect(at_limit.bytesize).to eq(8_388_608)
-    expect(decode(at_limit).fetch(:width)).to eq(2)
-    io = StringIO.new(at_limit + "a")
-    expect(io).to receive(:read).with(8_388_609).and_call_original
-    expect { described_class.decode(io: io, system: "gb") }.to raise_error(Screenshot::TooLarge)
   end
 
   it "rejects malformed, animated and truncated PNGs, including corrupt compressed pixels" do

@@ -43,8 +43,7 @@ When the outcome has no `merge` key, keep the project's existing procedure: once
 gates pass, merge exactly the verified head with its merge method (for example
 `gh pr merge N --squash --match-head-commit SHA`). If the merge command fails, check
 `gh pr view N --json state,mergeCommit`; if merged, report `merged`.
-Close the linked issue when completion is satisfied and record
-`ub-agents report --outcome merged --summary "Merged SHA under project policy"`.
+Record `ub-agents report --outcome merged --summary "Merged SHA under project policy"`.
 
 If policy requires a maintainer merge, report
 `ub-agents report --outcome maintainer-merge
@@ -52,10 +51,10 @@ If policy requires a maintainer merge, report
 --action "Maintainer: merge #N because REASON."`.
 
 If a check fails in code the diff does not touch, rerun the failed jobs once
-(`gh run rerun RUN_ID --failed`). If the rerun passes, file an issue for the flaky
-check with the run link, name it in your report and continue. If it fails again,
+(`gh run rerun RUN_ID --failed`). If the rerun passes, note the flaky check with the
+run link in a PR comment, name it in your report and continue. If it fails again,
 compare the same check on the current base branch; run it there if no comparable
-result exists. If the base fails the same way, file an issue with both results and
+result exists. If the base fails the same way, put both results in a PR comment and
 report blocked naming it. Do not send flaky or shared base failures back. If the
 base passes, send it back with the failing head and passing base results. If you
 cannot obtain a comparable base result, report blocked for missing evidence.

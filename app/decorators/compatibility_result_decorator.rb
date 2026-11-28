@@ -1,5 +1,5 @@
 class CompatibilityResultDecorator
-  VERSION = 3
+  VERSION = 1
   UNKNOWN = { "status" => "unknown" }.freeze
 
   def self.version

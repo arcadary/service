@@ -29,6 +29,10 @@
 !/tmp/storage/
 !/tmp/storage/.keep
 
+# Ignore uploads waiting on the host's disk for confirmation.
+/uploads/*
+!/uploads/.keep
+
 /public/assets
 
 # Ignore key files for decrypting credentials and more.
