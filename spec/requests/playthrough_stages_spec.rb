@@ -33,7 +33,7 @@ RSpec.describe "Private playthrough staging", type: :request do
       declaration: { oneOf: [ { "$ref" => "#/components/schemas/playthrough_declaration" },
         McpPlaythroughToolsService.input_schema.merge(required: %w[retry_key release_id source_sha1 capture],
           properties: McpPlaythroughToolsService.input_schema.fetch(:properties).except(:manifest)) ] },
-      state: { type: :string, enum: %w[incomplete received validated validation_failed expired reclaimed] },
+      state: { type: :string, enum: %w[incomplete received validated validation_failed promoting published expired reclaimed] },
       declared_at: { type: :string, format: "date-time" }, stage_expires_at: { type: :string, format: "date-time" },
       expired_at: { type: :string, format: "date-time" }, reclaimed_at: { type: :string, format: "date-time" },
       declaration_sha256: { type: :string, pattern: "^[0-9a-f]{64}$" },
@@ -50,11 +50,13 @@ RSpec.describe "Private playthrough staging", type: :request do
       security [ private_service_basic: [] ]
       parameter name: :staging_id, in: :path, required: true, schema: { type: :string }
       description <<~TEXT
-        declared_at is the original declaration/creation time; stage_expires_at is exactly 24 hours later. At that deadline every stage expires on access, before validation replay. GET remains 200: expired includes expired_at equal to the deadline; reclaimed adds reclaimed_at only after all associated reclaimable keys are confirmed absent with no deletion work pending. Receipts retain retry/stage identity, declaration fingerprint/package digest, exact release, source, capture and full mismatch evidence. Reclaimed receipts omit objects and manifests, including nested copies, and have no media attachments or bytes. Identical normalized begin replay returns stage_expired without authorization after the deadline; changed input returns stage_conflict even after pruning, with the retry key reserved.
+        declared_at is the original declaration/creation time; stage_expires_at is exactly 24 hours later. At that deadline every stage closes staging writes and internal validation rejects before replay. Unprotected stages expire on access; promoting/published retain their state without expired_at or reclaimed_at. GET remains 200: expired includes expired_at equal to the deadline; reclaimed adds reclaimed_at only after all associated reclaimable keys are confirmed absent with no deletion work pending. Receipts retain retry/stage identity, declaration fingerprint/package digest, exact release, source, capture and full mismatch evidence. Reclaimed receipts omit objects and manifests, including nested copies, and have no media attachments or bytes. Identical normalized begin replay returns stage_expired without authorization after the deadline; changed input returns stage_conflict even after pruning, with the retry key reserved.
 
         Transfers and validators have independent renewable fenced 15-minute leases. Concurrent different-object transfers proceed independently; same-object transfers return the winning receipt and delete only their own loser keys. Concurrent live validators replay the first terminal outcome, including conflicting local outcomes. Heartbeats renew during blocking upload/download and validation, without extending the declaration deadline. At lease equality abandoned attempts are fenced; stale attachment, validation commit/replay or renewal fails stage_conflict, or stage_expired after the deadline. Hourly cleanup at minute 5 after screenshot cleanup handles at most 100 stages and 500 keys with durable fair progress, skips live transfer/validation owners and uses renewable fenced claims. It deletes only owned private staging keys after reference rechecks; legacy bytes wait for the retained owning stage's original deadline. Failed deletion stays pending with retryable storage_unavailable while other work continues. Transfer key/blob identities and fencing tombstones persist with the stage, even after reclamation. Fenced late writers record pending work and delete only their own keys; failed deletion clears reclaimed_at until absence is reconfirmed. Cleanup revisits reclaimed tombstones even when a late writer crashes before recording pending work. Staging never reopens. All private HTTP, validation, cleanup and ownership failures suppress logs.
 
-        Existing stages always return 200. incomplete means missing receipts; received means stored but unvalidated. validated includes validation_result; validation_failed includes validation_error (invalid_hls or package_integrity_mismatch). Other states omit both validation fields. Results bind this exact staging ID, immutable normalized manifest/declaration fingerprint/package digest, stable release ID, source SHA-1 and capture/verification evidence. duration is exact summed decimal seconds, audio_codec is null for silent H.264, and absent chapters use chapters_path:null and chapters:[]. No public object, descriptor, redirect or playback is created.
+        Existing stages always return 200. incomplete means missing receipts; received means stored but unvalidated. validated, promoting and published include validation_result; promoting/published retain the exact validated payload, objects and declaration with only state changed, even after the deadline. They add no publication timestamp, claim data or terminal-expiry timestamps. validation_failed includes validation_error (invalid_hls or package_integrity_mismatch). Other states omit both validation fields. Results bind this exact staging ID, immutable normalized manifest/declaration fingerprint/package digest, stable release ID, source SHA-1 and capture/verification evidence. duration is exact summed decimal seconds, audio_codec is null for silent H.264, and absent chapters use chapters_path:null and chapters:[]. Before the deadline, promoting/published validation replays without storage reads, PUT retains identical receipts and MCP begin retains the same stage/objects/received summary with a fresh capability. No public object, descriptor, redirect or playback is created.
+
+        Internal PlaythroughPromotionService.claim_promotion(staging_id:, release_id:, package_sha256:) verifies persisted validation/stage/stable-release/package bindings and atomically pins an unexpired validated stage as promoting. Identical active requests return the same durable opaque claim, even after the deadline; active claims never time out. complete_promotion(claim:) records published; release_promotion(claim:) restores validated before the original deadline or expired at/after it. Matching terminal outcomes replay after restart; crossed operations, wrong/stale claims, ineligible/published stages and changed bindings fail stage_conflict. Unknown stages raise not_found; expired/reclaimed stages reject claims with stage_expired. A fresh claim after release has a new identity; repeating the old release is a no-op. Promotion uses the same atomic exclusion as expiry, attachment, validation finalization and reclamation. Cleanup excludes promoting/published stages from selection and visit counts; published staging objects, blobs and complete manifests remain indefinitely, even after pointer replacement. The #57 publisher must complete inside its successful release-pointer transaction (completion rolls back with it), release only after copying stops, and own historical successful-publication retries. Storage stays outside transactions; claims and private failures are never logged or exposed. No copying, release pointer, validation/promotion HTTP route or MCP publication tool is added here.
 
         PlaythroughValidationService.validate(staging_id:) is an internal operation for the authenticated MCP workflow, without a validation HTTP route. Unknown IDs raise not_found. Before the declaration deadline, persisted success or terminal failure replays before completeness or storage checks, including after restart; concurrent live validation cannot overwrite it. stage_incomplete is retryable and precedes all byte reads/parsing, including malformed received playlists or wrong role MIME. All completed objects are then read and verified before HLS interpretation: missing/unreadable blobs raise retryable storage_unavailable; readable bytes or stored size/hash/MIME disagreement raises terminal package_integrity_mismatch. Wrong declared role MIME, undeclared references, malformed/unsupported HLS, transport or chapters raises terminal invalid_hls. Retryable failures leave state unchanged; terminal failures require a new declaration/retry key to correct bytes. PUT receipts and declaration replays stay immutable. Internal validation suppresses logs, including failures.
 
@@ -98,6 +100,32 @@ RSpec.describe "Private playthrough staging", type: :request do
             expect(response.parsed_body.fetch("state")).to eq("validation_failed")
             expect(response.parsed_body.fetch("validation_error")).to eq("invalid_hls")
             expect(response.parsed_body).not_to have_key("validation_result")
+          end
+        end
+        %w[promoting published].each do |state|
+          context state do
+            let(:files) { hls_variant_files }
+            let(:stage) { declare_hls(release: release, files: files) }
+            before do
+              receive_hls(stage: stage, files: files)
+              PlaythroughValidationService.validate(staging_id: stage.public_id)
+              @validated_receipt = PlaythroughStageDecorator.decorate(stage.reload).as_json.deep_stringify_keys
+              claim = PlaythroughPromotionService.claim_promotion(staging_id: stage.public_id,
+                release_id: release.public_id, package_sha256: stage.package_sha256)
+              PlaythroughPromotionService.complete_promotion(claim: claim) if state == "published"
+            end
+            run_test! do
+              expect(response.parsed_body).to eq(@validated_receipt.merge("state" => state))
+              expect(response.headers["Cache-Control"]).to eq("no-store")
+              expect(response.headers["Set-Cookie"]).to be_nil
+              travel_to stage.declared_at + 24.hours, with_usec: true do
+                get "/v1/playthrough-stages/#{stage.public_id}.json", headers: headers
+                expect(response).to have_http_status(:ok)
+                expect(response.parsed_body).to eq(@validated_receipt.merge("state" => state))
+                expect(response.headers["Cache-Control"]).to eq("no-store")
+                expect(response.headers["Set-Cookie"]).to be_nil
+              end
+            end
           end
         end
         context "expired" do
@@ -206,6 +234,40 @@ RSpec.describe "Private playthrough staging", type: :request do
     end
   end
 
+  %w[promoting published].each do |state|
+    it "keeps authorized #{state} PUT receipts immutable, then rejects them at the deadline before body or storage reads" do
+      files = hls_files
+      stage = declare_hls(release: release, files: files)
+      receive_hls(stage: stage, files: files)
+      PlaythroughValidationService.validate(staging_id: stage.public_id)
+      object = stage.objects.reload.find_by!(path: "segment.ts")
+      expected = PlaythroughStageObjectDecorator.decorate(object).as_json.deep_stringify_keys
+      claim = PlaythroughPromotionService.claim_promotion(staging_id: stage.public_id,
+        release_id: release.public_id, package_sha256: stage.package_sha256)
+      PlaythroughPromotionService.complete_promotion(claim: claim) if state == "published"
+      travel_to stage.declared_at + 24.hours - 1, with_usec: true do
+        token = PlaythroughUploadAuthorizationService.issue(stage: stage).fetch(:capability)
+        authorized_headers = headers.merge("X-Arcadary-Upload-Capability" => token, "CONTENT_TYPE" => object.content_type)
+        path = "/v1/playthrough-stages/#{stage.public_id}/objects/#{object.public_id}.json"
+        allow(ActiveStorage::Blob.service).to receive(:upload).and_raise("must not upload")
+        allow(ActiveStorage::Blob.service).to receive(:download).and_raise("must not download")
+        put path, params: files.fetch("segment.ts"), headers: authorized_headers
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body).to eq(expected)
+        travel 1, with_usec: true
+        allow(PlaythroughStageInputService).to receive(:read).and_raise("must not read body")
+        put path, params: "unread body", headers: authorized_headers
+        expect(response).to have_http_status(:gone)
+        expect(response.parsed_body).to eq("error" => "stage_expired")
+        expect(response.headers["Cache-Control"]).to eq("no-store")
+        put path, params: "unread body", headers: authorized_headers.except("X-Arcadary-Upload-Capability")
+        expect(response).to have_http_status(:forbidden)
+        expect(response.parsed_body).to eq("error" => "upload_not_authorized")
+        expect(stage.reload).to have_attributes(promotion_state: state, expired_at: nil, reclaimed_at: nil)
+      end
+    end
+  end
+
   it "authenticates before bounded reads and silences success, parsing, integrity, storage and routing errors" do
     receipt = PlaythroughStageDecorator.decorate(stage).summary.deep_stringify_keys
     capability
@@ -256,9 +318,14 @@ RSpec.describe "Private playthrough staging", type: :request do
     failed = declare_playthrough
     receive_playthrough(stage: failed)
     expect { PlaythroughValidationService.validate(staging_id: failed.public_id) }.to raise_error(PlaythroughStage::InvalidHls)
-    public_paths.each_with_index do |path, index|
-      get path, headers: { "User-Agent" => "Arcadary/1.0" }
-      expect([ response.status, response.body, response.headers.slice("ETag", "Last-Modified", "Cache-Control") ]).to eq(previous[index])
+    claim = PlaythroughPromotionService.claim_promotion(staging_id: staged.public_id,
+      release_id: release.public_id, package_sha256: staged.package_sha256)
+    %w[promoting published].each do |state|
+      PlaythroughPromotionService.complete_promotion(claim: claim) if state == "published"
+      public_paths.each_with_index do |path, index|
+        get path, headers: { "User-Agent" => "Arcadary/1.0" }
+        expect([ response.status, response.body, response.headers.slice("ETag", "Last-Modified", "Cache-Control") ]).to eq(previous[index])
+      end
     end
     object = staged.objects.first.reload
     token = PlaythroughUploadAuthorizationService.issue(stage: staged).fetch(:capability)
@@ -266,9 +333,11 @@ RSpec.describe "Private playthrough staging", type: :request do
     expect(response).to have_http_status(:not_found)
     get "/rails/active_storage/blobs/redirect/#{object.blob.signed_id}/playthrough-object"
     expect(response).to have_http_status(:not_found)
-    post "/v1/playthrough-stages/#{staged.public_id}/validate.json", headers: headers
-    expect(response).to have_http_status(:not_found)
-    expect(response.headers["Cache-Control"]).to eq("no-store")
+    %w[validate promote].each do |operation|
+      post "/v1/playthrough-stages/#{staged.public_id}/#{operation}.json", headers: headers
+      expect(response).to have_http_status(:not_found)
+      expect(response.headers["Cache-Control"]).to eq("no-store")
+    end
   end
 
   it "bounds object reads with missing or dishonest Content-Length" do

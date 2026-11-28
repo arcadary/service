@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_28_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_28_130000) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.string "name", null: false
     t.string "record_type", null: false
@@ -87,6 +87,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_28_120000) do
     t.index ["sha1"], name: "index_media_files_on_sha1", unique: true
   end
 
+  create_table "playthrough_promotion_claims", force: :cascade do |t|
+    t.integer "playthrough_stage_id", null: false
+    t.string "token", null: false
+    t.string "validation_sha256", null: false
+    t.string "state", default: "active", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["playthrough_stage_id"], name: "index_playthrough_promotion_claims_active_stage", unique: true, where: "state = 'active'"
+    t.index ["playthrough_stage_id"], name: "index_playthrough_promotion_claims_on_playthrough_stage_id"
+    t.index ["token"], name: "index_playthrough_promotion_claims_on_token", unique: true
+  end
+
   create_table "playthrough_stage_attempts", force: :cascade do |t|
     t.integer "playthrough_stage_id", null: false
     t.string "kind", null: false
@@ -141,6 +153,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_28_120000) do
     t.datetime "expired_at"
     t.datetime "reclaimed_at"
     t.integer "cleanup_visits", default: 0, null: false
+    t.string "promotion_state"
     t.index ["cleanup_visits", "id"], name: "index_playthrough_stages_on_cleanup_visits_and_id"
     t.index ["public_id"], name: "index_playthrough_stages_on_public_id", unique: true
     t.index ["release_id"], name: "index_playthrough_stages_on_release_id"
@@ -222,6 +235,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_28_120000) do
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "game_identities", "games"
   add_foreign_key "games", "games", column: "retired_into_game_id"
+  add_foreign_key "playthrough_promotion_claims", "playthrough_stages"
   add_foreign_key "playthrough_stage_attempts", "playthrough_stages"
   add_foreign_key "playthrough_stage_objects", "active_storage_blobs", column: "blob_id"
   add_foreign_key "playthrough_stage_objects", "playthrough_stages"
