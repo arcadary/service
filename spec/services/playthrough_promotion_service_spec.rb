@@ -41,6 +41,23 @@ RSpec.describe PlaythroughPromotionService do
     expect(stage.promotion_claims).to be_empty
   end
 
+  it "allows promotion after an identical PUT retry leaves orphan cleanup pending" do
+    validate_stage
+    original_objects = stage.objects.map(&:attributes)
+    object = stage.objects.first
+    allow(ActiveStorage::Blob.service).to receive(:delete).and_raise(IOError)
+    receive_playthrough(stage: stage, object: object, bytes: files.fetch(object.path))
+    allow(ActiveStorage::Blob.service).to receive(:delete).and_call_original
+    pending = stage.attempts.where(cleanup_pending: true).sole
+
+    expect(claim).to be_present
+    PlaythroughReclamationService.discard(attempt: pending)
+    expect(pending.reload.cleanup_pending).to be(false)
+    expect(stage.reload.promotion_state).to eq("promoting")
+    expect(stage.objects.reload.map(&:attributes)).to eq(original_objects)
+    expect(stage.objects.map { |entry| entry.blob.download.b }).to eq(stage.objects.map { |entry| files.fetch(entry.path).b })
+  end
+
   it "rejects claims at the original deadline and after reclamation" do
     validate_stage
     travel_to stage.declared_at + 24.hours, with_usec: true do

@@ -18,10 +18,6 @@ class PlaythroughPromotionService
           require_claim!(stage: current, claim: active)
           next active.token
         end
-        if current.promotion_state || current.attempts.where(kind: "cleanup", state: "active").exists? ||
-            current.attempts.where(cleanup_pending: true).exists?
-          raise PlaythroughStage::Conflict, "stage_conflict"
-        end
 
         claim = current.promotion_claims.create!(token: SecureRandom.hex(48), validation_sha256: validation_sha256(stage: current))
         current.update!(promotion_state: "promoting")
