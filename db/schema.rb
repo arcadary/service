@@ -139,6 +139,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_28_010000) do
     t.index ["sha256"], name: "index_screenshots_on_sha256"
   end
 
+  create_table "validation_submissions", force: :cascade do |t|
+    t.string "sha1", null: false
+    t.bigint "byte_size", null: false
+    t.string "system", null: false
+    t.datetime "completed_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["sha1"], name: "index_validation_submissions_on_sha1", unique: true
+    t.check_constraint "byte_size > 0 AND byte_size <= 134217728", name: "validation_submission_size"
+  end
+
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "game_identities", "games"
