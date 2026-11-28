@@ -95,10 +95,11 @@ class CatalogAuthoringService
     def relationships
       @plan = CatalogRelationshipService.new(operation: @operation, attributes: @attributes)
       @plan.build do |before|
+        raise Conflict, "complete current preview is required" unless @supplied_preview.is_a?(Hash) && @supplied_preview["before"] == before
+
         required = before.to_h { |state| [ reference(state: state), state.fetch("authoring_revision") ] }
         no_extra_revisions!(references: required.keys)
         raise Conflict, "missing or stale affected revisions" unless @expected == required
-        raise Conflict, "complete current preview is required" unless @supplied_preview.is_a?(Hash) && @supplied_preview["before"] == before
       end
       raise Conflict, "complete current preview is required" unless @supplied_preview == @plan.preview
 

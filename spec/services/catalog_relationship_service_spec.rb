@@ -125,6 +125,19 @@ RSpec.describe "Catalog relationship authoring" do
     expect(CatalogMutation.count).to eq(0)
   end
 
+  it "rejects a stale preview when concurrent reassignment removes records from the affected set" do
+    attributes = { id: release.public_id, game_id: target.public_id }
+    proposal = preview(operation: :reassign_release, attributes: attributes)
+    other = create(:game)
+    apply(operation: :reassign_release, attributes: { id: release.public_id, game_id: other.public_id })
+    current = preview(operation: :reassign_release, attributes: attributes)
+    expect(current.fetch("expected_revisions").keys).not_to include("game:#{source.public_id}")
+    expect { apply(operation: :reassign_release, attributes: attributes, proposal: proposal) }.to raise_error(CatalogAuthoringService::Conflict, /preview/)
+    expect(release.reload.game).to eq(other)
+    expect(preview(operation: :reassign_release, attributes: attributes)).to eq(current)
+    expect(CatalogMutation.count).to eq(1)
+  end
+
   it "detects alias and importer-key ownership changes even without revision changes" do
     attributes = { id: release.public_id, game_id: target.public_id }
     key = create(:game_identity, game: source)
