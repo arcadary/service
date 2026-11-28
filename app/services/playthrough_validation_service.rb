@@ -77,7 +77,7 @@ class PlaythroughValidationService
   rescue PlaythroughStage::PackageIntegrityMismatch
     raise
   rescue StandardError
-    raise PlaythroughStage::StorageUnavailable, "storage_unavailable"
+    raise PlaythroughStage::StorageUnavailable, "storage_unavailable", cause: nil
   end
 
   def verify_manifest!

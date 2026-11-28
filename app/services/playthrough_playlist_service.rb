@@ -4,6 +4,8 @@ require "strscan"
 class PlaythroughPlaylistService
   INTEGER = /\A[0-9]{1,20}\z/
   MAX_INTEGER = (2**64) - 1
+  CODEC_FORMAT = /[!#$%&'*+.^_\x60|~0-9A-Za-z-]{4}(?:\.[!#$%&'*+^_\x60|~0-9A-Za-z-]+)*/
+  CODECS = /\A"#{CODEC_FORMAT}(?:, *#{CODEC_FORMAT})*"\z/
 
   def self.parse(bytes:)
     new(bytes: bytes).parse
@@ -110,7 +112,7 @@ class PlaythroughPlaylistService
       self.class.positive_integer(value: attributes.fetch(name)) if attributes.key?(name)
     end
     if attributes.key?("CODECS")
-      self.class.invalid! unless /\A"[A-Za-z0-9][A-Za-z0-9.-]*(?:,[A-Za-z0-9][A-Za-z0-9.-]*)*"\z/.match?(attributes.fetch("CODECS"))
+      self.class.invalid! unless CODECS.match?(attributes.fetch("CODECS"))
     end
     if attributes.key?("RESOLUTION")
       dimensions = attributes.fetch("RESOLUTION").split("x", -1)

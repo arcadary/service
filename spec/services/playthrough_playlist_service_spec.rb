@@ -8,6 +8,7 @@ RSpec.describe PlaythroughPlaylistService do
     playlist = hls_media(segments: [ [ "one.ts", "2" ], [ "two.ts", "2.49" ] ], target: 2).sub("#EXTINF", "# A comment\n\n#EXTINF").gsub("\n", "\r\n")
     expect(described_class.parse(bytes: playlist).fetch(:segments).map { |segment| segment.fetch(:duration) }).to eq([ BigDecimal("2"), BigDecimal("2.49") ])
     expect(described_class.parse(bytes: hls_master(paths: [ "one.m3u8", "one.m3u8" ])).fetch(:variants)).to eq([ "one.m3u8", "one.m3u8" ])
+    expect(described_class.parse(bytes: hls_master.sub("avc1.42001e,mp4a.40.2", "avc1.42001e, mp4a.40.2")).fetch(:type)).to eq(:master)
   end
 
   {
@@ -43,7 +44,7 @@ RSpec.describe PlaythroughPlaylistService do
   end
 
   [ "", "BANDWIDTH=0", "BANDWIDTH=18446744073709551616", "BANDWIDTH=1,BANDWIDTH=2",
-    'BANDWIDTH="1"', "BANDWIDTH=1, AVERAGE-BANDWIDTH=1", "BANDWIDTH=1,AVERAGE-BANDWIDTH=0",
+    'BANDWIDTH="1"', "BANDWIDTH=1, AVERAGE-BANDWIDTH=1", "BANDWIDTH=1,AVERAGE-BANDWIDTH=0", 'BANDWIDTH=1,CODECS="avc1..42001e"',
     "BANDWIDTH=1,CODECS=avc1.42001e", 'BANDWIDTH=1,CODECS=""', "BANDWIDTH=1,RESOLUTION=0x240",
     'BANDWIDTH=1,AUDIO="audio"', "BANDWIDTH=1," ].each do |attributes|
     it "rejects malformed or unsupported stream attributes #{attributes.inspect}" do

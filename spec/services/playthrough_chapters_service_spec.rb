@@ -6,6 +6,7 @@ RSpec.describe PlaythroughChaptersService do
   it "accepts chronological adjacent cues, UTF-8 titles and CRLF with an initial BOM" do
     bytes = "\uFEFF#{chapter}\n00:00:01.000 --> 00:00:02.500\nCafé\n".gsub("\n", "\r\n")
     expect(described_class.parse(bytes: bytes, duration: BigDecimal("2.5")).last).to eq("start" => "00:00:01.000", "end" => "00:00:02.500", "title" => "Café")
+    expect(described_class.parse(bytes: chapter.gsub("\n", "\r").sub("First chapter", "First\tchapter"), duration: BigDecimal("2.5")).sole.fetch("title")).to eq("First\tchapter")
   end
 
   {

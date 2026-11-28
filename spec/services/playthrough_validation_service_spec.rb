@@ -84,7 +84,7 @@ RSpec.describe PlaythroughValidationService do
     receive_hls(stage: stage, files: files)
     object = stage.objects.first.reload
     object.blob.delete
-    expect { validate_stage }.to raise_error(PlaythroughStage::StorageUnavailable, "storage_unavailable")
+    expect { validate_stage }.to raise_error(PlaythroughStage::StorageUnavailable, "storage_unavailable") { |error| expect(error.cause).to be_nil }
     expect(stage.reload.validation_state).to be_nil
     object.blob.upload_without_unfurling(StringIO.new(files.fetch(object.path)))
     expect(validate_stage.fetch("staging_id")).to eq(stage.public_id)

@@ -5,8 +5,8 @@ class PlaythroughChaptersService
   def self.parse(bytes:, duration:)
     text = bytes.dup.force_encoding(Encoding::UTF_8)
     invalid! unless text.valid_encoding?
-    text = text.delete_prefix("\uFEFF").gsub("\r\n", "\n")
-    invalid! if text.match?(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f\ufeff]/)
+    text = text.delete_prefix("\uFEFF").gsub(/\r\n?/, "\n")
+    invalid! if text.match?(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\ufeff]/)
     lines = text.split("\n", -1)
     invalid! unless lines.shift == "WEBVTT" && lines.shift == ""
     cues = []
