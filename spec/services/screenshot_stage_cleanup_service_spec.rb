@@ -38,13 +38,21 @@ RSpec.describe ScreenshotStageCleanupService do
     end
   end
 
-  it "retains a durable cleanup target when storage deletion fails so the hourly retry can remove it" do
-    stage = stage_image
+  it "continues past failed deletions and retains their targets for the hourly retry" do
+    stub_const("ScreenshotStageCleanupService::BATCH_SIZE", 2)
+    stage, second, third = stage_image, stage_image, stage_image
     blob = stage.blob
-    travel_to stage.expires_at, with_usec: true do
-      allow(blob.service).to receive(:delete).and_raise(IOError)
-      expect { described_class.call }.to raise_error(IOError)
+    later_blobs = [ second.blob, third.blob ]
+    travel_to third.expires_at, with_usec: true do
+      allow(blob.service).to receive(:delete).and_call_original
+      allow(blob.service).to receive(:delete).with(blob.key).and_raise(IOError)
+      expect { described_class.call }.to have_enqueued_job(ScreenshotStageCleanupJob)
+      expect(ScreenshotStage.pluck(:id)).to match_array([ stage.id, third.id ])
+      perform_enqueued_jobs(only: ScreenshotStageCleanupJob)
+      expect(ScreenshotStage.pluck(:id)).to eq([ stage.id ])
+      expect(enqueued_jobs).to be_empty
       expect(stage.reload.blob).to eq(blob)
+      later_blobs.each { |later| expect(later.service.exist?(later.key)).to be(false) }
       allow(blob.service).to receive(:delete).and_call_original
       described_class.call
       expect(ScreenshotStage.exists?(stage.id)).to be(false)

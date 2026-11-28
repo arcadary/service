@@ -1,11 +1,15 @@
 class ScreenshotStageCleanupService
   BATCH_SIZE = 100
 
-  def self.call
-    ScreenshotStage.where(expires_at: ..Time.current).order(:expires_at).limit(BATCH_SIZE).pluck(:id).each do |id|
+  def self.call(after_id: 0)
+    expired = ScreenshotStage.where(expires_at: ..Time.current).where("id > ?", after_id)
+    ids = expired.order(:id).limit(BATCH_SIZE).pluck(:id)
+    ids.each do |id|
       cleanup(id: id)
     end
-    ScreenshotStageCleanupJob.perform_later if ScreenshotStage.where(expires_at: ..Time.current).exists?
+    if ids.any? && expired.where("id > ?", ids.last).exists?
+      ScreenshotStageCleanupJob.perform_later(after_id: ids.last)
+    end
   end
 
   def self.cleanup(id:)
@@ -21,7 +25,11 @@ class ScreenshotStageCleanupService
     end
     return unless blob
 
-    blob.delete
+    begin
+      blob.delete
+    rescue StandardError
+      return
+    end
     ScreenshotStage.transaction do
       ScreenshotStage.find_by(id: id)&.destroy!
       blob.destroy!

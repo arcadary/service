@@ -67,13 +67,25 @@ class ScreenshotService
   end
   private_class_method :selected_attributes
 
+  def self.purge(blob:)
+    blob.delete
+    blob.destroy!
+  end
+
+  def self.cleanup_failed_upload(blob:)
+    purge(blob: blob) if blob&.persisted?
+  rescue StandardError
+    ScreenshotBlobCleanupJob.perform_later(blob)
+  end
+  private_class_method :cleanup_failed_upload
+
   def self.upload(bytes:)
     blob = ActiveStorage::Blob.build_after_unfurling(io: StringIO.new(bytes), filename: "screenshot.png", content_type: "image/png", identify: false)
     blob.save!
     blob.upload_without_unfurling(StringIO.new(bytes))
     blob
   rescue StandardError
-    blob&.purge
+    cleanup_failed_upload(blob: blob)
     raise Screenshot::StorageUnavailable
   end
 end
