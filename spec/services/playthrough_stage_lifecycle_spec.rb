@@ -22,6 +22,10 @@ RSpec.describe "Playthrough stage lifecycle" do
       expect { PlaythroughValidationService.validate(staging_id: stage.public_id) }.to raise_error(PlaythroughStage::Expired)
       expect(stage.reload.expired_at).to eq(stage.declared_at + 24.hours)
       expect { PlaythroughUploadAuthorizationService.issue(stage: stage) }.to raise_error(PlaythroughStage::Expired)
+      PlaythroughStageCleanupService.call
+      expect(stage.reload.reclaimed_at).to be_present
+      expect(stage.validation_result).to eq(result.except("manifest"))
+      expect(stage.declaration).not_to have_key("manifest")
     end
   end
 
@@ -73,11 +77,15 @@ RSpec.describe "Playthrough stage lifecycle" do
       key = stage.objects.sole.reload.blob.key
       service = ActiveStorage::Blob.service
       allow(service).to receive(:delete).and_call_original
-      allow(service).to receive(:delete).with(key).and_raise(IOError, "private failure")
+      allow(service).to receive(:delete).with(key).and_wrap_original do |method, private_key|
+        method.call(private_key)
+        raise IOError, "private failure after deletion"
+      end
       travel 24.hours
       expect { PlaythroughStageCleanupService.call }.to raise_error(PlaythroughStage::StorageUnavailable, "storage_unavailable")
       expect(stage.reload.reclaimed_at).to be_nil
       expect(stage.attempts.find_by!(kind: "transfer").cleanup_pending).to be(true)
+      expect(service.exist?(key)).to be(false)
       expect(other.reload.reclaimed_at).to be_present
       allow(service).to receive(:delete).with(key).and_call_original
       PlaythroughStageCleanupService.call
