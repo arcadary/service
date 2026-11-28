@@ -13,6 +13,7 @@ The Rails 8.1 application behind [Arcadary](https://github.com/arcadary/arcadary
 - Screenshots and playthrough videos arrive through one upload flow: MCP `request_upload`, files PUT to `/v1/uploads` onto the host's own disk, `confirm_upload` checks them, and `upload_screenshot` or `upload_video` turns them into a release's screenshot, served from the public media bucket at `media.arcadary.org`, or a private playthrough. Screenshots carry their own image licence; the catalog licence excludes images. See [Uploads](README.md#uploads) and the Uploads technical reference in the corpus.
 - `register_release` (MCP) adds a release by checksum metadata alone, through the audited catalog operations. See [Registering releases over MCP](README.md#registering-releases-over-mcp).
 - Shared database operations create and correct catalog metadata with expected authoring revisions, retry protection and atomic audit history. Aliases and retained source values stay internal. See [Catalog authoring](README.md#catalog-authoring).
+- The admin records per-device compatibility (`works`, `attention`, `does_not_work` or `unknown` per release and device class, with core, core version, startup revision, evidence, a short reason and required input devices) through MCP; the release response returns the newest current result per device as `release.compatibility`, `unknown` when none. See [Device compatibility](README.md#device-compatibility).
 
 ## Rules
 

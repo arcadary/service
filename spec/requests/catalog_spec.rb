@@ -32,7 +32,7 @@ RSpec.describe "Imported catalog lookups", type: :request do
     expect(response.headers["Cache-Control"]).to eq("max-age=86400, public")
     follow_redirect!
     release = Release.find_by!(sha1: checksum(90))
-    expect(response.parsed_body).to include("game" => { "id" => release.game.public_id, "title" => "Game 90", "screenshot" => nil }, "release" => { "id" => release.public_id, "sha1" => checksum(90), "system" => "nes", "region" => "World", "revision" => nil, "screenshots" => [] })
+    expect(response.parsed_body).to include("game" => { "id" => release.game.public_id, "title" => "Game 90", "screenshot" => nil }, "release" => { "id" => release.public_id, "sha1" => checksum(90), "system" => "nes", "region" => "World", "revision" => nil, "screenshots" => [], "compatibility" => { "steam_machine" => { "status" => "unknown" }, "steam_deck" => { "status" => "unknown" } } })
     expect(response.headers["Cache-Control"]).to eq("max-age=300, public")
     expect(response.headers["Set-Cookie"]).to be_nil
   end

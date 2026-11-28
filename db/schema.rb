@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_28_140000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_28_170000) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.string "name", null: false
     t.string "record_type", null: false
@@ -49,6 +49,34 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_28_140000) do
     t.json "result", default: {}, null: false
     t.datetime "created_at", null: false
     t.index ["idempotency_key"], name: "index_catalog_mutations_on_idempotency_key", unique: true
+  end
+
+  create_table "compatibility_result_playthroughs", id: false, force: :cascade do |t|
+    t.integer "compatibility_result_id", null: false
+    t.integer "playthrough_id", null: false
+    t.index ["compatibility_result_id", "playthrough_id"], name: "index_compatibility_result_playthroughs_unique", unique: true
+    t.index ["playthrough_id"], name: "index_compatibility_result_playthroughs_on_playthrough_id"
+  end
+
+  create_table "compatibility_results", force: :cascade do |t|
+    t.integer "release_id", null: false
+    t.string "sha1", null: false
+    t.string "device", null: false
+    t.string "status", null: false
+    t.string "core", null: false
+    t.string "core_version", null: false
+    t.string "startup_revision", null: false
+    t.datetime "tested_at", null: false
+    t.text "observed", null: false
+    t.text "limits", null: false
+    t.string "reason"
+    t.json "requires_input", default: [], null: false
+    t.string "reviewer", null: false
+    t.string "retry_key", null: false
+    t.string "fingerprint", null: false
+    t.datetime "created_at", null: false
+    t.index ["release_id", "device", "id"], name: "index_compatibility_results_on_release_id_and_device_and_id"
+    t.index ["retry_key"], name: "index_compatibility_results_on_retry_key", unique: true
   end
 
   create_table "game_identities", force: :cascade do |t|
@@ -186,6 +214,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_28_140000) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "compatibility_results", "releases"
   add_foreign_key "game_identities", "games"
   add_foreign_key "games", "games", column: "retired_into_game_id"
   add_foreign_key "playthroughs", "releases"

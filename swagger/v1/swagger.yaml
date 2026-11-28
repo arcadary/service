@@ -90,7 +90,7 @@ paths:
       security:
       - private_service_basic: []
       description: |
-        Catalog reads and uploads over MCP 1.11.0. See https://github.com/arcadary/service/blob/main/docs/mcp.md for discoverable input/output schemas, targeting, pagination and client setup. Every method and subtree requires current shared admin Basic credentials before parsing and returns no-store. No OAuth discovery/login, SSE subscriptions or persistent sessions.
+        Catalog reads, uploads and append-only device compatibility results (record_compatibility_result, get_compatibility) over MCP 1.11.0. See https://github.com/arcadary/service/blob/main/docs/mcp.md for discoverable input/output schemas, targeting, pagination and client setup. Every method and subtree requires current shared admin Basic credentials before parsing and returns no-store. No OAuth discovery/login, SSE subscriptions or persistent sessions.
 
         Complete HTTP request bodies are bounded at 2 MiB (2097152 bytes) regardless of Content-Length; an oversized request returns HTTP 413. JSON nesting remains limited to 64. request_upload returns an upload_id and the upload_url its files are PUT to; confirm_upload checks the upload as a whole; upload_screenshot and upload_video turn a confirmed upload into a release's screenshot or a private playthrough. File bytes never travel through MCP.
       parameters:
@@ -317,15 +317,19 @@ paths:
   "/v1/releases/{sha1}.json":
     get:
       summary: A release and its game, by the SHA-1 of its game file
-      description: The target of an unambiguous lookup redirect. Hex is case-insensitive;
+      description: 'The target of an unambiguous lookup redirect. Hex is case-insensitive;
         release.sha1 is the asked file and release.id identifies the whole release.
         Media are in position order. Startup applies defaults and includes a SHA-256
         revision over effective startup and ordered checksums. C64 slots are 8 and
-        9; other systems have no drives. The service never infers a set from one checksum
-        or from file names. Successes are public for 300 seconds with ETag and Last-Modified
-        validators; corrections refresh both, while cached responses may remain until
-        their existing TTL expires. Current conditional requests return 304. Errors
-        are never stored.
+        9; other systems have no drives. release.compatibility gives works, attention
+        (with a reason), does_not_work or unknown for steam_machine and steam_deck
+        separately: the newest recorded result under the current startup revision,
+        with its core, core version, evidence and the input devices besides the controller
+        it needs (requires_input), or unknown. The service never infers a set from
+        one checksum or from file names. Successes are public for 300 seconds with
+        ETag and Last-Modified validators; corrections refresh both, while cached
+        responses may remain until their existing TTL expires. Current conditional
+        requests return 304. Errors are never stored.'
       parameters:
       - name: sha1
         in: path
@@ -865,6 +869,97 @@ components:
                 - right
                 - bottom
                 - left
+    DeviceCompatibility:
+      description: 'The newest result recorded for this device class under the release''s
+        current startup.revision, or unknown when there is none. unknown carries only
+        status and never stops a launch. works, attention (a recorded problem, such
+        as performance, explained in one sentence) and does_not_work name the core
+        and version tested, the launch configuration (startup_revision) and test time,
+        with a short public reason sentence (required for attention, optional for
+        does_not_work, null for works), what the reviewer saw (observed) and what
+        the test did not cover (limits). requires_input lists input devices besides
+        the controller (keyboard, mouse) that the release needs to be playable on
+        this device class, empty when none; it is separate from status: the launcher
+        shows attention while a listed device is not connected, and does_not_work
+        outranks attention. No state blocks Play. Compare core and core_version with
+        your own before treating a result as yours.'
+      oneOf:
+      - type: object
+        required:
+        - status
+        additionalProperties: false
+        properties:
+          status:
+            type: string
+            enum:
+            - unknown
+      - type: object
+        required:
+        - status
+        - reason
+        - core
+        - core_version
+        - startup_revision
+        - tested_at
+        - observed
+        - limits
+        - requires_input
+        additionalProperties: false
+        properties:
+          status:
+            type: string
+            enum:
+            - works
+            - attention
+            - does_not_work
+          reason:
+            type: string
+            nullable: true
+            minLength: 1
+            maxLength: 200
+          core:
+            type: string
+            pattern: "^[a-z0-9][a-z0-9_.-]{0,63}$"
+          core_version:
+            type: string
+            minLength: 1
+            maxLength: 100
+          startup_revision:
+            type: string
+            pattern: "^[0-9a-f]{64}$"
+          tested_at:
+            type: string
+            format: date-time
+          observed:
+            type: string
+            minLength: 1
+            maxLength: 500
+          limits:
+            type: string
+            minLength: 1
+            maxLength: 500
+          requires_input:
+            type: array
+            uniqueItems: true
+            items:
+              type: string
+              enum:
+              - keyboard
+              - mouse
+    Compatibility:
+      type: object
+      required:
+      - steam_machine
+      - steam_deck
+      additionalProperties: false
+      description: Playability per device class, recorded by a named reviewer who
+        owns and played the exact file. A Steam Machine result says nothing about
+        Steam Deck. Recording a result refreshes this release's and its media's validators.
+      properties:
+        steam_machine:
+          "$ref": "#/components/schemas/DeviceCompatibility"
+        steam_deck:
+          "$ref": "#/components/schemas/DeviceCompatibility"
     Release:
       type: object
       required:
@@ -883,6 +978,7 @@ components:
           - region
           - revision
           - screenshots
+          - compatibility
           additionalProperties: false
           properties:
             id:
@@ -913,6 +1009,8 @@ components:
               type: array
               items:
                 "$ref": "#/components/schemas/Screenshot"
+            compatibility:
+              "$ref": "#/components/schemas/Compatibility"
         game:
           type: object
           required:

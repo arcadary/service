@@ -4,7 +4,8 @@ class McpCatalogToolsService
     "search_games" => "Find games by case-insensitive title or alias substring and optional system. Returns game summaries with stable id, title and authoring_revision.",
     "get_game" => "Inspect a stable game id: canonical title and paginated title_aliases, source_title, authored_fields, authoring_revision, and releases (id, game_id, system, region, revision, authoring_revision).",
     "get_release" => "Inspect exactly one release by stable id or SHA-1. Returns canonical metadata, ordered media, source provenance, authored_fields, authoring_revision, effective startup and optional controller_profile with edition binding and text evidence. A shared SHA-1 raises ambiguous_release with paginated candidate summaries; select a candidate id.",
-    "get_catalog_history" => "Read audit records newest first: id, operation, admin_name, created_at, reason and paginated record_changes with before/after authoring snapshots. Nested snapshot collections also have cursors."
+    "get_catalog_history" => "Read audit records newest first: id, operation, admin_name, created_at, reason and paginated record_changes with before/after authoring snapshots. Nested snapshot collections also have cursors.",
+    "get_compatibility" => "Inspect one stable release_id's device compatibility: its current startup_revision, current (exactly what public release JSON shows as release.compatibility: per device class works, attention, does_not_work or unknown) and every recorded result newest first, including withdrawn, superseded and stale-configuration results, with reviewer and recorded_at."
   }.freeze
 
   def self.tools
@@ -42,6 +43,8 @@ class McpCatalogToolsService
     when "get_release"
       properties[:id] = { type: "string", maxLength: 200, description: "Stable release public id; selects one variant unambiguously." }
       properties[:sha1] = { type: "string", maxLength: 40, description: "40 hexadecimal characters. Shared media returns ambiguous_release and candidates." }
+    when "get_compatibility"
+      properties[:release_id] = { type: "string", maxLength: 200, description: "Stable release public id." }
     end
     { type: "object", properties: properties, additionalProperties: false }
   end
@@ -50,7 +53,7 @@ class McpCatalogToolsService
     {
       type: "object", additionalProperties: false,
       properties: {
-        data: { anyOf: [ result_schema(name: name), { "$ref" => "#/$defs/page" } ] },
+        data: { anyOf: [ result_schema(name: name), continuation_schema(name: name) ] },
         error: { type: "object", additionalProperties: false, required: [ "code" ], properties: {
           code: { type: "string", enum: %w[invalid_input not_found ambiguous_release] },
           candidates: page_schema(items: release_summary_schema)
@@ -71,6 +74,11 @@ class McpCatalogToolsService
       }
     }
   end
+
+  def self.continuation_schema(name:)
+    name == "get_compatibility" ? page_schema(items: McpCompatibilityToolsService.history_item_schema) : { "$ref" => "#/$defs/page" }
+  end
+  private_class_method :continuation_schema
 
   def self.page_schema(items:)
     McpToolService.object_schema(properties: {
@@ -119,6 +127,11 @@ class McpCatalogToolsService
         id: { type: "integer" }, operation: { type: "string" }, admin_name: { type: "string" },
         created_at: { type: "string" }, reason: { type: "string" }, record_changes: { "$ref" => "#/$defs/page" }
       }))
+    when "get_compatibility"
+      McpToolService.object_schema(properties: {
+        release_id: { type: "string" }, startup_revision: { type: "string", pattern: "^[0-9a-f]{64}$" },
+        current: McpCompatibilityToolsService.current_schema, history: page_schema(items: McpCompatibilityToolsService.history_item_schema)
+      })
     end
   end
   private_class_method :result_schema
