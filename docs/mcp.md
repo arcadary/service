@@ -1,6 +1,6 @@
 # Private catalog MCP
 
-`/mcp` is the single admin's MCP endpoint for catalog reads and uploads in the Rails application. It uses the official Ruby `mcp` SDK **1.11.0**, in stateless Streamable HTTP mode with finite JSON responses. Writes start and confirm uploads and turn a confirmed upload into a release's screenshot or a private playthrough. It exposes no video publication, catalog metadata writes, compatibility operations, game files, downloads, submissions, shell, SQL or arbitrary URL tools. Catalog coverage is not a playability verdict.
+`/mcp` is the single admin's MCP endpoint for catalog reads, uploads and device compatibility results in the Rails application. It uses the official Ruby `mcp` SDK **1.11.0**, in stateless Streamable HTTP mode with finite JSON responses. Writes start and confirm uploads and turn a confirmed upload into a release's screenshot or a private playthrough, or append a reviewer's compatibility result for one release and device class. It exposes no video publication, catalog metadata writes, game files, downloads, submissions, shell, SQL or arbitrary URL tools. Catalog coverage is not a playability verdict; only a recorded compatibility result is.
 
 The generated [HTTP endpoint documentation](../swagger/v1/swagger.yaml) is served at `/api-docs`. MCP `tools/list` publishes the input/output JSON schemas and help for each tool; `server/discover` serves SDK discovery for the modern protocol. All discovery is authenticated. These schemas, rather than the launcher's public JSON shapes, describe the private authoring records.
 
@@ -25,9 +25,10 @@ The explicit Host allow-list is `api.arcadary.org`, plus `localhost`, `127.0.0.1
 | `search_games` | Optional `query` (case-insensitive title/alias substring, at most 200 characters), optional `system` | Page of `{id, title, authoring_revision}` summaries, ordered by stable game ID. System filters games with a release on that system. |
 | `get_game` | `id` from search | `{type, id, authoring_revision, canonical, authored_fields, source, releases}`. Canonical title and aliases; existing release variant summaries. |
 | `get_release` | Exactly one of `id` or `sha1` | `{type, id, authoring_revision, canonical, authored_fields, source}`. Stable release ID selects one edition; a SHA-1 can identify several candidates. |
+| `get_compatibility` | `release_id` | `{release_id, startup_revision, current, history}`. Current matches public `release.compatibility`; history includes all results newest first. |
 | `get_catalog_history` | No required initial argument | Page of `{id, operation, admin_name, created_at, reason, record_changes}` audit entries, newest ID first. Each change retains its before/after authoring snapshots. |
 
-Each initial read call accepts `limit`: default **20**, range **1–50**. Systems are `nes`, `snes`, `gb`, `gbc`, `megadrive`, `pcengine`, `atari2600`, `c64`. SHA-1 is 40 hexadecimal characters, case-insensitive. Player filenames are never accepted. These four tools retain read-only, non-destructive, idempotent annotations and their existing read semantics.
+Each initial read call accepts `limit`: default **20**, range **1–50**. Systems are `nes`, `snes`, `gb`, `gbc`, `megadrive`, `pcengine`, `atari2600`, `c64`. SHA-1 is 40 hexadecimal characters, case-insensitive. Player filenames are never accepted. These five tools retain read-only, non-destructive, idempotent annotations and their existing read semantics.
 
 Every collection uses `{ "items": [...], "next_cursor": "opaque-token-or-null" }`, including aliases, authored-field names, variants, media, controller-profile layout/prompts and each fact's evidence citations, ambiguous candidates, audit changes and collections inside before/after snapshots. No array is silently cut off. Alias ordering is lexical, releases/candidates use stable release ID, and media retain exact position order. Profile and audit snapshot arrays retain the recorded order.
 
@@ -53,6 +54,30 @@ Four tools carry an upload; file bytes go over HTTP, never through MCP. The [upl
 After `request_upload`, PUT each file to `upload_url` followed by its package-relative name, with the same Basic credentials, the file's `Content-Type` and `Content-Digest: sha-256=:BASE64:`. `GET /v1/uploads/{upload_id}.json` lists what has arrived. `release_id` is the release's stable id, never its title or a checksum. `upload_url` is built from the MCP request's own origin. `confirm_upload` answers at once; call it again until the state is `confirmed` or `rejected`. `upload_video`'s verification must name the authenticated admin as `verifier`.
 
 Tool errors use `isError: true` and `structuredContent: {"error":{"code":"..."}}`: `invalid_input`, `not_found` (upload or release), `upload_expired`, `upload_conflict` (the upload is in the wrong state or of the other type, or was already used), `upload_rejected` (the PNG exceeds the release system's limits), `target_mismatch` (`source_sha1` is not the release's and no verification explains it), `uploads_disabled` (`request_upload` before storage is configured) and `storage_unavailable`. A failed `upload_screenshot` or `upload_video` leaves the upload confirmed, so retry with the same `upload_id` before it expires.
+
+## Device compatibility
+
+`record_compatibility_result` appends what a named reviewer saw after playing one exact file of one stable release on one device class. Every argument except `reason` and `requires_input` is required, and no others are accepted:
+
+| Argument | Meaning |
+| --- | --- |
+| `release_id` | Stable release public ID, at most 200 characters. A shared checksum never selects a release. |
+| `sha1` | The exact file played, 40 hexadecimal characters, case-insensitive. It must be a medium of the release (a secondary disk is fine). |
+| `device` | `steam_machine` or `steam_deck`, the device class it was played on. |
+| `status` | `works`, `attention` (a recorded problem, such as performance, explained in one sentence), `does_not_work`, or `unknown` to withdraw an earlier result for that device without claiming the opposite. |
+| `reason` | One short public sentence on why, at most 200 characters, no control characters. Required for `attention`, optional for `does_not_work`, refused for `works` and `unknown`. |
+| `core`, `core_version` | The libretro core (`^[a-z0-9][a-z0-9_.-]{0,63}$`, for example `mesen`) and its version or build as the launcher reports it, at most 100 characters. |
+| `startup_revision` | The release's current `startup.revision` (from `get_release`, `get_compatibility` or the public release JSON): the launch configuration tested. |
+| `tested_at` | When it was played: ISO 8601 with `Z` or an offset, not in the future. |
+| `observed`, `limits` | What the reviewer saw and what the test did not cover: nonblank, at most 500 characters each, no control characters (one paragraph). Both are public. |
+| `reviewer` | The reviewer's display name, at most 100 characters. Internal: it never appears in public JSON. |
+| `owns_file` | Must be `true`: the reviewer owns that exact file. |
+| `requires_input` | Optional, default `[]`: input devices besides the controller that the release needs to be playable on this device class, from the closed list `keyboard`, `mouse`, each at most once (stored sorted). Separate from `status`: a game can work and still need a keyboard; the launcher shows Attention while a listed device is not connected, unless the status is `does_not_work`, which outranks it. Public. |
+| `retry_key` | Nonblank, at most 200 characters. An identical retry returns the original result; changed arguments with a used key return `retry_conflict`. |
+
+Success returns `{"data":{"release_id","result","current"}}`: the stored history entry and the release's new `current`. Errors are `invalid_input` (schema, attestation, time, text, or a reason missing for `attention` or given for `works`/`unknown`), `not_found` (unknown release), `target_mismatch` (the file is not in the release, or `startup_revision` is not current) and `retry_conflict`. The tool is non-read-only, non-destructive and idempotent per retry key.
+
+`requires_input` is the one plain array in these results (a closed set of at most two values, never paginated); the `history` page continues with `cursor` like every other collection. Results are append-only: a retest or correction is a new result, and earlier ones stay in `get_compatibility`'s history with their reviewer and `recorded_at`. Public `release.compatibility` has exactly two keys, `steam_machine` and `steam_deck`. Each is the newest result for that device whose `startup_revision` equals the release's current one, as `{status, reason, core, core_version, startup_revision, tested_at, observed, limits, requires_input}`, or `{"status":"unknown"}` when there is none, when the newest is a withdrawal, or after a media or startup correction changes the revision. One device class never stands in for the other. Recording touches the release, so its release and media ETags and Last-Modified change at once; CDN copies may stay up to their 300 seconds. Unknown never stops a launch.
 
 ## Codex configured-header connection
 
@@ -85,6 +110,6 @@ Owner: configure the intended Codex app environment and verify its connection. M
 
 ## Local real-client evidence
 
-The earlier read-tool implementation passed on 2026-11-28 using the installed **Codex CLI 0.172.0 app-server** on macOS arm64, with an isolated Codex home, a temporary SQLite catalog containing only synthetic metadata, and disposable Basic credentials supplied through `env_http_headers.Authorization`. No model turn, account credential copy or real catalog access was involved. The client initialized the MCP connection, sent the initialized notification, listed the then-existing four tools, searched the synthetic title, inspected its game and release, and read one synthetic audit entry through `mcpServer/tool/call`. All four calls returned `isError: false`, with matching structured and JSON-text results. Subsequent HTTP requests used **2025-06-18** and all observed MCP responses carried `no-store`; the initialized notification received 202 and reads received 200. The local server and client were stopped after the test. The upload tools are covered by in-process HTTP/MCP request specs; they have not been exercised through a real external MCP client.
+The earlier read-tool implementation passed on 2026-11-28 using the installed **Codex CLI 0.172.0 app-server** on macOS arm64, with an isolated Codex home, a temporary SQLite catalog containing only synthetic metadata, and disposable Basic credentials supplied through `env_http_headers.Authorization`. No model turn, account credential copy or real catalog access was involved. The client initialized the MCP connection, sent the initialized notification, listed the then-existing four tools, searched the synthetic title, inspected its game and release, and read one synthetic audit entry through `mcpServer/tool/call`. All four calls returned `isError: false`, with matching structured and JSON-text results. Subsequent HTTP requests used **2025-06-18** and all observed MCP responses carried `no-store`; the initialized notification received 202 and reads received 200. The local server and client were stopped after the test. The upload tools, `record_compatibility_result` and `get_compatibility` are covered by in-process HTTP/MCP request specs; they have not been exercised through a real external MCP client.
 
 This exercised a real configured-header Codex MCP client over loopback HTTP, separately from the in-process specs. Hosted TLS, proxy/CDN caches/logs, a deployed smoke test, and the owner's intended Codex app environment remain **unperformed** until the manual checks above are completed.

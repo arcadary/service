@@ -6,7 +6,7 @@ RSpec.describe ReleaseDecorator do
     release = create(:release, game: game, sha1: "abcdef0123456789abcdef0123456789abcdef01", system: "gb", region: "EU")
 
     expect(described_class.decorate(release).as_json).to eq(
-      release: { "id" => release.public_id, "sha1" => release.sha1, "system" => "gb", "region" => "EU", "revision" => nil, "screenshots" => [] },
+      release: { "id" => release.public_id, "sha1" => release.sha1, "system" => "gb", "region" => "EU", "revision" => nil, "screenshots" => [], "compatibility" => { "steam_machine" => { "status" => "unknown" }, "steam_deck" => { "status" => "unknown" } } },
       game: { id: "decorator-game", title: "A game", screenshot: nil },
       media: [ { "key" => "main", "position" => 1, "label" => nil, "role" => "game", "sha1" => release.sha1, "size" => nil, "format" => nil } ],
       startup: { "schema" => 1, "boot" => "main", "drives" => {}, "revision" => "94913af33af735c08211b2d614136735f0f855ec9173709238d451b97cbfed95" }

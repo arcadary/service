@@ -191,6 +191,28 @@ Convert that scope using the same `to_h` expression, and set `operation: "correc
 
 Successful apply prints the same committed `{audit_id, records}` result as direct authoring, with `preview` for previewed operations. Failures print JSON containing `failed` and `error` to stderr and exit nonzero. Invalid envelopes, stale revisions/previews, domain validation and persistence failures leave no partial writes or success audit. Each envelope is one atomic mutation; a sequence of files has no enclosing transaction. Retrying an exactly committed envelope returns its saved result even after revisions advance; changing any request content while reusing its key conflicts. Reference imports instead commit one whole system at a time and retry by re-running source inputs, without authoring retry keys or correction audits. Both retain their independent failure boundaries.
 
+## Device compatibility
+
+A known checksum says which release a file is, not whether it plays. After playing a file, the admin records what they saw through the [`record_compatibility_result`](docs/mcp.md#device-compatibility) MCP tool: `works`, `attention` (a recorded problem, such as performance, explained in a required one-sentence `reason`), `does_not_work` (optional `reason`), or `unknown` to withdraw an earlier result. Each result names the exact release and file (which the reviewer owns), the device class (`steam_machine` or `steam_deck`), the core and its version, the launch configuration (the release's current `startup.revision`), the test time, what the reviewer saw and the test's limits, the input devices besides the controller that the release needs on that device class (`requires_input`: `keyboard`, `mouse`, or none), and the reviewer's name. Results are append-only in `compatibility_results`; corrections and retests add to that history. `get_compatibility` reads the history back. There are no player run reports and no device upload path.
+
+Every release response carries `release.compatibility`:
+
+```json
+"compatibility": {
+  "steam_machine": {
+    "status": "attention", "reason": "Slows down when many enemies are on screen.",
+    "core": "sameboy", "core_version": "1.0.2",
+    "startup_revision": "94913af33af735c08211b2d614136735f0f855ec9173709238d451b97cbfed95",
+    "tested_at": "2026-11-20T18:00:00Z",
+    "observed": "Played the first level with sound and a battery save.", "limits": "Later levels not reached.",
+    "requires_input": ["keyboard"]
+  },
+  "steam_deck": { "status": "unknown" }
+}
+```
+
+Each device class shows the newest result whose `startup_revision` is still the release's current one, or `{"status":"unknown"}`. A Steam Machine result never fills in for Steam Deck, and a media or startup correction turns both back to unknown until someone plays the file again. The service cannot see a launcher's core version, so it returns the core and version tested; a launcher compares them with its own. Unknown must never stop a player launching a file. These follow the owner's decision on per-device states (Uberblick, "What can a player be told about a release's support on a device?"): Works, Attention (!), Does not work and Unknown, and no state blocks Play. Attention has two sources. One is a recorded `attention` result. The other is a needed input device that is not connected: `requires_input` is separate from `status`, and only the launcher can see what is connected, so it shows Attention for a missing device. Does not work outranks Attention. The reviewer's name stays internal. Recording a result refreshes the release's and its media's ETag and Last-Modified; reads stay anonymous and cacheable for 300 seconds.
+
 ## Uploads
 
 Screenshots and playthrough videos reach the service in six steps, whatever their type. The Uploads technical reference in the corpus, the project's Uberblick workspace, has the flow diagram, the states and the error codes; this section covers what the code does.
@@ -236,7 +258,7 @@ Every screenshot is exactly `{kind, url, width, height, licence}`. `url` is the 
 
 ### Storage configuration
 
-Infrastructure supplies both R2 buckets and one access key for them through fnox; this application never provisions them. Supply `R2_BUCKET` (private, for playthroughs), `R2_PUBLIC_BUCKET` (public, for screenshots), `R2_ENDPOINT` (the S3-compatible endpoint), `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`; the R2 region is `auto`. 
+Infrastructure supplies both R2 buckets and one access key for them through fnox; this application never provisions them. Supply `R2_BUCKET` (private, for playthroughs), `R2_PUBLIC_BUCKET` (public, for screenshots), `R2_ENDPOINT` (the S3-compatible endpoint), `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`; the R2 region is `auto`.
 
 Configured nonempty R2 names pass through Kamal `env.secret` and `.kamal/secrets`; no values are committed, and absent or empty names are left out. Production boots, answers `/up` and serves lookups without them, but `request_upload` answers `uploads_disabled` until all five are set, with no local-storage fallback. Production config names the two services (`:r2` for Active Storage, `config.x.media_service = :r2_media`) and `config.x.media_base_url`, `https://media.arcadary.org`; development and test use local disk services for both. Specs use local test storage, never R2. Local decoder checks require libvips; CI and Docker install it.
 
