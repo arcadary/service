@@ -26,6 +26,7 @@ class CatalogImportService
     @aliases = GameIdentity.all.index_by(&:key)
     @new_aliases = {}
     @assignments = {}
+    @mapping_titles = {}
     @release_sources = {}
     @divergences = []
   end
@@ -86,7 +87,8 @@ class CatalogImportService
           raise IdentityConflict, "curated ID #{game.public_id} belongs to a fallback identity"
         end
         game ||= add_game(public_id: mapping[:public_id], title: mapping[:title])
-        game.catalog_curated = true
+        game.catalog_curated = true unless game.retired_into_game_id || game.authored_fields.include?("grouping")
+        @mapping_titles[game] = mapping[:title]
         @assignments[row[:sha1]] = game
       end
     end
@@ -99,9 +101,17 @@ class CatalogImportService
         @assignments[row[:sha1]] = owner if owner&.catalog_curated
       end
       rows.group_by { |row| row[:key] }.each do |key, group|
+        authored_owners = []
         owners = group.filter_map do |row|
           release = @releases[row[:sha1]]
-          @games_by_id[release.source_game_id || release.game_id] if release
+          next unless release
+
+          owner = @games_by_id[release.source_game_id || release.game_id]
+          if release.authored_fields.include?("game_id")
+            authored_owners << owner
+            next
+          end
+          owner
         end
         key_owner = @games_by_id.fetch(@aliases[key].game_id) if @aliases.key?(key)
         owners << key_owner if key_owner
@@ -113,7 +123,7 @@ class CatalogImportService
         seed_ids = group.filter_map { |row| SEEDS[row[:sha1]] }.uniq
         raise IdentityConflict, "fallback alias #{key} conflicts with seed IDs" if seed_ids.size > 1
 
-        game = key_owner || owners.first
+        game = key_owner || owners.first || authored_owners.min_by(&:public_id)
         if game && seed_ids.any? && game.public_id != seed_ids.first && !game.authored_fields.include?("grouping")
           raise IdentityConflict, "seed checksum already belongs to #{game.public_id}"
         end
@@ -126,7 +136,7 @@ class CatalogImportService
         group.each do |row|
           release = @releases[row[:sha1]]
           owner = release && @games_by_id[release.source_game_id]
-          @assignments[row[:sha1]] = owner || game
+          @assignments[row[:sha1]] = owner && resolve(game: owner) == resolve(game: game) ? owner : game
         end
       end
     end
@@ -169,7 +179,12 @@ class CatalogImportService
         @release_sources[release.public_id] = owner
         apply_source(record: release, attributes: row.slice(:system, :region, :revision))
         release.source_title = row[:source_title]
-        release.validate!
+        validate_record(record: release, source: row)
+        if release.persisted? && release.authored_fields.include?("media")
+          source = [ { "key" => "main", "position" => 1, "label" => nil, "role" => "game", "sha1" => row[:sha1] } ]
+          effective = release.release_media.map { |medium| medium.slice(:key, :position, :label, :role).merge("sha1" => medium.media_file.sha1) }
+          divergence(record: release, field: "membership", source: source, effective: effective)
+        end
         release.authoring_revision += 1 if release.persisted? && file.changed?
         @release_changes << release
       end
@@ -186,24 +201,26 @@ class CatalogImportService
 
     def prepare_titles
       titles = Hash.new { |hash, key| hash[key] = {} }
+      incoming = @rows.map { |row| row[:sha1] }.to_set
       @existing_releases.each do |release|
+        next unless release.source_title && !incoming.include?(release.sha1)
+
         owner = @games_by_id[release.source_game_id || release.game_id]
-        titles[owner][release.sha1] = release.source_title ? CatalogNameService.display_title(title: release.source_title) : owner.title
+        titles[owner][release.sha1] = CatalogNameService.display_title(title: release.source_title)
       end
       @rows.each do |row|
         owner = @assignments[row[:sha1]]
         titles[owner][row[:sha1]] = row[:title] if owner
       end
       @assignments.values.uniq.each do |game|
-        mapping = @rows.filter_map { |row| @mappings[row[:sha1]] if @assignments[row[:sha1]] == game }.first
-        source = mapping ? mapping[:title] : titles[game].values.min_by(&:b)
+        source = @mapping_titles.fetch(game) { titles[game].values.min_by(&:b) }
         game.source_title = source
         if game.retired_into_game_id || (game.authored_fields & %w[title grouping]).any?
           divergence(record: game, field: "title", source: source, effective: game.title)
         else
           game.title = source
         end
-        game.validate!
+        validate_record(record: game, source: { title: source })
       end
       @changed_titles = @assignments.values.uniq.select { |game| game.persisted? && game.title_changed? }.map(&:id)
     end
@@ -211,7 +228,7 @@ class CatalogImportService
     def prepare_media(row:)
       file = @media_files[row[:sha1]] || MediaFile.new(sha1: row[:sha1])
       apply_source(record: file, attributes: row.slice(:size, :format, :crc32, :md5))
-      file.validate!
+      validate_record(record: file, source: row)
       @media_files[row[:sha1]] = file
     end
 
@@ -229,12 +246,23 @@ class CatalogImportService
     def divergence(record:, field:, source:, effective:)
       return if source == effective
 
-      type, id = case record
+      type, id = reference(record: record)
+      @divergences << { type: type, id: id, field: field, source_value: source, effective_value: effective }
+    end
+
+    def validate_record(record:, source:)
+      record.validate!
+    rescue ActiveRecord::RecordInvalid => error
+      type, id = reference(record: record)
+      raise IdentityConflict, "#{type} #{id}: invalid resulting configuration from source #{JSON.generate(source)}: #{error.message}"
+    end
+
+    def reference(record:)
+      case record
       when Game then [ "game", record.public_id ]
       when Release then [ "release", record.public_id ]
       when MediaFile then [ "media", record.sha1 ]
       end
-      @divergences << { type: type, id: id, field: field, source_value: source, effective_value: effective }
     end
 
     def counts(records:)
@@ -269,7 +297,7 @@ class CatalogImportService
             "created_at" => release.created_at || now, "updated_at" => now)
         end, unique_by: :public_id)
       end
-      Release.where(game_id: @changed_titles).touch_all(time: now) if @changed_titles.any?
+      Release.where(game_id: @changed_titles).in_batches(of: 500) { |batch| batch.touch_all(time: now) } if @changed_titles.any?
     end
 
     def write_media
@@ -286,6 +314,8 @@ class CatalogImportService
         end)
       end
       public_changes = changed.select { |file| (file.changed - %w[authoring_revision source_size source_format source_crc32 source_md5]).any? }
-      Release.joins(:media_files).where(media_files: { sha1: public_changes.map(&:sha1) }).touch_all(time: now) if public_changes.any?
+      if public_changes.any?
+        Release.joins(:media_files).where(media_files: { sha1: public_changes.map(&:sha1) }).in_batches(of: 500) { |batch| batch.touch_all(time: now) }
+      end
     end
 end

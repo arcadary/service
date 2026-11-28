@@ -26,7 +26,9 @@ RSpec.describe CatalogManualImportService do
   end
 
   def revisions(game_id:)
-    CatalogAuthoringReadService.scope(game_id: game_id).to_h do |state|
+    scope = @path.dirname.join("scope.json")
+    scope.write(JSON.pretty_generate(CatalogAuthoringReadService.scope(game_id: game_id)))
+    JSON.parse(scope.read).to_h do |state|
       [ "#{state.fetch('type')}:#{state.fetch('id')}", state.fetch("authoring_revision") ]
     end
   end
@@ -111,7 +113,7 @@ RSpec.describe CatalogManualImportService do
     expect(status.exitstatus).not_to eq(0)
     expect(JSON.parse(error)).to include("error" => "CatalogAuthoringService::InvalidInput")
     @path.write(JSON.generate(operation: "correct_media", attributes: { sha1: "a" * 40, size: 64 }))
-    script = "require_relative './config/environment'; MediaFile.create!(sha1: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'); ARGV.replace([#{JSON.generate("catalog:preview[#{@path}]")}]); load './bin/rails'"
+    script = "require_relative './config/environment'; ApplicationRecord.transaction do; MediaFile.create!(sha1: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'); ARGV.replace([#{JSON.generate("catalog:preview[#{@path}]")}]); load './bin/rails'; raise ActiveRecord::Rollback; end"
     output, error, status = Open3.capture3(RbConfig.ruby, "-e", script)
     expect(status.exitstatus).to eq(0), error
     expect(JSON.parse(output)).to include("operation" => "correct_media", "expected_revisions" => { "media:#{'a' * 40}" => 0 })

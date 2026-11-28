@@ -25,6 +25,12 @@ class CatalogSeedService
       releases.each do |release|
         difference(type: "release", id: release.public_id, field: "game_id", source: @seed[:public_id], effective: release.game.public_id)
         difference(type: "release", id: release.public_id, field: "system", source: @seed[:system], effective: release.system)
+        %w[region revision].each do |field|
+          difference(type: "release", id: release.public_id, field: field, source: nil, effective: release[field])
+        end
+        source = [ { "key" => "main", "position" => 1, "label" => nil, "role" => "game", "sha1" => @seed[:sha1] } ]
+        effective = release.release_media.map { |medium| medium.slice(:key, :position, :label, :role).merge("sha1" => medium.media_file.sha1) }
+        difference(type: "release", id: release.public_id, field: "membership", source: source, effective: effective)
         difference(type: "game", id: release.game.public_id, field: "title", source: @seed[:title], effective: release.game.title)
       end
       game = Game.find_by(public_id: @seed[:public_id])
