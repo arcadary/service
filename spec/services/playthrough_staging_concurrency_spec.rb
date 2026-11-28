@@ -1,9 +1,11 @@
 require "rails_helper"
 require "timeout"
 require_relative "../support/playthrough_helpers"
+require_relative "../support/playthrough_hls_helpers"
 
 RSpec.describe "Concurrent playthrough staging" do
   include PlaythroughHelpers
+  include PlaythroughHlsHelpers
   self.use_transactional_tests = false
 
   it "serializes declaration retries into one durable stage and one accounting result" do
@@ -59,6 +61,69 @@ RSpec.describe "Concurrent playthrough staging" do
   ensure
     2.times { start.push(true) } if start
     threads&.each(&:join)
+    cleanup_playthrough(release: release) if release
+  end
+
+  it "persists one result when complete packages validate concurrently" do
+    release = create(:release)
+    files = hls_files
+    stage = declare_hls(release: release, files: files)
+    receive_hls(stage: stage, files: files)
+    ready, start = Queue.new, Queue.new
+    allow(PlaythroughHlsService).to receive(:validate).and_wrap_original do |method, **arguments|
+      result = method.call(**arguments)
+      ready.push(true)
+      start.pop
+      result
+    end
+    threads = 2.times.map do
+      Thread.new do
+        ActiveRecord::Base.connection_pool.with_connection do
+          PlaythroughValidationService.validate(staging_id: stage.public_id)
+        end
+      end
+    end
+    Timeout.timeout(10) { 2.times { ready.pop } }
+    2.times { start.push(true) }
+    results = threads.map(&:value)
+    expect(results.uniq.size).to eq(1)
+    expect(stage.reload.validation_result).to eq(results.first)
+    expect(stage.validation_state).to eq("validated")
+  ensure
+    2.times { start.push(true) } if start
+    threads&.each(&:join)
+    cleanup_playthrough(release: release) if release
+  end
+
+  it "replays the terminal winner when another validator finishes with a conflicting outcome" do
+    release = create(:release)
+    files = hls_files
+    stage = declare_hls(release: release, files: files)
+    receive_hls(stage: stage, files: files)
+    ready, start = Queue.new, Queue.new
+    allow(PlaythroughHlsService).to receive(:validate).and_wrap_original do |method, **arguments|
+      if Thread.current[:delayed_failure]
+        ready.push(true)
+        start.pop
+        raise PlaythroughStage::InvalidHls, "invalid_hls"
+      end
+      method.call(**arguments)
+    end
+    thread = Thread.new do
+      Thread.current[:delayed_failure] = true
+      ActiveRecord::Base.connection_pool.with_connection do
+        PlaythroughValidationService.validate(staging_id: stage.public_id)
+      end
+    end
+    Timeout.timeout(10) { ready.pop }
+    winner = PlaythroughValidationService.validate(staging_id: stage.public_id)
+    start.push(true)
+    expect(thread.value).to eq(winner)
+    expect(stage.reload.validation_state).to eq("validated")
+    expect(stage.validation_error).to be_nil
+  ensure
+    start&.push(true)
+    thread&.join
     cleanup_playthrough(release: release) if release
   end
 

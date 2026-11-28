@@ -1,10 +1,12 @@
 require "swagger_helper"
 require_relative "../support/playthrough_helpers"
 require_relative "../support/screenshot_helpers"
+require_relative "../support/playthrough_hls_helpers"
 
 RSpec.describe "Private playthrough staging", type: :request do
   include PlaythroughHelpers
   include ScreenshotHelpers
+  include PlaythroughHlsHelpers
 
   let!(:release) { create(:release) }
   let(:declaration) { playthrough_declaration(release: release) }
@@ -25,7 +27,9 @@ RSpec.describe "Private playthrough staging", type: :request do
   stage_schema = {
     type: :object, additionalProperties: false, required: %w[staging_id package_sha256 declaration state objects], properties: {
       staging_id: { type: :string }, package_sha256: { type: :string, pattern: "^[0-9a-f]{64}$" },
-      declaration: { "$ref" => "#/components/schemas/playthrough_declaration" }, state: { type: :string, enum: %w[incomplete received] },
+      declaration: { "$ref" => "#/components/schemas/playthrough_declaration" }, state: { type: :string, enum: %w[incomplete received validated validation_failed] },
+      validation_result: { "$ref" => "#/components/schemas/playthrough_validation_result" },
+      validation_error: { type: :string, enum: %w[invalid_hls package_integrity_mismatch] },
       objects: { type: :array, items: { type: :object, additionalProperties: false, required: %w[object_id path received],
         properties: { object_id: { type: :string }, path: { type: :string }, received: { type: :boolean } } } }
     }
@@ -44,7 +48,7 @@ RSpec.describe "Private playthrough staging", type: :request do
 
         Each entry has a unique package-relative path, positive byte_size, lowercase sha256 and exact MIME content_type without parameters. Paths exclude absolute paths, URLs, traversal/dot/empty components, whitespace, backslashes, colon, percent, query/fragment and control characters. Package identity is SHA-256 of UTF-8 compact JSON of [path, byte_size, sha256, content_type] arrays sorted bytewise by path. Reordering manifest entries or JSON keys and equivalent timestamp offsets replay the original stage; changing the normalized declaration with the same retry_key conflicts. Successful replays return 201 with current progress.
 
-        Ceilings: 1 MiB actual declaration bytes, 4096 objects, 8 MiB per object, 4 GiB summed declared bytes. Actual reads are bounded independently of Content-Length. All responses are no-store and log-suppressed across the complete subtree. No download, playback, redirect, direct-upload capability or public storage route exists. received means all objects stored, never HLS-validated or published; HLS validation/publication/cleanup are #56 and private delivery/trial checks are #57. Catalog and screenshot licences grant no video rights; commercial footage remains private and absent from anonymous responses.
+        Ceilings: 1 MiB actual declaration bytes, 4096 objects, 8 MiB per object, 4 GiB summed declared bytes. Actual reads are bounded independently of Content-Length. All responses are no-store and log-suppressed across the complete subtree. No download, playback, redirect, direct-upload capability or public storage route exists. received means all objects stored, still unvalidated. Internal validation fixes the root at index.m3u8 without changing declaration or package identity. Terminal validated/validation_failed states and their persisted result/error are replayed in metadata. No HTTP validation route exists; publication/cleanup and private delivery/trial checks remain separate. Catalog and screenshot licences grant no video rights; commercial footage remains private and absent from anonymous responses.
       TEXT
 
       response "201", "declaration persisted or identical replay" do
@@ -93,10 +97,53 @@ RSpec.describe "Private playthrough staging", type: :request do
       produces "application/json"
       security [ private_service_basic: [] ]
       parameter name: :staging_id, in: :path, required: true, schema: { type: :string }
+      description <<~TEXT
+        Existing stages always return 200. incomplete means missing receipts; received means stored but unvalidated. validated includes validation_result; validation_failed includes validation_error (invalid_hls or package_integrity_mismatch). Other states omit both validation fields. Results bind this exact staging ID, immutable normalized manifest/declaration fingerprint/package digest, stable release ID, source SHA-1 and capture/verification evidence. duration is exact summed decimal seconds, audio_codec is null for silent H.264, and absent chapters use chapters_path:null and chapters:[]. No public object, descriptor, redirect or playback is created.
+
+        PlaythroughValidationService.validate(staging_id:) is an internal operation for the authenticated MCP workflow, without a validation HTTP route. Unknown IDs raise not_found. Persisted success or terminal failure replays before completeness or storage checks, including after restart; concurrent validation cannot overwrite it. stage_incomplete is retryable and precedes all byte reads/parsing, including malformed received playlists or wrong role MIME. All completed objects are then read and verified before HLS interpretation: missing/unreadable blobs raise retryable storage_unavailable; readable bytes or stored size/hash/MIME disagreement raises terminal package_integrity_mismatch. Wrong declared role MIME, undeclared references, malformed/unsupported HLS, transport or chapters raises terminal invalid_hls. Retryable failures leave state unchanged; terminal failures require a new declaration/retry key to correct bytes. PUT receipts and declaration replays stay immutable. Internal validation suppresses logs, including failures.
+
+        Restricted RFC 8216 profile: UTF-8 NFC, no BOM/control characters, LF or CRLF, first-line EXTM3U, exactly one EXT-X-VERSION:3 in every playlist. One media playlist or one master directly referencing media playlists, with shared media references allowed; no nested masters, alternate renditions or other tags/attributes. Masters require positive unsigned 64-bit BANDWIDTH; optional positive AVERAGE-BANDWIDTH, quoted CODECS list and positive RESOLUTION dimensions use RFC syntax and unique attributes. Media requires segments, a single positive unsigned 64-bit TARGETDURATION, PLAYLIST-TYPE:VOD, terminal ENDLIST and optional single MEDIA-SEQUENCE:0 before segments. Every URI follows one positive finite decimal EXTINF and required comma; optional UTF-8 titles are ignored. Half-up rounded durations cannot exceed target. Variant segment counts and numeric duration sequences must match. References use declaration path grammar relative to their playlist; every declared object must be reachable except optional root chapters.vtt, which is also required and validated. MIME roles: application/vnd.apple.mpegurl, video/mp2t, text/vtt.
+
+        Each MPEG-TS segment is nonempty, 188-byte framed with sync 0x47, valid packet/adaptation/PSI lengths, no transport errors/scrambling, and complete CRC-checked PAT then matching PMT before elementary payload. One nonzero program, exactly one H.264 stream (0x1B), optionally one AAC/ADTS (0x0F), no other streams, with payload for every declared stream. Audio presence must agree across the package. PMT determines codecs; full decoding is outside validation. chapters.vtt permits one initial UTF-8 BOM, exact WEBVTT then blank line, and 1–256 chronological non-overlapping cues within summed duration. Each cue is HH:MM:SS.mmm --> HH:MM:SS.mmm (two-digit hours, minutes/seconds 00–59), one nonblank title without <, & or -->, and blank separation. No header text, identifiers, settings, markup or STYLE/REGION/NOTE blocks.
+      TEXT
       response "200", "metadata only; no bytes or storage URLs" do
         schema stage_schema
         header "Cache-Control", schema: { type: :string, enum: [ "no-store" ] }
-        run_test! { expect(response.headers["Cache-Control"]).to eq("no-store") }
+        context "incomplete" do
+          run_test! do
+            expect(response.headers["Cache-Control"]).to eq("no-store")
+            expect(response.parsed_body.fetch("state")).to eq("incomplete")
+            expect(response.parsed_body.keys).not_to include("validation_result", "validation_error")
+          end
+        end
+        context "received" do
+          before { receive_playthrough(stage: stage) }
+          run_test! { expect(response.parsed_body.fetch("state")).to eq("received") }
+        end
+        context "validated" do
+          let(:files) { hls_variant_files }
+          let(:stage) { declare_hls(release: release, files: files) }
+          before { receive_hls(stage: stage, files: files); PlaythroughValidationService.validate(staging_id: stage.public_id) }
+          run_test! do
+            expect(response.headers["Cache-Control"]).to eq("no-store")
+            expect(response.headers["Set-Cookie"]).to be_nil
+            expect(response.parsed_body.fetch("state")).to eq("validated")
+            expect(response.parsed_body.fetch("validation_result")).to eq(stage.reload.validation_result)
+            expect(response.parsed_body).not_to have_key("validation_error")
+          end
+        end
+        context "validation_failed" do
+          before do
+            receive_playthrough(stage: stage)
+            expect { PlaythroughValidationService.validate(staging_id: stage.public_id) }.to raise_error(PlaythroughStage::InvalidHls)
+          end
+          run_test! do
+            expect(response.headers["Cache-Control"]).to eq("no-store")
+            expect(response.parsed_body.fetch("state")).to eq("validation_failed")
+            expect(response.parsed_body.fetch("validation_error")).to eq("invalid_hls")
+            expect(response.parsed_body).not_to have_key("validation_result")
+          end
+        end
       end
       response "404", "unknown stage" do
         let(:staging_id) { "unknown" }
@@ -212,17 +259,25 @@ RSpec.describe "Private playthrough staging", type: :request do
       get path, headers: { "User-Agent" => "Arcadary/1.0" }
       [ response.status, response.body, response.headers.slice("ETag", "Last-Modified", "Cache-Control") ]
     end
-    staged = declare_playthrough
-    receive_playthrough(stage: staged)
+    files = hls_files
+    staged = declare_hls(release: release, files: files)
+    receive_hls(stage: staged, files: files)
+    PlaythroughValidationService.validate(staging_id: staged.public_id)
+    failed = declare_playthrough
+    receive_playthrough(stage: failed)
+    expect { PlaythroughValidationService.validate(staging_id: failed.public_id) }.to raise_error(PlaythroughStage::InvalidHls)
     public_paths.each_with_index do |path, index|
       get path, headers: { "User-Agent" => "Arcadary/1.0" }
       expect([ response.status, response.body, response.headers.slice("ETag", "Last-Modified", "Cache-Control") ]).to eq(previous[index])
     end
-    object = staged.objects.sole.reload
+    object = staged.objects.first.reload
     get "/v1/playthrough-stages/#{staged.public_id}/objects/#{object.public_id}.json", headers: headers
     expect(response).to have_http_status(:not_found)
     get "/rails/active_storage/blobs/redirect/#{object.blob.signed_id}/playthrough-object"
     expect(response).to have_http_status(:not_found)
+    post "/v1/playthrough-stages/#{staged.public_id}/validate.json", headers: headers
+    expect(response).to have_http_status(:not_found)
+    expect(response.headers["Cache-Control"]).to eq("no-store")
   end
 
   it "bounds declaration and object reads with missing or dishonest Content-Length" do

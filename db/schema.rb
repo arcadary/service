@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_28_030000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_28_110000) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.string "name", null: false
     t.string "record_type", null: false
@@ -113,6 +113,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_28_030000) do
     t.json "declaration", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "validation_state"
+    t.json "validation_result"
+    t.string "validation_error"
     t.index ["public_id"], name: "index_playthrough_stages_on_public_id", unique: true
     t.index ["release_id"], name: "index_playthrough_stages_on_release_id"
     t.index ["retry_key"], name: "index_playthrough_stages_on_retry_key", unique: true

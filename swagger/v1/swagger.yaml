@@ -6,7 +6,7 @@ info:
   description: |-
     Public, anonymous reads for the Arcadary launcher; authenticated capture-device uploads and private admin staging. JSON routes end in .json; screenshot delivery ends in .png. Generated from the request specs in spec/requests; do not edit swagger/ by hand.
 
-    Catalog data originates from [No-Intro](https://no-intro.org/), sourced through [libretro-database at f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029](https://github.com/libretro/libretro-database/tree/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/metadat/no-intro). Arcadary imports checksum metadata, groups releases into games, normalizes titles/regions/revisions and applies explicit launcher identity mappings. The entire service catalog, including project corrections, additions and later metadata fields, is licensed under [CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/), as is the [upstream source at the pin](https://github.com/libretro/libretro-database/blob/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/LICENSE). Screenshot images and all video are excluded: each medium's own rights apply. Catalog and screenshot licences grant no video rights. The owner-approved exception permits authenticated private HLS staging and delivery, including the private Donkey Kong trial, without public commercial-footage distribution or anonymous playthrough metadata. Staging exposes no playback; HLS validation/publication/cleanup and delivery arrive separately. Application code remains MIT.
+    Catalog data originates from [No-Intro](https://no-intro.org/), sourced through [libretro-database at f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029](https://github.com/libretro/libretro-database/tree/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/metadat/no-intro). Arcadary imports checksum metadata, groups releases into games, normalizes titles/regions/revisions and applies explicit launcher identity mappings. The entire service catalog, including project corrections, additions and later metadata fields, is licensed under [CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/), as is the [upstream source at the pin](https://github.com/libretro/libretro-database/blob/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/LICENSE). Screenshot images and all video are excluded: each medium's own rights apply. Catalog and screenshot licences grant no video rights. The owner-approved exception permits authenticated private HLS staging and delivery, including the private Donkey Kong trial, without public commercial-footage distribution or anonymous playthrough metadata. Internal HLS validation leaves all bytes private; publication, cleanup and delivery arrive separately. Application code remains MIT.
 
     The pinned NES DAT includes distinct headered .nes and unheadered .unh releases. A launcher hashing NES payload bytes without the iNES header sends the matching unheadered checksum. All eight lists are covered, including C64 tape metadata; catalog coverage does not imply launcher playback support. No game files or player filenames are received, stored or served.
 
@@ -294,7 +294,7 @@ paths:
 
         Each entry has a unique package-relative path, positive byte_size, lowercase sha256 and exact MIME content_type without parameters. Paths exclude absolute paths, URLs, traversal/dot/empty components, whitespace, backslashes, colon, percent, query/fragment and control characters. Package identity is SHA-256 of UTF-8 compact JSON of [path, byte_size, sha256, content_type] arrays sorted bytewise by path. Reordering manifest entries or JSON keys and equivalent timestamp offsets replay the original stage; changing the normalized declaration with the same retry_key conflicts. Successful replays return 201 with current progress.
 
-        Ceilings: 1 MiB actual declaration bytes, 4096 objects, 8 MiB per object, 4 GiB summed declared bytes. Actual reads are bounded independently of Content-Length. All responses are no-store and log-suppressed across the complete subtree. No download, playback, redirect, direct-upload capability or public storage route exists. received means all objects stored, never HLS-validated or published; HLS validation/publication/cleanup are #56 and private delivery/trial checks are #57. Catalog and screenshot licences grant no video rights; commercial footage remains private and absent from anonymous responses.
+        Ceilings: 1 MiB actual declaration bytes, 4096 objects, 8 MiB per object, 4 GiB summed declared bytes. Actual reads are bounded independently of Content-Length. All responses are no-store and log-suppressed across the complete subtree. No download, playback, redirect, direct-upload capability or public storage route exists. received means all objects stored, still unvalidated. Internal validation fixes the root at index.m3u8 without changing declaration or package identity. Terminal validated/validation_failed states and their persisted result/error are replayed in metadata. No HTTP validation route exists; publication/cleanup and private delivery/trial checks remain separate. Catalog and screenshot licences grant no video rights; commercial footage remains private and absent from anonymous responses.
       responses:
         '201':
           description: declaration persisted or identical replay
@@ -328,6 +328,15 @@ paths:
                     enum:
                     - incomplete
                     - received
+                    - validated
+                    - validation_failed
+                  validation_result:
+                    "$ref": "#/components/schemas/playthrough_validation_result"
+                  validation_error:
+                    type: string
+                    enum:
+                    - invalid_hls
+                    - package_integrity_mismatch
                   objects:
                     type: array
                     items:
@@ -483,6 +492,14 @@ paths:
         required: true
         schema:
           type: string
+      description: |
+        Existing stages always return 200. incomplete means missing receipts; received means stored but unvalidated. validated includes validation_result; validation_failed includes validation_error (invalid_hls or package_integrity_mismatch). Other states omit both validation fields. Results bind this exact staging ID, immutable normalized manifest/declaration fingerprint/package digest, stable release ID, source SHA-1 and capture/verification evidence. duration is exact summed decimal seconds, audio_codec is null for silent H.264, and absent chapters use chapters_path:null and chapters:[]. No public object, descriptor, redirect or playback is created.
+
+        PlaythroughValidationService.validate(staging_id:) is an internal operation for the authenticated MCP workflow, without a validation HTTP route. Unknown IDs raise not_found. Persisted success or terminal failure replays before completeness or storage checks, including after restart; concurrent validation cannot overwrite it. stage_incomplete is retryable and precedes all byte reads/parsing, including malformed received playlists or wrong role MIME. All completed objects are then read and verified before HLS interpretation: missing/unreadable blobs raise retryable storage_unavailable; readable bytes or stored size/hash/MIME disagreement raises terminal package_integrity_mismatch. Wrong declared role MIME, undeclared references, malformed/unsupported HLS, transport or chapters raises terminal invalid_hls. Retryable failures leave state unchanged; terminal failures require a new declaration/retry key to correct bytes. PUT receipts and declaration replays stay immutable. Internal validation suppresses logs, including failures.
+
+        Restricted RFC 8216 profile: UTF-8 NFC, no BOM/control characters, LF or CRLF, first-line EXTM3U, exactly one EXT-X-VERSION:3 in every playlist. One media playlist or one master directly referencing media playlists, with shared media references allowed; no nested masters, alternate renditions or other tags/attributes. Masters require positive unsigned 64-bit BANDWIDTH; optional positive AVERAGE-BANDWIDTH, quoted CODECS list and positive RESOLUTION dimensions use RFC syntax and unique attributes. Media requires segments, a single positive unsigned 64-bit TARGETDURATION, PLAYLIST-TYPE:VOD, terminal ENDLIST and optional single MEDIA-SEQUENCE:0 before segments. Every URI follows one positive finite decimal EXTINF and required comma; optional UTF-8 titles are ignored. Half-up rounded durations cannot exceed target. Variant segment counts and numeric duration sequences must match. References use declaration path grammar relative to their playlist; every declared object must be reachable except optional root chapters.vtt, which is also required and validated. MIME roles: application/vnd.apple.mpegurl, video/mp2t, text/vtt.
+
+        Each MPEG-TS segment is nonempty, 188-byte framed with sync 0x47, valid packet/adaptation/PSI lengths, no transport errors/scrambling, and complete CRC-checked PAT then matching PMT before elementary payload. One nonzero program, exactly one H.264 stream (0x1B), optionally one AAC/ADTS (0x0F), no other streams, with payload for every declared stream. Audio presence must agree across the package. PMT determines codecs; full decoding is outside validation. chapters.vtt permits one initial UTF-8 BOM, exact WEBVTT then blank line, and 1–256 chronological non-overlapping cues within summed duration. Each cue is HH:MM:SS.mmm --> HH:MM:SS.mmm (two-digit hours, minutes/seconds 00–59), one nonblank title without <, & or -->, and blank separation. No header text, identifiers, settings, markup or STYLE/REGION/NOTE blocks.
       responses:
         '200':
           description: metadata only; no bytes or storage URLs
@@ -516,6 +533,15 @@ paths:
                     enum:
                     - incomplete
                     - received
+                    - validated
+                    - validation_failed
+                  validation_result:
+                    "$ref": "#/components/schemas/playthrough_validation_result"
+                  validation_error:
+                    type: string
+                    enum:
+                    - invalid_hls
+                    - package_integrity_mismatch
                   objects:
                     type: array
                     items:
@@ -1707,5 +1733,177 @@ components:
             revision:
               type: string
               pattern: "^[0-9a-f]{64}$"
+    playthrough_validation_result:
+      type: object
+      additionalProperties: false
+      required:
+      - staging_id
+      - declaration_sha256
+      - package_sha256
+      - manifest
+      - release_id
+      - source_sha1
+      - capture
+      - verification
+      - root
+      - duration
+      - video_codec
+      - audio_codec
+      - chapters_path
+      - chapters
+      properties:
+        staging_id:
+          type: string
+        declaration_sha256:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+        package_sha256:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+        manifest:
+          type: array
+          minItems: 1
+          maxItems: 4096
+          items:
+            type: object
+            additionalProperties: false
+            required:
+            - path
+            - byte_size
+            - sha256
+            - content_type
+            properties:
+              path:
+                type: string
+                minLength: 1
+                maxLength: 1024
+              byte_size:
+                type: integer
+                minimum: 1
+                maximum: 8388608
+              sha256:
+                type: string
+                pattern: "^[0-9a-f]{64}$"
+              content_type:
+                type: string
+                minLength: 1
+                maxLength: 200
+        release_id:
+          type: string
+          minLength: 1
+          maxLength: 200
+        source_sha1:
+          type: string
+          pattern: "^[0-9a-f]{40}$"
+        capture:
+          type: object
+          additionalProperties: false
+          required:
+          - tool
+          - version
+          - captured_at
+          properties:
+            tool:
+              type: string
+              minLength: 1
+              maxLength: 200
+            version:
+              type: string
+              minLength: 1
+              maxLength: 200
+            captured_at:
+              type: string
+              format: date-time
+        verification:
+          type: object
+          additionalProperties: false
+          required:
+          - source_sha1
+          - payload_sha1
+          - relationship
+          - method
+          - result
+          - verifier
+          - verified_at
+          - evidence
+          properties:
+            source_sha1:
+              type: string
+              pattern: "^[0-9a-f]{40}$"
+            payload_sha1:
+              type: string
+              pattern: "^[0-9a-f]{40}$"
+            relationship:
+              type: string
+              enum:
+              - trailing_padding
+              - verified_equivalence
+            removed_bytes:
+              type: integer
+              minimum: 1
+            method:
+              type: string
+              minLength: 1
+              maxLength: 8000
+            result:
+              type: string
+              enum:
+              - success
+            verifier:
+              type: string
+              minLength: 1
+              maxLength: 8000
+            verified_at:
+              type: string
+              format: date-time
+            evidence:
+              type: string
+              minLength: 1
+              maxLength: 8000
+          nullable: true
+        root:
+          type: string
+          enum:
+          - index.m3u8
+        duration:
+          type: string
+          pattern: "^[0-9]+\\.[0-9]+$"
+          description: Exact summed EXTINF seconds as a decimal string.
+        video_codec:
+          type: string
+          enum:
+          - h264
+        audio_codec:
+          type: string
+          nullable: true
+          enum:
+          - aac
+          -
+        chapters_path:
+          type: string
+          nullable: true
+          enum:
+          - chapters.vtt
+          -
+        chapters:
+          type: array
+          maxItems: 256
+          items:
+            type: object
+            additionalProperties: false
+            required:
+            - start
+            - end
+            - title
+            properties:
+              start:
+                type: string
+                pattern: "^[0-9]{2}:[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}$"
+              end:
+                type: string
+                pattern: "^[0-9]{2}:[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}$"
+              title:
+                type: string
+                minLength: 1
 servers:
 - url: "/"
