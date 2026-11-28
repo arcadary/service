@@ -37,4 +37,19 @@ RSpec.describe ScreenshotStageCleanupService do
       expect(ScreenshotStage.pluck(:id)).to eq([ second.id ])
     end
   end
+
+  it "retains a durable cleanup target when storage deletion fails so the hourly retry can remove it" do
+    stage = stage_image
+    blob = stage.blob
+    travel_to stage.expires_at, with_usec: true do
+      allow(blob.service).to receive(:delete).and_raise(IOError)
+      expect { described_class.call }.to raise_error(IOError)
+      expect(stage.reload.blob).to eq(blob)
+      allow(blob.service).to receive(:delete).and_call_original
+      described_class.call
+      expect(ScreenshotStage.exists?(stage.id)).to be(false)
+      expect(ActiveStorage::Blob.exists?(blob.id)).to be(false)
+      expect(blob.service.exist?(blob.key)).to be(false)
+    end
+  end
 end

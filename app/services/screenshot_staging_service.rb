@@ -2,13 +2,15 @@ class ScreenshotStagingService
   def self.create(release_id:, source_sha1:, kind:, io:, content_type:)
     ScreenshotConfigurationService.require_uploads!
     release = target(release_id: release_id, source_sha1: source_sha1, kind: kind)
+    require_membership!(release: release, source_sha1: source_sha1)
     raise Screenshot::InvalidImage unless content_type == "image/png"
 
     png = ScreenshotPngService.decode(io: io, system: release.system)
     blob = ScreenshotService.upload(bytes: png.fetch(:bytes))
     begin
+      ingested_at = Time.current
       ScreenshotStage.create!(release_public_id: release.public_id, source_sha1: source_sha1.downcase,
-        kind: kind, blob: blob, expires_at: 24.hours.from_now, **png.except(:bytes))
+        kind: kind, blob: blob, created_at: ingested_at, expires_at: ingested_at + 24.hours, **png.except(:bytes))
     rescue StandardError
       blob.purge
       raise
@@ -19,13 +21,17 @@ class ScreenshotStagingService
     ScreenshotConfigurationService.require_uploads!
     release = target(release_id: release_id, source_sha1: source_sha1, kind: kind)
     stage = available(staging_id: staging_id, release_id: release_id, source_sha1: source_sha1, kind: kind)
+    require_membership!(release: release, source_sha1: source_sha1)
     png = validated_png(stage: stage, system: release.system)
-    screenshot, old_blob = ScreenshotStage.transaction do
-      current = available(staging_id: staging_id, release_id: release_id, source_sha1: source_sha1, kind: kind)
-      release = target(release_id: release_id, source_sha1: source_sha1, kind: kind)
-      result = ScreenshotService.replace(release: release, kind: kind, blob: current.blob, png: png)
-      current.update!(consumed_at: Time.current, blob: nil)
-      result
+    screenshot, old_blob = ScreenshotStage.uncached do
+      ScreenshotStage.transaction do
+        current = available(staging_id: staging_id, release_id: release_id, source_sha1: source_sha1, kind: kind)
+        release = target(release_id: release_id, source_sha1: source_sha1, kind: kind)
+        require_membership!(release: release, source_sha1: source_sha1)
+        result = ScreenshotService.replace(release: release, kind: kind, blob: current.blob, png: png)
+        current.update!(consumed_at: Time.current, blob: nil)
+        result
+      end
     end
     old_blob&.purge_later
     screenshot
@@ -39,11 +45,14 @@ class ScreenshotStagingService
 
     release = Release.includes(:game).find_by(public_id: release_id)
     raise Release::ReleaseNotFound unless release
-    raise ScreenshotStage::TargetMismatch unless release.media_files.exists?(sha1: source_sha1.downcase)
-
     release
   end
   private_class_method :target
+
+  def self.require_membership!(release:, source_sha1:)
+    raise ScreenshotStage::TargetMismatch unless release.media_files.exists?(sha1: source_sha1.downcase)
+  end
+  private_class_method :require_membership!
 
   def self.available(staging_id:, release_id:, source_sha1:, kind:)
     raise ScreenshotStage::InvalidInput unless staging_id.is_a?(String) && staging_id.present? && staging_id.length <= 200

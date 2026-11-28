@@ -47,7 +47,7 @@ RSpec.describe "Private screenshot staging", type: :request do
         run_test! do
           stage = ScreenshotStage.sole
           expect(response.parsed_body).to eq("staging_id" => stage.public_id, "expires_at" => stage.expires_at.iso8601(6))
-          expect(stage.expires_at).to be_within(1.second).of(24.hours.from_now)
+          expect(stage.expires_at).to eq(stage.created_at + 24.hours)
           expect(stage).to have_attributes(release_public_id: release.public_id, source_sha1: release.sha1, kind: "gameplay")
           expect(Screenshot.count).to eq(0)
           expect(response.headers["Set-Cookie"]).to be_nil

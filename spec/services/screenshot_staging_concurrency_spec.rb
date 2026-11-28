@@ -1,4 +1,5 @@
 require "rails_helper"
+require "timeout"
 require_relative "../support/screenshot_helpers"
 
 RSpec.describe "Concurrent screenshot publication" do
@@ -21,14 +22,16 @@ RSpec.describe "Concurrent screenshot publication" do
     threads = 2.times.map do
       Thread.new do
         ActiveRecord::Base.connection_pool.with_connection do
-          ScreenshotStagingService.publish(staging_id: stage.public_id, release_id: release.public_id, source_sha1: release.sha1, kind: "title")
+          ActiveRecord::Base.cache do
+            ScreenshotStagingService.publish(staging_id: stage.public_id, release_id: release.public_id, source_sha1: release.sha1, kind: "title")
+          end
           :published
         rescue ScreenshotStage::Consumed
           :consumed
         end
       end
     end
-    2.times { ready.pop }
+    Timeout.timeout(10) { 2.times { ready.pop } }
     2.times { proceed.push(true) }
     expect(threads.map(&:value)).to contain_exactly(:published, :consumed)
     expect(Screenshot.where(release: release).count).to eq(1)
@@ -36,6 +39,7 @@ RSpec.describe "Concurrent screenshot publication" do
     expect(stage.consumed_at).to be_present
     expect(Screenshot.find_by!(release: release).blob_id).to eq(blob.id)
   ensure
+    2.times { proceed.push(true) } if proceed
     threads&.each(&:join)
     Screenshot.where(release: release).destroy_all if release
     stage&.destroy!
