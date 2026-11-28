@@ -46,7 +46,7 @@ RSpec.describe CatalogAuthoringService do
     create(:media_file, sha1: "a" * 40)
     expect { author(operation: :create_release, attributes: attributes, expected_revisions: { "game:#{game.public_id}" => 0 }) }.to raise_error(described_class::Conflict, /existing media/)
     expect(game.reload.authoring_revision).to eq(0)
-    expect(Release.count).to eq(0)
+    expect(game.releases.count).to eq(0)
     expect(CatalogMutation.count).to eq(0)
   end
 
@@ -94,7 +94,7 @@ RSpec.describe CatalogAuthoringService do
     revisions = { "game:#{game.public_id}" => 0 }
     result = author(operation: :create_release, attributes: attributes, expected_revisions: revisions, key: "new-release")
     expect(author(operation: :create_release, attributes: attributes, expected_revisions: revisions, key: "new-release")).to eq(result)
-    expect([ Release.count, MediaFile.count, CatalogMutation.count, game.reload.authoring_revision ]).to eq([ 1, 1, 1, 1 ])
+    expect([ game.releases.count, MediaFile.where(sha1: "a" * 40).count, CatalogMutation.count, game.reload.authoring_revision ]).to eq([ 1, 1, 1, 1 ])
     expect { author(operation: :create_release, attributes: attributes, expected_revisions: revisions) }.to raise_error(described_class::Conflict, /stale/)
   end
 
@@ -123,7 +123,7 @@ RSpec.describe CatalogAuthoringService do
   it "rolls invalid release creation back without creating files or advancing the game" do
     attributes = { game_id: game.public_id, system: "c64", startup: { schema: 1, boot: "missing", drives: { "8" => "missing" } }, media: [ { key: "main", position: 1, role: "game", sha1: "a" * 40 } ] }
     expect { author(operation: :create_release, attributes: attributes, expected_revisions: revisions_for(record: game)) }.to raise_error(ActiveRecord::RecordInvalid)
-    expect([ Release.count, MediaFile.count, CatalogMutation.count, game.reload.authoring_revision ]).to eq([ 0, 0, 0, 0 ])
+    expect([ game.releases.count, MediaFile.where(sha1: "a" * 40).count, CatalogMutation.count, game.reload.authoring_revision ]).to eq([ 0, 0, 0, 0 ])
   end
 
   it "fails closed for blank admin name, reason or retry key" do
