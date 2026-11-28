@@ -46,7 +46,7 @@ class CatalogAuthoringReadService
         "media" => record.release_media.reject(&:marked_for_destruction?).sort_by(&:position).map { |medium| medium.slice(:key, :position, :role, :label).merge(medium.media_file.slice(:sha1, :size, :format, :crc32, :md5)) })
       [ "release", record.public_id, canonical, record.slice(:source_title, :source_system, :source_region, :source_revision) ]
     when MediaFile
-      [ "media", record.sha1, record.slice(:sha1, :size, :format, :crc32, :md5), {} ]
+      [ "media", record.sha1, record.slice(:sha1, :size, :format, :crc32, :md5), record.slice(:source_size, :source_format, :source_crc32, :source_md5) ]
     else
       raise ArgumentError, "unknown authoring record"
     end

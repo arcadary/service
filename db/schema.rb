@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_28_010000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_28_020000) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.string "name", null: false
     t.string "record_type", null: false
@@ -84,6 +84,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_28_010000) do
     t.datetime "updated_at", null: false
     t.integer "authoring_revision", default: 0, null: false
     t.json "authored_fields", default: [], null: false
+    t.bigint "source_size"
+    t.string "source_format"
+    t.string "source_crc32"
+    t.string "source_md5"
     t.index ["sha1"], name: "index_media_files_on_sha1", unique: true
   end
 
@@ -118,9 +122,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_28_010000) do
     t.string "source_system"
     t.string "source_region"
     t.string "source_revision"
+    t.integer "source_game_id"
     t.index ["game_id"], name: "index_releases_on_game_id"
     t.index ["public_id"], name: "index_releases_on_public_id", unique: true
     t.index ["sha1"], name: "index_releases_on_sha1"
+    t.index ["source_game_id"], name: "index_releases_on_source_game_id"
   end
 
   create_table "screenshots", force: :cascade do |t|
@@ -146,6 +152,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_28_010000) do
   add_foreign_key "release_media", "media_files"
   add_foreign_key "release_media", "releases"
   add_foreign_key "releases", "games"
+  add_foreign_key "releases", "games", column: "source_game_id"
   add_foreign_key "screenshots", "active_storage_blobs", column: "blob_id"
   add_foreign_key "screenshots", "releases"
 end
