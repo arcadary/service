@@ -7,7 +7,10 @@
         "mcp",
         "serve"
       ],
-      "env": {}
+      "env": {
+        "UB_HUB_URL": "https://hub.arcadary.org",
+        "UB_WORKSPACE_ID": "9370ef20-86bf-4dcd-b2a8-cca78f281ddb"
+      }
     }
   }
 }
