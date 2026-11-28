@@ -20,8 +20,8 @@ RSpec.describe "Bundled homebrew seeds", type: :request do
       get "/v1/releases/#{sha1}.json"
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body).to include(
-        "game" => { "id" => public_id, "title" => title },
-        "release" => { "id" => Release.find_by!(sha1: sha1).public_id, "sha1" => sha1, "system" => system, "region" => nil, "revision" => nil },
+        "game" => { "id" => public_id, "title" => title, "screenshot" => nil },
+        "release" => { "id" => Release.find_by!(sha1: sha1).public_id, "sha1" => sha1, "system" => system, "region" => nil, "revision" => nil, "screenshots" => [] },
         "media" => [ { "key" => "main", "position" => 1, "label" => nil, "role" => "game", "sha1" => sha1, "size" => nil, "format" => nil } ],
         "startup" => { "schema" => 1, "boot" => "main", "drives" => {}, "revision" => match(/\A[0-9a-f]{64}\z/) }
       )
@@ -35,6 +35,16 @@ RSpec.describe "Bundled homebrew seeds", type: :request do
     load Rails.root.join("db/seeds.rb")
     expect_seeded_lookups
     expect([ Game.order(:public_id).pluck(:id), Release.order(:sha1).pluck(:id) ]).to eq(database_ids)
+    expect(Game.order(:public_id).pluck(:screenshot_licence)).to eq([ "CC-BY-4.0", "CC-BY-SA-4.0" ])
+  end
+
+  it "sets artwork licences on existing imported seeds without changing their metadata" do
+    game = create(:game, public_id: "ucity", title: "uCity")
+    release = create(:release, game: game, sha1: "5f026649611c9606ce0bf70dc1552e054e7df5bc", system: "gbc", region: "World", revision: "v1.3")
+    load Rails.root.join("db/seeds.rb")
+    expect(game.reload.screenshot_licence).to eq("CC-BY-SA-4.0")
+    expect(release.reload.slice(:region, :revision)).to eq("region" => "World", "revision" => "v1.3")
+    expect(game.title).to eq("uCity")
   end
 
   it "replants only the two fixed-ID seeds offline after imported metadata exists" do

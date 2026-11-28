@@ -8,10 +8,14 @@ The Rails 8.1 application behind [Arcadary](https://github.com/arcadary/arcadary
 
 - `GET /v1/lookup/{sha1}.json`: a known checksum answers `301` to its resource, with `Cache-Control: public` for a day; an unknown one answers `404`. The target is `GET /v1/releases/{sha1}.json` (a release, its game, ordered media and validated startup), or `GET /v1/media/{sha1}.json` when the file is shared by several releases; both are cached for 300 seconds with ETags. See [Ordered media and startup](README.md#ordered-media-and-startup). The `.json` suffix is required. Errors are JSON with `no-store`. `/api-docs` documents the contract.
 - An offline importer for eight pinned No-Intro lists (29,336 distinct checksums) and two bundled homebrew seeds that need no DATs. Commands, identity rules and the CC-BY-SA-4.0 catalog licence: [Catalog data](README.md#catalog-data).
+- The owner's capture device uploads title/gameplay PNGs per release with a bearer token. The service re-encodes pixels, stores them privately in R2 and serves content-addressed PNG URLs through the Rails API. Screenshots carry their own image licence; the catalog licence excludes images. See [Screenshots](README.md#screenshots).
+- Shared database operations create and correct catalog metadata with expected authoring revisions, retry protection and atomic audit history. Aliases and retained source values stay internal. See [Catalog authoring](README.md#catalog-authoring).
+- Authenticated admins declare and upload private HLS packages for an exact stable release, retaining capture evidence and durable progress. Staging exposes metadata only, without playback or publication. See [Private playthrough staging](README.md#private-playthrough-staging).
 
 ## Rules
 
 - **Game files.** Never serve, link to or describe where to get a game file. Identify files by SHA-1 only; never accept a file name from a player's device. The only code path that receives file bytes is the validation-request flow (milestone *Validation requests*): private storage on the service host, downloads only for authenticated reviewers, no public route, preview, execution or unpacking.
+- **Media rights.** Title and gameplay screenshots from the capture device are permitted. The owner-approved narrow video exception permits authenticated private HLS staging and delivery, including the private Donkey Kong trial; commercial footage stays out of public distribution and anonymous responses. No other clips, box art or manuals. Uploads, screenshot licences and the catalog licence grant no video rights. Use the recorded image licence for screenshots and honour takedown requests at `takedown@arcadary.org`.
 - **Public reads are anonymous and caller-independent.** No account, cookie, session or personalised response on any public read: the same URL returns the same bytes, so a CDN can cache it. Comments, the logging policy and documents never claim reads are private: a read by checksum shows the service and the CDN which file a household has, with its IP address.
 - **Authenticated routes** (reviewer pages, admin tools) send `Cache-Control: no-store` on every response, errors included, and are never covered by a CDN cache rule.
 - **Logging and telemetry.** No IP address, stable device ID or file name in application logs or telemetry, and no checksum next to anything that could tie it to a household, unless an issue decides otherwise. Telemetry is internal and anonymised. Log nothing that is not needed. The lookup's protections and the deployment checks still outstanding are in [Privacy and logging](README.md#privacy-and-logging).
@@ -60,6 +64,8 @@ These are the owner's technical choices. Do not replace them with something else
 
 Tools are managed with [mise](https://mise.jdx.dev): `mise.toml` pins Ruby 3.4.13 and installs fnox. `.ruby-version` and the Dockerfile's `RUBY_VERSION` name the same Ruby for GitHub Actions and the image; change all three together.
 
+Screenshot decoding requires the native libvips library on the normal library search path. On macOS, install it with `brew install vips` before setup or checks. GitHub CI and the Docker image already install libvips.
+
 ```bash
 mise install       # Ruby and fnox, once
 mise run setup     # installs gems and prepares the SQLite databases in storage/
@@ -88,7 +94,7 @@ Work runs through [ub-agents](https://agents.uberblick.ai): `ub-agents.yaml` hol
 
 ## Where things are
 
-- `app/`, `config/`, `db/`, `spec/`: the Rails application, catalog models, seeds and specs.
+- `app/`, `config/`, `db/`, `spec/`: the Rails application, catalog and screenshot models, seeds and specs.
 - `storage/`: SQLite databases, git-ignored.
 - `swagger/v1/swagger.yaml`: the OpenAPI document, generated from the request specs; never edited by hand.
 - `Dockerfile`: production image with Thruster request logging disabled.

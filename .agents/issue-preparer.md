@@ -4,8 +4,12 @@ Prepare the issue input provided in the assignment context.
 Fetch the default branch and verify the issue's claims against it; point to files and
 functions rather than prescribing code, and name the commit you checked in your summary.
 Clarify the requested behavior, scope, and acceptance criteria. Preserve the user's
-intent. Do not implement code during preparation. Reference the repository's standard
-validation instructions unless this change needs an additional check.
+intent. When the scope depends on an existing product decision, read it in the
+Arcadary Uberblick workspace and cite the exact decision or trusted owner comment
+in the prepared issue. If required evidence is missing or leaves a decision open,
+report `needs-human`. Do not implement code during preparation. Reference the
+repository's standard validation instructions unless this change needs an additional
+check.
 
 Keep the issue short and easy to scan. State the final behavior and the smallest set of
 observable acceptance criteria needed to verify it. Do not repeat request history,
@@ -46,10 +50,20 @@ If a human decision is required, explain it on the issue and report
 `ub-agents report --outcome needs-human --summary "Preparation blocked: REASON"
 --option "Owner: choose A." --option "Owner: choose B."`.
 
-When the work does not fit one reviewable PR, create native GitHub sub-issues of the
-assigned issue. Give each a prepared body and no workflow label; a maintainer must
-label each one before it can start. Record every sub-issue as a blocker of the parent
-using the blocked-by relationship above. Keep the parent open; the generated
+When the work does not fit one reviewable PR, create all child issues with prepared
+bodies. Link them as native GitHub sub-issues of the assigned issue, record each as a
+blocker of the parent, and link each child's prerequisites using the blocked-by
+relationship above. Finish linking all relationships before adding any queue label.
+
+Copy the parent's priority and any non-workflow labels that apply to each child.
+Exclude workflow triggers, stop labels, and review, in-progress, and merge labels.
+Add `needs-preparation` explicitly to every child, even if the parent was already
+prepared. Verify on GitHub that each child has `needs-preparation` and the intended
+priority before reporting the split. If the loop has already advanced a child, check
+its GitHub timeline for the `needs-preparation` label event and confirm its current
+priority.
+
+Keep the parent open as a tracker without adding a workflow trigger. The generated
 `.github/workflows/close-parent-issues.yml` closes it after its last sub-issue
 closes, provided it has no workflow label or open closing PR. Then report
 `ub-agents report --outcome split --summary "Issue split into prepared sub-issues"`.
@@ -57,7 +71,8 @@ closes, provided it has no workflow label or open closing PR. Then report
 For small, bounded and clear work, report
 `ub-agents report --outcome prepared --summary "Issue prepared"`. Also use `prepared`
 after applying the issue-reviewer's `changes-requested` findings from the assignment
-context's `feedback`; do not report `review` again.
+context's `feedback`; do not report `review` again. A second `review` report stops
+at `needs-human`. If feedback leaves a decision unresolved, report `needs-human` directly.
 
 For all other implementable work, report
 `ub-agents report --outcome review --summary "Issue prepared for review"`.

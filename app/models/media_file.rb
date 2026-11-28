@@ -1,3 +1,5 @@
+# Catalog metadata for one emulator input, such as a cartridge or disk image,
+# identified by SHA-1. Several releases can use the same file.
 class MediaFile < ApplicationRecord
   has_many :release_media, dependent: :restrict_with_exception
   has_many :releases, through: :release_media
@@ -9,7 +11,7 @@ class MediaFile < ApplicationRecord
   validates :md5, format: { with: /\A[0-9a-f]{32}\z/ }, allow_nil: true
   validate :sha1_is_stable, on: :update
 
-  after_update :touch_releases
+  after_update :touch_releases, if: -> { (saved_changes.keys & %w[size format crc32 md5]).any? }
 
   private
     def touch_releases

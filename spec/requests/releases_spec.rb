@@ -6,8 +6,8 @@ RSpec.describe "Release", type: :request do
   let(:url) { "/v1/releases/#{release.sha1}.json" }
   let(:expected_payload) do
     {
-      "release" => { "id" => release.public_id, "sha1" => release.sha1, "system" => "c64", "region" => nil, "revision" => nil },
-      "game" => { "id" => "lookup-game", "title" => "A game" },
+      "release" => { "id" => release.public_id, "sha1" => release.sha1, "system" => "c64", "region" => nil, "revision" => nil, "screenshots" => [] },
+      "game" => { "id" => "lookup-game", "title" => "A game", "screenshot" => nil },
       "media" => [ { "key" => "main", "position" => 1, "label" => nil, "role" => "game", "sha1" => release.sha1, "size" => nil, "format" => nil } ],
       "startup" => { "schema" => 1, "boot" => "main", "drives" => { "8" => "main" }, "revision" => "20ac504497948774502ee889d50c8b20f4dcb493ee0a66f064e818b91cb8c9ff" }
     }
@@ -16,7 +16,7 @@ RSpec.describe "Release", type: :request do
   path "/v1/releases/{sha1}.json" do
     get "A release and its game, by the SHA-1 of its game file" do
       produces "application/json"
-      description "The target of an unambiguous lookup redirect. Hex is case-insensitive; release.sha1 is the asked file and release.id identifies the whole release. Media are in position order. Startup applies defaults and includes a SHA-256 revision over effective startup and ordered checksums. C64 slots are 8 and 9; other systems have no drives. The service never infers a set from one checksum or from file names. Successes are public for 300 seconds with an ETag; errors are never stored."
+      description "The target of an unambiguous lookup redirect. Hex is case-insensitive; release.sha1 is the asked file and release.id identifies the whole release. Media are in position order. Startup applies defaults and includes a SHA-256 revision over effective startup and ordered checksums. C64 slots are 8 and 9; other systems have no drives. The service never infers a set from one checksum or from file names. Successes are public for 300 seconds with ETag and Last-Modified validators; corrections refresh both, while cached responses may remain until their existing TTL expires. Current conditional requests return 304. Errors are never stored."
       parameter name: :sha1, in: :path, required: true,
         schema: { type: :string, pattern: "^[0-9a-fA-F]{40}$", minLength: 40, maxLength: 40 }
 
@@ -24,12 +24,21 @@ RSpec.describe "Release", type: :request do
         schema "$ref" => "#/components/schemas/Release"
         header "Cache-Control", schema: { type: :string, enum: [ "max-age=300, public" ] }
         header "ETag", schema: { type: :string }
+        header "Last-Modified", schema: { type: :string }
         let(:sha1) { release.sha1 }
         run_test! { expect(response.parsed_body).to eq(expected_payload) }
 
         context "upper-case hex" do
           let(:sha1) { release.sha1.upcase }
           run_test! { expect(response.parsed_body).to eq(expected_payload) }
+        end
+
+        context "with an authored original controller profile" do
+          before { release.update!(system: "snes", controller_profile: build(:controller_profile)) }
+          run_test! do
+            expect(response.parsed_body.dig("release", "controller_profile")).to eq(
+              ReleaseControllerProfileDecorator.decorate(release.controller_profile).as_json)
+          end
         end
       end
 

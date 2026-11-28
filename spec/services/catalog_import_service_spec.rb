@@ -4,6 +4,27 @@ require_relative "../support/catalog_helpers"
 RSpec.describe CatalogImportService do
   include CatalogHelpers
 
+  it "preserves an authored exact-edition profile and evidence through a supported reimport" do
+    entries = [ { title: "Synthetic (USA)", sha1: checksum(1), size: 16384 } ]
+    import_entries(entries: entries, system: "snes")
+    release = Release.sole
+    profile = build(:controller_profile, binding: { "system" => "snes", "region" => "USA", "revision" => nil })
+    allow(ENV).to receive(:[]).and_call_original
+    allow(ENV).to receive(:[]).with("CATALOG_ADMIN_NAME").and_return("Synthetic Owner")
+    CatalogAuthoringService.call(operation: :correct_release, attributes: { id: release.public_id, controller_profile: profile },
+      expected_revisions: { "game:#{release.game.public_id}" => 0, "release:#{release.public_id}" => 0 },
+      reason: "Synthetic evidence", idempotency_key: "import-profile")
+    original = release.reload.attributes
+    history = CatalogMutation.sole.attributes
+    import_entries(entries: [ entries.sole.merge(size: 32768) ], system: "snes")
+    expect(release.reload.attributes.except("updated_at")).to eq(original.except("updated_at"))
+    expect(release.media_files.sole.size).to eq(32768)
+    expect(CatalogMutation.sole.attributes).to eq(history)
+    before = snapshot
+    expect { import_entries(entries: [ entries.sole.merge(title: "Synthetic (Europe)") ], system: "snes") }.to raise_error(ActiveRecord::RecordInvalid, /binding/)
+    expect(snapshot).to eq(before)
+  end
+
   around do |example|
     Dir.mktmpdir("catalog-", Rails.root.join("tmp")) do |folder|
       @folder = folder
@@ -15,6 +36,8 @@ RSpec.describe CatalogImportService do
     entries = [ { title: "Example (USA)", sha1: checksum(1), filename: "example.NES", size: 16384, crc: "ABCDEF12", md5: "A" * 32 } ]
     import_entries(entries: entries)
     release = Release.sole
+    expect(release.attributes.slice("source_title", "source_system", "source_region", "source_revision")).to eq("source_title" => "Example (USA)", "source_system" => "nes", "source_region" => "USA", "source_revision" => nil)
+    expect(release.game.source_title).to eq("Example")
     expect(release.release_media.sole.attributes.slice("key", "position", "label", "role")).to eq("key" => "main", "position" => 1, "label" => nil, "role" => "game")
     expect(MediaFile.sole.attributes.slice("sha1", "size", "format", "crc32", "md5")).to eq("sha1" => checksum(1), "size" => 16384, "format" => "nes", "crc32" => "abcdef12", "md5" => "a" * 32)
     before = snapshot
@@ -127,6 +150,7 @@ RSpec.describe CatalogImportService do
     load Rails.root.join("db/seeds.rb")
     expect(snapshot).to eq(before)
     expect(Release.includes(:game).order(:system).map { |release| [ release.game.public_id, release.game.title, release.system, release.region, release.revision ] }).to eq([ [ "tobu-tobu-girl", "Tobu Tobu Girl", "gb", "World", nil ], [ "ucity", "uCity", "gbc", "World", "v1.3" ] ])
+    expect(Game.order(:public_id).pluck(:screenshot_licence)).to eq([ "CC-BY-4.0", "CC-BY-SA-4.0" ])
   end
 
   it "assigns the same fixed seed IDs when importing into an empty database" do

@@ -10,7 +10,47 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_26_210000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_28_030000) do
+  create_table "active_storage_attachments", force: :cascade do |t|
+    t.string "name", null: false
+    t.string "record_type", null: false
+    t.bigint "record_id", null: false
+    t.bigint "blob_id", null: false
+    t.datetime "created_at", null: false
+    t.index ["blob_id"], name: "index_active_storage_attachments_on_blob_id"
+    t.index ["record_type", "record_id", "name", "blob_id"], name: "index_active_storage_attachments_uniqueness", unique: true
+  end
+
+  create_table "active_storage_blobs", force: :cascade do |t|
+    t.string "key", null: false
+    t.string "filename", null: false
+    t.string "content_type"
+    t.text "metadata"
+    t.string "service_name", null: false
+    t.bigint "byte_size", null: false
+    t.string "checksum"
+    t.datetime "created_at", null: false
+    t.index ["key"], name: "index_active_storage_blobs_on_key", unique: true
+  end
+
+  create_table "active_storage_variant_records", force: :cascade do |t|
+    t.bigint "blob_id", null: false
+    t.string "variation_digest", null: false
+    t.index ["blob_id", "variation_digest"], name: "index_active_storage_variant_records_uniqueness", unique: true
+  end
+
+  create_table "catalog_mutations", force: :cascade do |t|
+    t.string "idempotency_key", null: false
+    t.string "fingerprint", null: false
+    t.string "operation", null: false
+    t.string "admin_name", null: false
+    t.text "reason", null: false
+    t.json "record_changes", default: [], null: false
+    t.json "result", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.index ["idempotency_key"], name: "index_catalog_mutations_on_idempotency_key", unique: true
+  end
+
   create_table "game_identities", force: :cascade do |t|
     t.integer "game_id", null: false
     t.string "key", null: false
@@ -24,7 +64,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_26_210000) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.boolean "catalog_curated", default: false, null: false
+    t.string "screenshot_licence", default: "", null: false
+    t.integer "authoring_revision", default: 0, null: false
+    t.json "authored_fields", default: [], null: false
+    t.json "title_aliases", default: [], null: false
+    t.string "source_title"
+    t.integer "retired_into_game_id"
     t.index ["public_id"], name: "index_games_on_public_id", unique: true
+    t.index ["retired_into_game_id"], name: "index_games_on_retired_into_game_id"
   end
 
   create_table "media_files", force: :cascade do |t|
@@ -35,7 +82,40 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_26_210000) do
     t.string "md5"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.integer "authoring_revision", default: 0, null: false
+    t.json "authored_fields", default: [], null: false
     t.index ["sha1"], name: "index_media_files_on_sha1", unique: true
+  end
+
+  create_table "playthrough_stage_objects", force: :cascade do |t|
+    t.integer "playthrough_stage_id", null: false
+    t.string "public_id", null: false
+    t.string "path", null: false
+    t.bigint "byte_size", null: false
+    t.string "sha256", null: false
+    t.string "content_type", null: false
+    t.integer "blob_id"
+    t.datetime "received_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["blob_id"], name: "index_playthrough_stage_objects_on_blob_id"
+    t.index ["playthrough_stage_id", "path"], name: "idx_on_playthrough_stage_id_path_e253008c66", unique: true
+    t.index ["playthrough_stage_id"], name: "index_playthrough_stage_objects_on_playthrough_stage_id"
+    t.index ["public_id"], name: "index_playthrough_stage_objects_on_public_id", unique: true
+  end
+
+  create_table "playthrough_stages", force: :cascade do |t|
+    t.string "public_id", null: false
+    t.integer "release_id", null: false
+    t.string "retry_key", null: false
+    t.string "declaration_sha256", null: false
+    t.string "package_sha256", null: false
+    t.json "declaration", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["public_id"], name: "index_playthrough_stages_on_public_id", unique: true
+    t.index ["release_id"], name: "index_playthrough_stages_on_release_id"
+    t.index ["retry_key"], name: "index_playthrough_stages_on_retry_key", unique: true
   end
 
   create_table "release_media", force: :cascade do |t|
@@ -64,13 +144,62 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_26_210000) do
     t.string "source_title"
     t.string "public_id", null: false
     t.json "startup"
+    t.integer "authoring_revision", default: 0, null: false
+    t.json "authored_fields", default: [], null: false
+    t.string "source_system"
+    t.string "source_region"
+    t.string "source_revision"
+    t.json "controller_profile"
     t.index ["game_id"], name: "index_releases_on_game_id"
     t.index ["public_id"], name: "index_releases_on_public_id", unique: true
     t.index ["sha1"], name: "index_releases_on_sha1"
   end
 
+  create_table "screenshot_stages", force: :cascade do |t|
+    t.string "public_id", null: false
+    t.string "release_public_id", null: false
+    t.string "source_sha1", null: false
+    t.string "kind", null: false
+    t.integer "blob_id"
+    t.string "sha256", null: false
+    t.integer "width", null: false
+    t.integer "height", null: false
+    t.datetime "expires_at", null: false
+    t.datetime "consumed_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["blob_id"], name: "index_screenshot_stages_on_blob_id"
+    t.index ["expires_at"], name: "index_screenshot_stages_on_expires_at"
+    t.index ["public_id"], name: "index_screenshot_stages_on_public_id", unique: true
+  end
+
+  create_table "screenshots", force: :cascade do |t|
+    t.integer "release_id", null: false
+    t.integer "blob_id", null: false
+    t.string "kind", null: false
+    t.integer "width", null: false
+    t.integer "height", null: false
+    t.string "sha256", null: false
+    t.string "licence", default: "", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["blob_id"], name: "index_screenshots_on_blob_id"
+    t.index ["release_id", "kind"], name: "index_screenshots_on_release_id_and_kind", unique: true
+    t.index ["release_id"], name: "index_screenshots_on_release_id"
+    t.index ["sha256"], name: "index_screenshots_on_sha256"
+  end
+
+  add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "game_identities", "games"
+  add_foreign_key "games", "games", column: "retired_into_game_id"
+  add_foreign_key "playthrough_stage_objects", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "playthrough_stage_objects", "playthrough_stages"
+  add_foreign_key "playthrough_stages", "releases"
   add_foreign_key "release_media", "media_files"
   add_foreign_key "release_media", "releases"
   add_foreign_key "releases", "games"
+  add_foreign_key "screenshot_stages", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "screenshots", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "screenshots", "releases"
 end
