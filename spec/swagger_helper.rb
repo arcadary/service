@@ -30,9 +30,9 @@ RSpec.configure do |config|
         title: 'Arcadary service API',
         version: 'v1',
         description: <<~TEXT.strip
-          Public, anonymous reads for the Arcadary launcher; authenticated capture-device uploads. JSON routes end in .json; screenshot delivery ends in .png. Generated from the request specs in spec/requests; do not edit swagger/ by hand.
+          Public, anonymous reads for the Arcadary launcher; authenticated capture-device uploads and private admin staging. JSON routes end in .json; screenshot delivery ends in .png. Generated from the request specs in spec/requests; do not edit swagger/ by hand.
 
-          Catalog data originates from [No-Intro](https://no-intro.org/), sourced through [libretro-database at f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029](https://github.com/libretro/libretro-database/tree/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/metadat/no-intro). Arcadary imports checksum metadata, groups releases into games, normalizes titles/regions/revisions and applies explicit launcher identity mappings. The entire service catalog, including project corrections, additions and later metadata fields, is licensed under [CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/), as is the [upstream source at the pin](https://github.com/libretro/libretro-database/blob/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/LICENSE). Screenshot images are excluded: their own licence applies. Application code remains MIT.
+          Catalog data originates from [No-Intro](https://no-intro.org/), sourced through [libretro-database at f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029](https://github.com/libretro/libretro-database/tree/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/metadat/no-intro). Arcadary imports checksum metadata, groups releases into games, normalizes titles/regions/revisions and applies explicit launcher identity mappings. The entire service catalog, including project corrections, additions and later metadata fields, is licensed under [CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/), as is the [upstream source at the pin](https://github.com/libretro/libretro-database/blob/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/LICENSE). Screenshot images and all video are excluded: each medium's own rights apply. Catalog and screenshot licences grant no video rights. The owner-approved exception permits authenticated private HLS staging and delivery, including the private Donkey Kong trial, without public commercial-footage distribution or anonymous playthrough metadata. Staging exposes no playback; HLS validation/publication/cleanup and delivery arrive separately. Application code remains MIT.
 
           The pinned NES DAT includes distinct headered .nes and unheadered .unh releases. A launcher hashing NES payload bytes without the iNES header sends the matching unheadered checksum. All eight lists are covered, including C64 tape metadata; catalog coverage does not imply launcher playback support. No game files or player filenames are received, stored or served.
 
@@ -49,6 +49,35 @@ RSpec.configure do |config|
       components: {
         securitySchemes: { capture_token: { type: :http, scheme: :bearer }, private_service_basic: { type: :http, scheme: :basic } },
         schemas: {
+          playthrough_declaration: {
+            type: :object, additionalProperties: false, required: %w[retry_key release_id source_sha1 capture manifest],
+            properties: {
+              retry_key: { type: :string, minLength: 1, maxLength: 200 }, release_id: { type: :string, minLength: 1, maxLength: 200 },
+              source_sha1: { type: :string, pattern: '^[0-9a-f]{40}$' },
+              capture: {
+                type: :object, additionalProperties: false, required: %w[tool version captured_at],
+                properties: { tool: { type: :string, minLength: 1, maxLength: 200 }, version: { type: :string, minLength: 1, maxLength: 200 },
+                  captured_at: { type: :string, format: 'date-time' } }
+              },
+              verification: {
+                type: :object, additionalProperties: false, required: %w[source_sha1 payload_sha1 relationship method result verifier verified_at evidence],
+                properties: {
+                  source_sha1: { type: :string, pattern: '^[0-9a-f]{40}$' }, payload_sha1: { type: :string, pattern: '^[0-9a-f]{40}$' },
+                  relationship: { type: :string, enum: %w[trailing_padding verified_equivalence] }, removed_bytes: { type: :integer, minimum: 1 },
+                  method: { type: :string, minLength: 1, maxLength: 8000 }, result: { type: :string, enum: %w[success] },
+                  verifier: { type: :string, minLength: 1, maxLength: 8000 }, verified_at: { type: :string, format: 'date-time' },
+                  evidence: { type: :string, minLength: 1, maxLength: 8000 }
+                }
+              },
+              manifest: {
+                type: :array, minItems: 1, maxItems: 4096,
+                items: { type: :object, additionalProperties: false, required: %w[path byte_size sha256 content_type], properties: {
+                  path: { type: :string, minLength: 1, maxLength: 1024 }, byte_size: { type: :integer, minimum: 1, maximum: 8_388_608 },
+                  sha256: { type: :string, pattern: '^[0-9a-f]{64}$' }, content_type: { type: :string, minLength: 1, maxLength: 200 }
+                } }
+              }
+            }
+          },
           Screenshot: screenshot_schema,
           ControllerProfile: {
             type: :object, required: %w[version layout prompts], additionalProperties: false,

@@ -4,9 +4,9 @@ info:
   title: Arcadary service API
   version: v1
   description: |-
-    Public, anonymous reads for the Arcadary launcher; authenticated capture-device uploads. JSON routes end in .json; screenshot delivery ends in .png. Generated from the request specs in spec/requests; do not edit swagger/ by hand.
+    Public, anonymous reads for the Arcadary launcher; authenticated capture-device uploads and private admin staging. JSON routes end in .json; screenshot delivery ends in .png. Generated from the request specs in spec/requests; do not edit swagger/ by hand.
 
-    Catalog data originates from [No-Intro](https://no-intro.org/), sourced through [libretro-database at f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029](https://github.com/libretro/libretro-database/tree/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/metadat/no-intro). Arcadary imports checksum metadata, groups releases into games, normalizes titles/regions/revisions and applies explicit launcher identity mappings. The entire service catalog, including project corrections, additions and later metadata fields, is licensed under [CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/), as is the [upstream source at the pin](https://github.com/libretro/libretro-database/blob/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/LICENSE). Screenshot images are excluded: their own licence applies. Application code remains MIT.
+    Catalog data originates from [No-Intro](https://no-intro.org/), sourced through [libretro-database at f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029](https://github.com/libretro/libretro-database/tree/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/metadat/no-intro). Arcadary imports checksum metadata, groups releases into games, normalizes titles/regions/revisions and applies explicit launcher identity mappings. The entire service catalog, including project corrections, additions and later metadata fields, is licensed under [CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/), as is the [upstream source at the pin](https://github.com/libretro/libretro-database/blob/f89f09cbe13f9f7863ecf20d0ebf2c5ce53be029/LICENSE). Screenshot images and all video are excluded: each medium's own rights apply. Catalog and screenshot licences grant no video rights. The owner-approved exception permits authenticated private HLS staging and delivery, including the private Donkey Kong trial, without public commercial-footage distribution or anonymous playthrough metadata. Staging exposes no playback; HLS validation/publication/cleanup and delivery arrive separately. Application code remains MIT.
 
     The pinned NES DAT includes distinct headered .nes and unheadered .unh releases. A launcher hashing NES payload bytes without the iNES header sends the matching unheadered checksum. All eight lists are covered, including C64 tape metadata; catalog coverage does not imply launcher playback support. No game files or player filenames are received, stored or served.
 
@@ -281,6 +281,508 @@ paths:
                     type: string
                     enum:
                     - not_found
+  "/v1/playthrough-stages.json":
+    post:
+      summary: Declare a private release-bound playthrough package
+      security:
+      - private_service_basic: []
+      parameters: []
+      description: |
+        Authenticated by shared admin Basic before parsing, body reads or logging. A strict single-target declaration binds a stable release public_id, capture source SHA-1, provenance and immutable manifest. Unknown fields and duplicate JSON keys are rejected. SHA-1s and SHA-256s are lowercase. Capture and verification times require ISO 8601 with an explicit timezone and normalize to UTC microseconds.
+
+        The source must belong to the named release, or carry a single offline successful verification attestation whose payload belongs to that release. The verifier must equal the authenticated admin username. Evidence must name exactly the source and payload SHA-1s, with no other checksum proposals. trailing_padding requires a positive removed_bytes, including 127 for the trial when verified; verified_equivalence accepts other byte-verified relationships without removed_bytes. No game bytes are accepted, no title matching or launcher-checksum inference occurs.
+
+        Each entry has a unique package-relative path, positive byte_size, lowercase sha256 and exact MIME content_type without parameters. Paths exclude absolute paths, URLs, traversal/dot/empty components, whitespace, backslashes, colon, percent, query/fragment and control characters. Package identity is SHA-256 of UTF-8 compact JSON of [path, byte_size, sha256, content_type] arrays sorted bytewise by path. Reordering manifest entries or JSON keys and equivalent timestamp offsets replay the original stage; changing the normalized declaration with the same retry_key conflicts. Successful replays return 201 with current progress.
+
+        Ceilings: 1 MiB actual declaration bytes, 4096 objects, 8 MiB per object, 4 GiB summed declared bytes. Actual reads are bounded independently of Content-Length. All responses are no-store and log-suppressed across the complete subtree. No download, playback, redirect, direct-upload capability or public storage route exists. received means all objects stored, never HLS-validated or published; HLS validation/publication/cleanup are #56 and private delivery/trial checks are #57. Catalog and screenshot licences grant no video rights; commercial footage remains private and absent from anonymous responses.
+      responses:
+        '201':
+          description: declaration persisted or identical replay
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - staging_id
+                - package_sha256
+                - declaration
+                - state
+                - objects
+                properties:
+                  staging_id:
+                    type: string
+                  package_sha256:
+                    type: string
+                    pattern: "^[0-9a-f]{64}$"
+                  declaration:
+                    "$ref": "#/components/schemas/playthrough_declaration"
+                  state:
+                    type: string
+                    enum:
+                    - incomplete
+                    - received
+                  objects:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required:
+                      - object_id
+                      - path
+                      - received
+                      properties:
+                        object_id:
+                          type: string
+                        path:
+                          type: string
+                        received:
+                          type: boolean
+        '400':
+          description: invalid declaration or interrupted read
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - error
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - invalid_declaration
+                    - interrupted_transfer
+        '401':
+          description: authentication failed
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - error
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - unauthorized
+        '404':
+          description: release not found
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - error
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - not_found
+        '409':
+          description: target mismatch or changed retry declaration
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - error
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - target_mismatch
+                    - stage_conflict
+        '413':
+          description: declaration or package exceeds a ceiling
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - error
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - stage_too_large
+        '503':
+          description: authentication not configured
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - error
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - authentication_unavailable
+      requestBody:
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/playthrough_declaration"
+        required: true
+  "/v1/playthrough-stages/{staging_id}.json":
+    get:
+      summary: Read private declaration and durable object progress
+      security:
+      - private_service_basic: []
+      parameters:
+      - name: staging_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: metadata only; no bytes or storage URLs
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - staging_id
+                - package_sha256
+                - declaration
+                - state
+                - objects
+                properties:
+                  staging_id:
+                    type: string
+                  package_sha256:
+                    type: string
+                    pattern: "^[0-9a-f]{64}$"
+                  declaration:
+                    "$ref": "#/components/schemas/playthrough_declaration"
+                  state:
+                    type: string
+                    enum:
+                    - incomplete
+                    - received
+                  objects:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required:
+                      - object_id
+                      - path
+                      - received
+                      properties:
+                        object_id:
+                          type: string
+                        path:
+                          type: string
+                        received:
+                          type: boolean
+        '404':
+          description: unknown stage
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - error
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - not_found
+        '401':
+          description: authentication failed
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - error
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - unauthorized
+        '503':
+          description: authentication not configured
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - error
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - authentication_unavailable
+  "/v1/playthrough-stages/{staging_id}/objects/{stage_object_id}.json":
+    put:
+      summary: Receive one declared private object
+      security:
+      - private_service_basic: []
+      parameters:
+      - name: staging_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: stage_object_id
+        in: path
+        required: true
+        schema:
+          type: string
+      description: 'Raw bytes with the exact declared Content-Type; any valid declared
+        MIME type without parameters is accepted. Exact size and SHA-256 must match,
+        including on successful retries. Reads are bounded at 8 MiB regardless of
+        Content-Length. Success returns an immutable object_id/received_at receipt;
+        identical retries return exactly that receipt, even after other objects finish.
+        GET stage metadata for aggregate progress. Fresh private storage keys isolate
+        attempts and stages; completion follows storage success. Interrupted reads
+        and storage failure leave the object incomplete and retryable after restart.
+        No HLS validation or playback is performed. The deployment owner must verify
+        the zone upload setting, which can be lower than Cloudflare''s documented
+        100 MB minimum plan limit: https://developers.cloudflare.com/cache/concepts/default-cache-behavior/#upload-limits
+        (#57).'
+      responses:
+        '200':
+          description: verified object received, or identical successful retry
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - object_id
+                - received_at
+                properties:
+                  object_id:
+                    type: string
+                  received_at:
+                    type: string
+                    format: date-time
+        '400':
+          description: interrupted read
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - error
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - interrupted_transfer
+        '401':
+          description: authentication failed
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - error
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - unauthorized
+        '404':
+          description: stage or declared object not found
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - error
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - not_found
+        '409':
+          description: bytes, size or content type mismatch
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - error
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - stage_conflict
+        '413':
+          description: actual bytes exceed 8 MiB
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - error
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - stage_too_large
+        '503':
+          description: storage or authentication unavailable
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                - no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - error
+                properties:
+                  error:
+                    type: string
+                    enum:
+                    - storage_unavailable
+                    - authentication_unavailable
+      requestBody:
+        content:
+          video/mp2t:
+            schema:
+              type: string
+              format: binary
+          application/vnd.apple.mpegurl:
+            schema:
+              type: string
+              format: binary
+          video/mp4:
+            schema:
+              type: string
+              format: binary
+          application/json:
+            schema:
+              type: string
+              format: binary
+        required: true
   "/v1/releases/{sha1}.json":
     get:
       summary: A release and its game, by the SHA-1 of its game file
@@ -843,6 +1345,120 @@ components:
       type: http
       scheme: basic
   schemas:
+    playthrough_declaration:
+      type: object
+      additionalProperties: false
+      required:
+      - retry_key
+      - release_id
+      - source_sha1
+      - capture
+      - manifest
+      properties:
+        retry_key:
+          type: string
+          minLength: 1
+          maxLength: 200
+        release_id:
+          type: string
+          minLength: 1
+          maxLength: 200
+        source_sha1:
+          type: string
+          pattern: "^[0-9a-f]{40}$"
+        capture:
+          type: object
+          additionalProperties: false
+          required:
+          - tool
+          - version
+          - captured_at
+          properties:
+            tool:
+              type: string
+              minLength: 1
+              maxLength: 200
+            version:
+              type: string
+              minLength: 1
+              maxLength: 200
+            captured_at:
+              type: string
+              format: date-time
+        verification:
+          type: object
+          additionalProperties: false
+          required:
+          - source_sha1
+          - payload_sha1
+          - relationship
+          - method
+          - result
+          - verifier
+          - verified_at
+          - evidence
+          properties:
+            source_sha1:
+              type: string
+              pattern: "^[0-9a-f]{40}$"
+            payload_sha1:
+              type: string
+              pattern: "^[0-9a-f]{40}$"
+            relationship:
+              type: string
+              enum:
+              - trailing_padding
+              - verified_equivalence
+            removed_bytes:
+              type: integer
+              minimum: 1
+            method:
+              type: string
+              minLength: 1
+              maxLength: 8000
+            result:
+              type: string
+              enum:
+              - success
+            verifier:
+              type: string
+              minLength: 1
+              maxLength: 8000
+            verified_at:
+              type: string
+              format: date-time
+            evidence:
+              type: string
+              minLength: 1
+              maxLength: 8000
+        manifest:
+          type: array
+          minItems: 1
+          maxItems: 4096
+          items:
+            type: object
+            additionalProperties: false
+            required:
+            - path
+            - byte_size
+            - sha256
+            - content_type
+            properties:
+              path:
+                type: string
+                minLength: 1
+                maxLength: 1024
+              byte_size:
+                type: integer
+                minimum: 1
+                maximum: 8388608
+              sha256:
+                type: string
+                pattern: "^[0-9a-f]{64}$"
+              content_type:
+                type: string
+                minLength: 1
+                maxLength: 200
     Screenshot:
       type: object
       required:

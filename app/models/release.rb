@@ -12,6 +12,7 @@ class Release < ApplicationRecord
   has_many :release_media, -> { order(:position) }, dependent: :destroy, inverse_of: :release
   has_many :media_files, through: :release_media
   has_many :screenshots, dependent: :restrict_with_exception
+  has_many :playthrough_stages, dependent: :restrict_with_exception
   accepts_nested_attributes_for :release_media, allow_destroy: true
 
   attribute :public_id, :string, default: -> { SecureRandom.uuid }
