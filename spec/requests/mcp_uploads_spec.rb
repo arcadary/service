@@ -113,6 +113,46 @@ RSpec.describe "Uploads through MCP", type: :request do
     expect(mcp_tool(name: "confirm_upload", upload_id: retried).fetch("state")).to eq("checking")
   end
 
+  it "keeps the previous video, files and evidence attachments when the database replacement fails" do
+    arguments = { release_id: release.public_id, kind: "playthrough", source_sha1: release.sha1, capture: capture }
+    first = upload(type: "video", files: hls_files)
+    confirm(first)
+    mcp_tool(name: "upload_video", upload_id: first, **arguments)
+    result = create(:compatibility_result, release: release, videos: [ Video.sole ])
+    second = upload(type: "video", files: hls_fmp4_files)
+    confirm(second)
+    allow(Video).to receive(:create!).and_raise(ActiveRecord::RecordNotUnique)
+
+    expect { VideoService.create(upload_id: second, verifier: "synthetic-admin", **arguments) }.to raise_error(ActiveRecord::RecordNotUnique)
+
+    expect(release.videos.reload.map(&:public_id)).to eq([ first ])
+    expect(result.reload.videos.map(&:public_id)).to eq([ first ])
+    expect(StorageConfigurationService.media_service.exist?(VideoService.key(public_id: first, name: "index.m3u8"))).to be(true)
+    expect(Upload.find_by!(public_id: second).state).to eq("confirmed")
+  end
+
+  it "keeps the new publication and retries deletion when the replaced video's storage is unavailable" do
+    arguments = { release_id: release.public_id, kind: "playthrough", source_sha1: release.sha1, capture: capture }
+    first = upload(type: "video", files: hls_files)
+    confirm(first)
+    mcp_tool(name: "upload_video", upload_id: first, **arguments)
+    second = upload(type: "video", files: hls_fmp4_files)
+    confirm(second)
+    media = StorageConfigurationService.media_service
+    allow(media).to receive(:delete_prefixed).and_raise(IOError)
+
+    expect do
+      expect(mcp_tool(name: "upload_video", upload_id: second, **arguments).dig("video", "id")).to eq(second)
+    end.to have_enqueued_job(VideoFileCleanupJob).with(first)
+    expect(release.videos.reload.map(&:public_id)).to eq([ second ])
+    expect(Upload.find_by!(public_id: second).state).to eq("used")
+
+    allow(media).to receive(:delete_prefixed).and_call_original
+    perform_enqueued_jobs(only: VideoFileCleanupJob)
+    expect(media.exist?(VideoService.key(public_id: first, name: "index.m3u8"))).to be(false)
+    expect(media.exist?(VideoService.key(public_id: second, name: "index.m3u8"))).to be(true)
+  end
+
   it "attaches a video only to the release's own media unless the admin's verification explains the difference" do
     upload_id = upload(type: "video", files: hls_files)
     confirm(upload_id)

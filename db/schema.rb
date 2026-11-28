@@ -210,6 +210,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_28_183000) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["public_id"], name: "index_videos_on_public_id", unique: true
+    t.index ["release_id", "kind"], name: "index_videos_on_release_id_and_kind", unique: true
     t.index ["release_id"], name: "index_videos_on_release_id"
   end
 

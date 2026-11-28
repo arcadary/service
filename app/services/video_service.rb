@@ -25,16 +25,18 @@ class VideoService
     release = ReleaseService.find(public_id: release_id)
     raise Video::TargetMismatch unless member?(release: release, source_sha1: source_sha1, verification: verification)
 
-    UploadService.use(upload_id: upload_id, kind: "video") do |upload|
-      replaced = release.videos.find_by(kind: kind)
-      delete_files(public_id: replaced.public_id) if replaced
+    replaced = nil
+    video = UploadService.use(upload_id: upload_id, kind: "video") do |upload|
       Video.transaction do
+        replaced = release.videos.find_by(kind: kind)
         replaced&.destroy!
         Video.create!(public_id: upload.public_id, release: release, kind: kind, source_sha1: source_sha1, verification: verification,
           capture: capture.merge("captured_at" => timestamp(capture.fetch("captured_at"))), media: upload.media,
           files: upload.files.map { |file| file.slice(:name, :byte_size, :sha256, :content_type) })
       end
     end
+    discard(public_id: replaced.public_id) if replaced
+    video
   end
 
   def self.remove(video_id:)
@@ -73,6 +75,19 @@ class VideoService
   def self.expire(upload:)
     delete_files(public_id: upload.public_id) unless upload.state == "used"
   end
+
+  def self.purge(public_id:)
+    return if Video.exists?(public_id: public_id)
+
+    delete_files(public_id: public_id)
+  end
+
+  def self.discard(public_id:)
+    purge(public_id: public_id)
+  rescue Video::StorageUnavailable
+    VideoFileCleanupJob.perform_later(public_id)
+  end
+  private_class_method :discard
 
   def self.store(upload:, file:)
     path = UploadStorageService.path(upload: upload, name: file.name)
