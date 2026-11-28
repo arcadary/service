@@ -14,7 +14,7 @@ readonly DOMAIN="gui/$(id -u)"
 readonly REDACT_SECRETS='
   BEGIN {
     $| = 1;
-    %secrets = map { $_ => $ENV{$_} } grep { length($ENV{$_} // "") } qw(DEPLOY_HOST SECRET_KEY_BASE TUNNEL_TOKEN);
+    %secrets = map { $_ => $ENV{$_} } grep { length($ENV{$_} // "") } split " ", $ENV{SECRET_NAMES};
   }
   for my $name (keys %secrets) { s/\Q$secrets{$name}\E/<$name>/g }
 '
@@ -50,7 +50,8 @@ deploy() {
     cd "$CHECKOUT" &&
     mise trust --quiet mise.toml &&
     { mise exec -- bundle check >/dev/null || mise exec -- bundle install --quiet; } &&
-    mise exec -- fnox exec -- bash -c 'set -o pipefail; bin/kamal deploy --lock-wait 2>&1 | perl -pe "$1"' \
+    SECRET_NAMES="DEPLOY_HOST $(sed -n -E 's/^([A-Za-z0-9_]+)=.*/\1/p' .kamal/secrets | tr '\n' ' ')" \
+      mise exec -- fnox exec -- bash -c 'set -o pipefail; bin/kamal deploy --lock-wait 2>&1 | perl -pe "$1"' \
       redact "$REDACT_SECRETS"
 }
 
