@@ -34,6 +34,10 @@ RSpec.describe "Storage container configuration" do
     storage = YAML.safe_load(ERB.new(Rails.root.join("config/storage.yml").read).result)
     expect(storage.fetch("r2")).to include("bucket" => "test-private", "public" => false)
     expect(storage.fetch("r2_media")).to include("bucket" => "test-media", "upload" => { "cache_control" => "public, max-age=31536000, immutable" })
+    %w[r2 r2_media].each do |name|
+      client = ActiveStorage::Service.configure(name, storage).client.client
+      expect([ client.config.request_checksum_calculation, client.config.response_checksum_validation ]).to eq(%w[when_required when_required])
+    end
   end
 
   it "omits empty optional secrets from both declarations and container values" do
