@@ -51,8 +51,8 @@ module PlaythroughHlsHelpers
     [ 0x47, (start ? 0x40 : 0) | (pid >> 8), pid & 255, 0x10 | counter ].pack("C4") + payload.ljust(184, "\xff".b)
   end
 
-  def hls_psi(table:, data:)
-    section = [ table, 0xb000 | (data.bytesize + 4) ].pack("Cn") + data
+  def hls_psi(table:, data:, section_flags: 0xb000)
+    section = [ table, section_flags | (data.bytesize + 4) ].pack("Cn") + data
     crc = 0xffffffff
     section.each_byte do |byte|
       crc ^= byte << 24

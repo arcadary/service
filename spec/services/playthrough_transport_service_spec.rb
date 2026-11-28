@@ -9,6 +9,14 @@ RSpec.describe PlaythroughTransportService do
     expect(described_class.validate(bytes: hls_transport(audio: false))).to be(false)
   end
 
+  it "accepts a DVB service description table before the PAT" do
+    data = [ 1, 0xc1, 0, 0, 1, 0xff, 1, 0xfc, 0x8000 ].pack("nC3nCnCn")
+    section = hls_psi(table: 0x42, data: data, section_flags: 0xf000)
+    sdt = hls_packet(pid: 0x11, payload: "\x00".b + section, start: true)
+
+    expect(described_class.validate(bytes: sdt + hls_transport)).to be(true)
+  end
+
   it "assembles PSI across packet boundaries with adaptation stuffing" do
     bytes = hls_transport
     pmt = bytes.byteslice(188, 188).byteslice(5, 26)
@@ -32,6 +40,8 @@ RSpec.describe PlaythroughTransportService do
     "PMT CRC error" => ->(bytes) { bytes.tap { |data| data.setbyte(213, data.getbyte(213) ^ 1) } },
     "PMT before PAT" => ->(bytes) { bytes.byteslice(188, 188) + bytes.byteslice(0, 188) + bytes.byteslice(376..) },
     "elementary stream before PMT" => ->(bytes) { bytes.byteslice(0, 188) + bytes.byteslice(376, 188) + bytes.byteslice(188, 188) + bytes.byteslice(564..) },
+    "undeclared elementary stream" => ->(bytes) { bytes.tap { |data| data.setbyte(378, 0x03) } },
+    "conditional-access PID" => ->(bytes) { bytes.tap { |data| data.setbyte(2, 1) } },
     "absent declared audio payload" => ->(bytes) { bytes.byteslice(0, 564) }
   }.each do |name, corrupt|
     it "rejects #{name}" do

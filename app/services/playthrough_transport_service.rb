@@ -32,7 +32,7 @@ class PlaythroughTransportService
       adaptation(bytes: bytes.byteslice(5, length)) if length.positive?
       offset += 1 + length
     end
-    return if pid == 0x1fff
+    return if pid == 0x1fff || pid.between?(0x0010, 0x001f)
     invalid! unless pid.zero? || pid == @pmt_pid || pid == @pcr_pid || @streams&.key?(pid)
     if pid.zero? || pid == @pmt_pid
       return if (adaptation_control & 1).zero?
