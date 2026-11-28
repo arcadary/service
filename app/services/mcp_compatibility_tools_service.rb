@@ -94,5 +94,4 @@ class McpCompatibilityToolsService
     { type: "array", uniqueItems: true, items: { type: "string", enum: CompatibilityResult::INPUTS } }
   end
   private_class_method :inputs_schema
-
 end
