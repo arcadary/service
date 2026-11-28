@@ -9,7 +9,7 @@ module PlaythroughHelpers
   end
 
   def declare_playthrough(input: declaration)
-    PlaythroughStagingService.create(io: StringIO.new(JSON.generate(input)), content_type: "application/json", verifier: "synthetic-admin")
+    PlaythroughStagingService.create(declaration: input, verifier: "synthetic-admin")
   end
 
   def receive_playthrough(stage:, bytes: "synthetic segment", object: stage.objects.first, content_type: object.content_type)

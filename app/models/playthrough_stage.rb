@@ -6,6 +6,7 @@ class PlaythroughStage < ApplicationRecord
   class NotFound < StandardError; end
   class InterruptedTransfer < StandardError; end
   class StorageUnavailable < StandardError; end
+  class UploadNotAuthorized < StandardError; end
 
   belongs_to :release
   has_many :objects, -> { order(:path) }, class_name: "PlaythroughStageObject", dependent: :restrict_with_exception

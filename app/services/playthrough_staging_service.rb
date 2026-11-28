@@ -1,8 +1,6 @@
 class PlaythroughStagingService
-  def self.create(io:, content_type:, verifier:)
-    raise PlaythroughStage::InvalidDeclaration unless content_type == "application/json"
-
-    declaration = PlaythroughDeclarationService.normalize(io: io, verifier: verifier)
+  def self.create(declaration:, verifier:)
+    declaration = PlaythroughDeclarationService.normalize(declaration: declaration, verifier: verifier)
     fingerprint = PlaythroughDeclarationService.fingerprint(declaration: declaration)
     retry_key = declaration.fetch("retry_key")
     stage = PlaythroughStage.transaction do
