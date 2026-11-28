@@ -139,6 +139,9 @@ class CatalogRelationshipService
     end
 
     def change
+      if %w[reassign_release merge_games restore_game].include?(@operation)
+        [ @source, @target, @original ].compact.each { |game| @fields[@games.fetch(game.id)] << "grouping" }
+      end
       case @operation
       when "reassign_release"
         move(release: @records.find { |record| record == @release }, game: @target)

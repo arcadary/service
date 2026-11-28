@@ -17,11 +17,12 @@ RSpec.describe CatalogImportService do
     original = release.reload.attributes
     history = CatalogMutation.sole.attributes
     import_entries(entries: [ entries.sole.merge(size: 32768) ], system: "snes")
-    expect(release.reload.attributes.except("updated_at")).to eq(original.except("updated_at"))
+    expect(release.reload.attributes.except("updated_at", "authoring_revision")).to eq(original.except("updated_at", "authoring_revision"))
+    expect(release.authoring_revision).to eq(original.fetch("authoring_revision") + 1)
     expect(release.media_files.sole.size).to eq(32768)
     expect(CatalogMutation.sole.attributes).to eq(history)
     before = snapshot
-    expect { import_entries(entries: [ entries.sole.merge(title: "Synthetic (Europe)") ], system: "snes") }.to raise_error(ActiveRecord::RecordInvalid, /binding/)
+    expect { import_entries(entries: [ entries.sole.merge(title: "Synthetic (Europe)") ], system: "snes") }.to raise_error(described_class::IdentityConflict, /binding/)
     expect(snapshot).to eq(before)
   end
 

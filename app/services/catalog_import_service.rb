@@ -18,11 +18,17 @@ class CatalogImportService
     @games = Game.all.index_by(&:public_id)
     @games_by_id = @games.values.index_by(&:id)
     @existing_releases = Release.includes(release_media: :media_file).to_a
-    @releases = @existing_releases.index_by(&:sha1)
+    @releases = @existing_releases.each_with_object({}) do |release, files|
+      release.release_media.each { |medium| files[medium.media_file.sha1] = release }
+    end
     @media_files = MediaFile.all.index_by(&:sha1)
+    @detached = (@media_files.keys - @releases.keys).to_set
     @aliases = GameIdentity.all.index_by(&:key)
     @new_aliases = {}
     @assignments = {}
+    @mapping_titles = {}
+    @release_sources = {}
+    @divergences = []
   end
 
   def import
@@ -37,18 +43,24 @@ class CatalogImportService
       write_releases
       write_media
     end
-    @counts.merge(transaction_seconds: Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, skipped_reasons: @skipped[:reasons])
+    @counts.merge(transaction_seconds: Process.clock_gettime(Process::CLOCK_MONOTONIC) - started,
+      skipped_reasons: @skipped[:reasons], divergences: @divergences.uniq)
   end
 
   private
+    def resolve(game:)
+      CatalogGameIdentityService.resolve(game: game, games: @games_by_id)
+    end
+
     def refuse_set_imports
       checksums = @rows.map { |row| row[:sha1] }.to_set
       memberships = ReleaseMedium.group(:media_file_id).count
       @existing_releases.each do |release|
-        next unless release.release_media.any? { |medium| checksums.include?(medium.media_file.sha1) }
+        matched = release.release_media.select { |medium| checksums.include?(medium.media_file.sha1) }
+        next if matched.empty?
 
-        if release.release_media.size != 1 || memberships.fetch(release.release_media.first.media_file_id) > 1
-          raise IdentityConflict, "importing media already in a multi-disk or shared release is not supported"
+        if release.release_media.size != 1 || memberships.fetch(matched.first.media_file_id) > 1
+          raise IdentityConflict, "release #{release.public_id}: importing media #{matched.map { |medium| medium.media_file.sha1 }.join(', ')} already in a multi-disk or shared release is not supported"
         end
       end
     end
@@ -56,59 +68,82 @@ class CatalogImportService
     def assign_curated
       @rows.each do |row|
         existing = @releases[row[:sha1]]
-        raise IdentityConflict, "#{row[:sha1]} already belongs to system #{existing.system}" if existing && existing.system != row[:system]
+        if existing && existing.system != row[:system] && !existing.authored_fields.include?("system")
+          raise IdentityConflict, "#{row[:sha1]} already belongs to system #{existing.system}; source #{row[:system]}"
+        end
 
         mapping = @mappings[row[:sha1]]
         next unless mapping
+        next if @detached.include?(row[:sha1])
         if SEEDS.key?(row[:sha1]) && SEEDS[row[:sha1]] != mapping[:public_id]
           raise IdentityConflict, "curated mapping conflicts with seed #{SEEDS[row[:sha1]]}"
         end
-        if existing && existing.game_id != @games[mapping[:public_id]]&.id
-          raise IdentityConflict, "#{row[:sha1]} cannot move to #{mapping[:public_id]}"
-        end
 
         game = @games[mapping[:public_id]]
-        if game && !game.catalog_curated && @releases.values.any? { |release| release.game_id == game.id && !mapping[:checksums].include?(release.sha1) }
+        if existing && resolve(game: @games_by_id.fetch(existing.game_id)) != (game && resolve(game: game)) && !existing.authored_fields.include?("game_id")
+          raise IdentityConflict, "release #{existing.public_id} checksum #{row[:sha1]} cannot move to #{mapping[:public_id]} (#{mapping[:title]})"
+        end
+        if game && !game.catalog_curated && !game.authored_fields.include?("grouping") && @existing_releases.any? { |release| release.game_id == game.id && !mapping[:checksums].include?(release.sha1) }
           raise IdentityConflict, "curated ID #{game.public_id} belongs to a fallback identity"
         end
         game ||= add_game(public_id: mapping[:public_id], title: mapping[:title])
-        game.title = mapping[:title]
-        game.catalog_curated = true
+        game.catalog_curated = true unless game.retired_into_game_id || game.authored_fields.include?("grouping")
+        @mapping_titles[game] = mapping[:title]
         @assignments[row[:sha1]] = game
       end
     end
 
     def assign_fallback
-      rows = @rows.reject { |row| @assignments.key?(row[:sha1]) }
+      rows = @rows.reject { |row| @assignments.key?(row[:sha1]) || @detached.include?(row[:sha1]) }
       rows = rows.reject do |row|
         existing = @releases[row[:sha1]]
-        game = existing && @games_by_id[existing.game_id]
-        @assignments[row[:sha1]] = game if game&.catalog_curated
+        owner = existing && @games_by_id[existing.source_game_id || existing.game_id]
+        @assignments[row[:sha1]] = owner if owner&.catalog_curated
       end
       rows.group_by { |row| row[:key] }.each do |key, group|
-        owners = group.filter_map { |row| @releases[row[:sha1]]&.game_id }
-        owners << @aliases[key].game_id if @aliases.key?(key)
-        owners.uniq!
-        raise IdentityConflict, "fallback alias #{key} points to multiple games" if owners.size > 1
+        authored_owners = []
+        owners = group.filter_map do |row|
+          release = @releases[row[:sha1]]
+          next unless release
+
+          owner = @games_by_id[release.source_game_id || release.game_id]
+          if release.authored_fields.include?("game_id")
+            authored_owners << owner
+            next
+          end
+          owner
+        end
+        key_owner = @games_by_id.fetch(@aliases[key].game_id) if @aliases.key?(key)
+        owners << key_owner if key_owner
+        canonical = owners.map { |game| resolve(game: game) }.uniq
+        if canonical.size > 1
+          raise IdentityConflict, "fallback alias #{key} points to multiple games #{owners.map(&:public_id).join(', ')}; source checksums #{group.map { |row| row[:sha1] }.join(', ')}"
+        end
 
         seed_ids = group.filter_map { |row| SEEDS[row[:sha1]] }.uniq
         raise IdentityConflict, "fallback alias #{key} conflicts with seed IDs" if seed_ids.size > 1
 
-        game = @games_by_id[owners.first] if owners.any?
-        if game && seed_ids.any? && game.public_id != seed_ids.first
+        game = key_owner || owners.first || authored_owners.min_by(&:public_id)
+        if game && seed_ids.any? && game.public_id != seed_ids.first && !game.authored_fields.include?("grouping")
           raise IdentityConflict, "seed checksum already belongs to #{game.public_id}"
         end
         game ||= fallback_game(key: key, row: group.first, seed_id: seed_ids.first)
-        raise IdentityConflict, "fallback alias #{key} belongs to curated game #{game.public_id}" if game.catalog_curated
+        if game.catalog_curated && !game.authored_fields.include?("grouping")
+          raise IdentityConflict, "fallback alias #{key} belongs to curated game #{game.public_id}"
+        end
 
         @new_aliases[key] = game unless @aliases.key?(key)
-        group.each { |row| @assignments[row[:sha1]] = game }
+        group.each do |row|
+          release = @releases[row[:sha1]]
+          owner = release && @games_by_id[release.source_game_id]
+          @assignments[row[:sha1]] = owner && resolve(game: owner) == resolve(game: game) ? owner : game
+        end
       end
     end
 
     def fallback_game(key:, row:, seed_id:)
       public_id = seed_id || CatalogNameService.public_id(key: key, title: row[:title], system: row[:system])
-      raise IdentityConflict, "new identity conflicts with public ID #{public_id}" if @games.key?(public_id)
+      raise IdentityConflict, "new identity #{key} conflicts with public ID #{public_id}" if @games.key?(public_id)
 
       add_game(public_id: public_id, title: row[:title])
     end
@@ -118,43 +153,116 @@ class CatalogImportService
     end
 
     def prepare_changes
-      @affected_games = @assignments.values.uniq
-      titles = Hash.new { |hash, key| hash[key] = {} }
-      games_by_id = @affected_games.select(&:persisted?).index_by(&:id)
-      @releases.each_value do |release|
-        game = games_by_id[release.game_id]
-        next unless game && !game.catalog_curated
-
-        titles[game.public_id][release.sha1] = release.source_title ? CatalogNameService.display_title(title: release.source_title) : game.title
-      end
+      prepare_titles
+      @release_changes = []
       @rows.each do |row|
-        game = @assignments.fetch(row[:sha1])
-        titles[game.public_id][row[:sha1]] = row[:title] unless game.catalog_curated
-      end
-      @affected_games.each do |game|
-        game.title = titles[game.public_id].values.min_by(&:b) unless game.catalog_curated
-        game.source_title = game.title
-        game.validate!
-      end
-      @changed_titles = @affected_games.select { |game| game.persisted? && game.title_changed? }.map(&:id)
-      @release_changes = @rows.map do |row|
+        prepare_media(row: row)
+        if @detached.include?(row[:sha1])
+          divergence(record: @media_files.fetch(row[:sha1]), field: "membership", source: "single release", effective: [])
+          next
+        end
+
         release = @releases[row[:sha1]] || Release.new(sha1: row[:sha1])
-        media_file = @media_files[row[:sha1]] || MediaFile.new(sha1: row[:sha1])
-        media_file.assign_attributes(row.slice(:size, :format, :crc32, :md5))
-        media_file.validate!
-        release.updated_at = Time.current if release.persisted? && media_file.changed?
-        @media_files[row[:sha1]] = media_file
-        release.release_media.build(key: "main", position: 1, role: "game", media_file: media_file) if release.new_record?
-        release.assign_attributes(row.slice(:system, :region, :revision, :source_title))
-        release.assign_attributes(source_system: row[:system], source_region: row[:region], source_revision: row[:revision])
-        release.game = @assignments.fetch(row[:sha1])
-        release.validate!
-        release
+        file = @media_files.fetch(row[:sha1])
+        release.release_media.each { |medium| medium.media_file = file if medium.media_file.sha1 == file.sha1 }
+        release.release_media.build(key: "main", position: 1, role: "game", media_file: file) if release.new_record?
+        owner = @assignments.fetch(row[:sha1])
+        game = resolve(game: owner)
+        if release.persisted? && release.authored_fields.include?("game_id")
+          divergence(record: release, field: "game_id", source: owner.public_id, effective: @games_by_id.fetch(release.game_id).public_id)
+          game = @games_by_id.fetch(release.game_id)
+        elsif owner != game
+          divergence(record: release, field: "game_id", source: owner.public_id, effective: game.public_id)
+        end
+        release.game = game
+        release.source_game_id = owner.id
+        @release_sources[release.public_id] = owner
+        apply_source(record: release, attributes: row.slice(:system, :region, :revision))
+        release.source_title = row[:source_title]
+        validate_record(record: release, source: row)
+        if release.persisted? && release.authored_fields.include?("media")
+          source = [ { "key" => "main", "position" => 1, "label" => nil, "role" => "game", "sha1" => row[:sha1] } ]
+          effective = release.release_media.map { |medium| medium.slice(:key, :position, :label, :role).merge("sha1" => medium.media_file.sha1) }
+          divergence(record: release, field: "membership", source: source, effective: effective)
+        end
+        release.authoring_revision += 1 if release.persisted? && file.changed?
+        @release_changes << release
+      end
+      @affected_games = (@assignments.values + @release_changes.map(&:game)).uniq
+      @new_aliases.each_value { |game| game.authoring_revision += 1 unless game.changed? }
+      [ *@affected_games, *@release_changes, *@media_files.values ].each do |record|
+        record.authoring_revision += 1 if record.persisted? && record.changed? && !record.authoring_revision_changed?
       end
       @counts = {
         games: counts(records: @affected_games).merge(skipped: @skipped[:games]),
         releases: counts(records: @release_changes).merge(skipped: @skipped[:releases])
       }
+    end
+
+    def prepare_titles
+      titles = Hash.new { |hash, key| hash[key] = {} }
+      incoming = @rows.map { |row| row[:sha1] }.to_set
+      @existing_releases.each do |release|
+        next unless release.source_title && !incoming.include?(release.sha1)
+
+        owner = @games_by_id[release.source_game_id || release.game_id]
+        titles[owner][release.sha1] = CatalogNameService.display_title(title: release.source_title)
+      end
+      @rows.each do |row|
+        owner = @assignments[row[:sha1]]
+        titles[owner][row[:sha1]] = row[:title] if owner
+      end
+      @assignments.values.uniq.each do |game|
+        source = @mapping_titles.fetch(game) { titles[game].values.min_by(&:b) }
+        game.source_title = source
+        if game.retired_into_game_id || (game.authored_fields & %w[title grouping]).any?
+          divergence(record: game, field: "title", source: source, effective: game.title)
+        else
+          game.title = source
+        end
+        validate_record(record: game, source: { title: source })
+      end
+      @changed_titles = @assignments.values.uniq.select { |game| game.persisted? && game.title_changed? }.map(&:id)
+    end
+
+    def prepare_media(row:)
+      file = @media_files[row[:sha1]] || MediaFile.new(sha1: row[:sha1])
+      apply_source(record: file, attributes: row.slice(:size, :format, :crc32, :md5))
+      validate_record(record: file, source: row)
+      @media_files[row[:sha1]] = file
+    end
+
+    def apply_source(record:, attributes:)
+      attributes.each do |field, value|
+        record["source_#{field}"] = value
+        if record.authored_fields.include?(field.to_s)
+          divergence(record: record, field: field.to_s, source: value, effective: record[field])
+        else
+          record[field] = value
+        end
+      end
+    end
+
+    def divergence(record:, field:, source:, effective:)
+      return if source == effective
+
+      type, id = reference(record: record)
+      @divergences << { type: type, id: id, field: field, source_value: source, effective_value: effective }
+    end
+
+    def validate_record(record:, source:)
+      record.validate!
+    rescue ActiveRecord::RecordInvalid => error
+      type, id = reference(record: record)
+      raise IdentityConflict, "#{type} #{id}: invalid resulting configuration from source #{JSON.generate(source)}: #{error.message}"
+    end
+
+    def reference(record:)
+      case record
+      when Game then [ "game", record.public_id ]
+      when Release then [ "release", record.public_id ]
+      when MediaFile then [ "media", record.sha1 ]
+      end
     end
 
     def counts(records:)
@@ -184,24 +292,30 @@ class CatalogImportService
       now = Time.current
       @release_changes.select { |release| release.new_record? || release.changed? }.each_slice(500) do |releases|
         Release.upsert_all(releases.map do |release|
-          release.attributes.except("id").merge("game_id" => @game_ids.fetch(release.game.public_id), "created_at" => release.created_at || now, "updated_at" => now)
+          release.attributes.except("id").merge("game_id" => @game_ids.fetch(release.game.public_id),
+            "source_game_id" => @game_ids.fetch(@release_sources.fetch(release.public_id).public_id),
+            "created_at" => release.created_at || now, "updated_at" => now)
         end, unique_by: :public_id)
       end
-      Release.where(game_id: @changed_titles).touch_all(time: now) if @changed_titles.any?
+      Release.where(game_id: @changed_titles).in_batches(of: 500) { |batch| batch.touch_all(time: now) } if @changed_titles.any?
     end
 
     def write_media
       now = Time.current
-      changed = @rows.filter_map { |row| @media_files.fetch(row[:sha1]) }.select { |file| file.new_record? || file.changed? }
+      changed = @rows.map { |row| @media_files.fetch(row[:sha1]) }.select { |file| file.new_record? || file.changed? }
       changed.each_slice(500) do |files|
         MediaFile.upsert_all(files.map { |file| file.attributes.except("id").merge("created_at" => file.created_at || now, "updated_at" => now) }, unique_by: :sha1)
       end
       media_ids = MediaFile.where(sha1: @rows.map { |row| row[:sha1] }).pluck(:sha1, :id).to_h
-      releases = Release.where(public_id: @release_changes.map(&:public_id)).pluck(:sha1, :id).to_h
-      existing = ReleaseMedium.where(release_id: releases.values).pluck(:release_id).to_set
-      @rows.reject { |row| existing.include?(releases.fetch(row[:sha1])) }.each_slice(500) do |rows|
-        ReleaseMedium.insert_all!(rows.map { |row| { release_id: releases.fetch(row[:sha1]), media_file_id: media_ids.fetch(row[:sha1]), key: "main", position: 1, role: "game", created_at: now, updated_at: now } })
+      release_ids = Release.where(public_id: @release_changes.map(&:public_id)).pluck(:public_id, :id).to_h
+      @release_changes.select(&:new_record?).each_slice(500) do |releases|
+        ReleaseMedium.insert_all!(releases.map do |release|
+          { release_id: release_ids.fetch(release.public_id), media_file_id: media_ids.fetch(release.sha1), key: "main", position: 1, role: "game", created_at: now, updated_at: now }
+        end)
       end
-      Release.joins(:media_files).where(media_files: { sha1: changed.map(&:sha1) }).touch_all(time: now) if changed.any?
+      public_changes = changed.select { |file| (file.changed - %w[authoring_revision source_size source_format source_crc32 source_md5]).any? }
+      if public_changes.any?
+        Release.joins(:media_files).where(media_files: { sha1: public_changes.map(&:sha1) }).in_batches(of: 500) { |batch| batch.touch_all(time: now) }
+      end
     end
 end
