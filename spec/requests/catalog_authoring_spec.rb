@@ -165,7 +165,7 @@ RSpec.describe "Authored catalog output", type: :request do
       expect(response.headers.fetch("Last-Modified")).not_to eq(validators.fetch(path).fetch("Last-Modified"))
       bodies = response.parsed_body.fetch("releases", [ response.parsed_body ])
       bodies.each do |body|
-        expect(body.keys).to match_array(%w[release game media startup compatibility])
+        expect(body.keys).to match_array(%w[release game media startup])
         expect(body.fetch("game").keys).to match_array(%w[id title screenshot])
         expect(body.fetch("release").keys).to match_array(%w[id sha1 system region revision screenshots])
       end

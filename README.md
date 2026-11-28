@@ -154,7 +154,7 @@ A supported reimport preserves the authored controller profile, evidence, author
 
 ### Registering releases over MCP
 
-The MCP tool `register_release` adds a release by its checksum metadata alone; no game file reaches the service. It runs `create_game` when it names a `new_game`, then `create_release`, in one transaction. `create_release` alone also accepts `expected_revisions: :current`, which takes the game scope's revisions at write time; creating a release only adds records, and the retry key still replays an identical request. The Compatibility verdicts technical reference in the corpus has the tool's arguments and errors.
+The MCP tool `register_release` adds a release by its checksum metadata alone; no game file reaches the service. It runs `create_game` when it names a `new_game`, then `create_release`, in one transaction. `create_release` alone also accepts `expected_revisions: :current`, which takes the game scope's revisions at write time; creating a release only adds records, and the retry key still replays an identical request. [Private catalog MCP](docs/mcp.md#registering-releases) lists its arguments and errors.
 
 ### Offline manual metadata imports
 
@@ -216,12 +216,6 @@ All stored uploads together stay within 10 GB; past that, a file is refused with
 Uploads wait on the service host's own disk (`config.x.uploads_root`; in production the `arcadary_service_uploads` Docker volume at `/rails/uploads`), never on the volume that holds the databases. A rejected upload's files are deleted at once, a used upload's once its record exists, and `UploadCleanupJob` deletes every expired upload hourly, with any folder a crash left behind and the private copy of a video nobody used.
 
 A playthrough is private: its package is in the private bucket under `playthroughs/{id}/`, where `id` is the upload's, and `upload_video` records the release, the capture provenance (`tool`, `version`, `captured_at`), the files and the validated media (duration, codecs, chapters). Nothing publishes it. `source_sha1` must be one of the release's media, unless `verification` attests that the captured file differs from a release medium: `trailing_padding` with `removed_bytes`, or `verified_equivalence`, verified by the admin, with evidence naming exactly both checksums. The [owner decision](https://github.com/arcadary/service/issues/45#issuecomment-7230746970) permits these authenticated private uploads, including the private Donkey Kong trial; commercial footage stays out of public distribution, and the catalog and screenshot licences grant no video rights.
-
-## Compatibility
-
-A known checksum identifies a release; it says nothing about whether it plays. A compatibility verdict records that for one release in one environment: the device class (`steam_machine` or `steam_deck`), the emulator `core` and `core_version`. It also records the release's `startup.revision` at the time of the test. The MCP tools `record_verdict` and `get_compatibility`, their rules and errors are in the Compatibility verdicts technical reference in the corpus. `CATALOG_ADMIN_NAME` names the reviewer (production: `Admin`).
-
-Release JSON, including each release in a media response, has a top-level `compatibility` with `default_state: "unknown"` and `results`: the newest verdict per environment, unless it withdrew the result, with its `id`, environment, `startup_revision`, `state`, `tested_at`, `evidence` and `limitations`. A result whose `startup_revision` differs from the release's current `startup.revision` was tested on an earlier launch configuration. The reviewer, reason and attached playthroughs stay private. Recording a verdict refreshes the release's ETag and Last-Modified.
 
 ## Screenshots
 

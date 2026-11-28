@@ -74,7 +74,7 @@ RSpec.configure do |config|
             }
           },
           Release: {
-            type: :object, required: %w[release game media startup compatibility], additionalProperties: false,
+            type: :object, required: %w[release game media startup], additionalProperties: false,
             properties: {
               release: {
                 type: :object, required: %w[id sha1 system region revision screenshots], additionalProperties: false,
@@ -108,24 +108,6 @@ RSpec.configure do |config|
                   schema: { type: :integer, enum: [ 1 ] }, boot: { type: :string },
                   drives: { type: :object, additionalProperties: false, properties: { "8" => { type: :string }, "9" => { type: :string } } },
                   revision: { type: :string, pattern: "^[0-9a-f]{64}$" }
-                }
-              },
-              compatibility: {
-                type: :object, required: %w[default_state results], additionalProperties: false,
-                description: "Tested playability, kept apart from identity. Any environment without a result is default_state.",
-                properties: {
-                  default_state: { type: :string, enum: [ "unknown" ] },
-                  results: { type: :array, items: {
-                    type: :object, additionalProperties: false,
-                    required: %w[id device_class core core_version startup_revision state tested_at evidence limitations],
-                    description: "The verdict in force for one environment: a reviewer who owns the exact file played it on this device class, core version and launch configuration.",
-                    properties: {
-                      id: { type: :integer }, device_class: { type: :string, enum: CompatibilityVerdict::DEVICE_CLASSES },
-                      core: { type: :string }, core_version: { type: :string }, startup_revision: { type: :string, pattern: "^[0-9a-f]{64}$" },
-                      state: { type: :string, enum: CompatibilityVerdict::STATES - [ "unknown" ] }, tested_at: { type: :string, format: "date-time" },
-                      evidence: { type: :string }, limitations: { type: :string, nullable: true }
-                    }
-                  } }
                 }
               }
             }

@@ -1,12 +1,12 @@
 class ReleaseDecorator
-  VERSION = 5
+  VERSION = 4
 
   def self.decorate(release, sha1: release.sha1)
     new(release, sha1: sha1)
   end
 
   def self.version
-    [ VERSION, *GameDecorator.version, *ReleaseMediumDecorator.version, *ScreenshotDecorator.version, *ReleaseControllerProfileDecorator.version, *CompatibilityVerdictDecorator.version ]
+    [ VERSION, *GameDecorator.version, *ReleaseMediumDecorator.version, *ScreenshotDecorator.version, *ReleaseControllerProfileDecorator.version ]
   end
 
   def initialize(release, sha1:)
@@ -21,11 +21,7 @@ class ReleaseDecorator
         .merge(@release.controller_profile ? { "controller_profile" => ReleaseControllerProfileDecorator.decorate(@release.controller_profile).as_json } : {}),
       game: GameDecorator.decorate(@release.game).as_json,
       media: @release.release_media.map { |medium| ReleaseMediumDecorator.decorate(medium).as_json },
-      startup: @startup,
-      compatibility: {
-        "default_state" => "unknown",
-        "results" => CompatibilityVerdictDecorator.current(release: @release)
-      }
+      startup: @startup
     }
   end
 end

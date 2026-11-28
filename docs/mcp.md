@@ -1,6 +1,6 @@
 # Private catalog MCP
 
-`/mcp` is the single admin's MCP endpoint for catalog reads and uploads in the Rails application. It uses the official Ruby `mcp` SDK **1.11.0**, in stateless Streamable HTTP mode with finite JSON responses. Writes start and confirm uploads, turn a confirmed upload into a release's screenshot or a private playthrough, register releases by checksum and record compatibility verdicts. It exposes no video publication, catalog corrections, game files, downloads, submissions, shell, SQL or arbitrary URL tools. Catalog coverage is not a playability verdict.
+`/mcp` is the single admin's MCP endpoint for catalog reads and uploads in the Rails application. It uses the official Ruby `mcp` SDK **1.11.0**, in stateless Streamable HTTP mode with finite JSON responses. Writes start and confirm uploads, turn a confirmed upload into a release's screenshot or a private playthrough, and register releases by checksum. It exposes no video publication, catalog corrections, game files, downloads, submissions, shell, SQL or arbitrary URL tools. Catalog coverage is not a playability verdict.
 
 The generated [HTTP endpoint documentation](../swagger/v1/swagger.yaml) is served at `/api-docs`. MCP `tools/list` publishes the input/output JSON schemas and help for each tool; `server/discover` serves SDK discovery for the modern protocol. All discovery is authenticated. These schemas, rather than the launcher's public JSON shapes, describe the private authoring records.
 
@@ -54,15 +54,9 @@ After `request_upload`, PUT each file to `upload_url` followed by its package-re
 
 Tool errors use `isError: true` and `structuredContent: {"error":{"code":"..."}}`: `invalid_input`, `not_found` (upload or release), `upload_expired`, `upload_conflict` (the upload is in the wrong state or of the other type, or was already used), `upload_rejected` (the PNG exceeds the release system's limits), `target_mismatch` (`source_sha1` is not the release's and no verification explains it), `uploads_disabled` (`request_upload` before storage is configured) and `storage_unavailable`. A failed `upload_screenshot` or `upload_video` leaves the upload confirmed, so retry with the same `upload_id` before it expires.
 
-## Releases and compatibility
+## Registering releases
 
-| Tool | Arguments | Result |
-| --- | --- | --- |
-| `register_release` | `reason`, `idempotency_key`, `game_id` or `new_game` `{id, title}`, `system`, optional `region`, `revision`, and `media` (`sha1` with optional `size`, `crc32`, `md5`, `format`, `label`, `key`, `role`) | The new release, as `get_release` returns it |
-| `record_verdict` | `release_id`, `device_class`, `core`, `core_version`, `state`, `tested_at`, `reason`, and as the state needs `evidence`, `limitations`, `attested`; optional `playthrough_ids` | The recorded verdict, with reviewer and attached playthroughs |
-| `get_compatibility` | `release_id` | The current `startup_revision`, the verdicts in force and the history |
-
-The Compatibility verdicts technical reference in the corpus has the rules and errors; [Compatibility](../README.md#compatibility) has the public release JSON.
+`register_release` takes a `reason`, an `idempotency_key`, `game_id` or `new_game` `{id, title}`, the `system`, optional `region` and `revision`, and `media` (`sha1` with optional `size`, `crc32`, `md5`, `format`, `label`, `key`, `role`). It returns the new release as `get_release` does. Errors are `invalid_input`, `conflict` (an existing checksum or game id, or a reused retry key with different arguments) and `admin_unavailable` (`CATALOG_ADMIN_NAME` is not configured). [Registering releases over MCP](../README.md#registering-releases-over-mcp) has how retries and revisions work.
 
 ## Codex configured-header connection
 

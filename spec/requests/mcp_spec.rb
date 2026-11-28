@@ -91,7 +91,7 @@ RSpec.describe "Authenticated catalog MCP", type: :request do
   end
 
   it "requires the current configured pair on every reconnect" do
-    expect(rpc(method: "tools/list").dig("result", "tools").size).to eq(11)
+    expect(rpc(method: "tools/list").dig("result", "tools").size).to eq(9)
     allow(ENV).to receive(:[]).with("VALIDATION_REVIEWER_PASSWORD").and_return("rotated-synthetic")
     rpc(method: "tools/list")
     expect(response).to have_http_status(:unauthorized)
@@ -101,7 +101,7 @@ RSpec.describe "Authenticated catalog MCP", type: :request do
 
   it "advertises read tools, the upload tools and the release tools with schemas and preserves SDK version negotiation" do
     discovered = rpc(method: "tools/list").dig("result", "tools")
-    expect(discovered.map { |entry| entry.fetch("name") }).to eq(%w[search_games get_game get_release get_catalog_history request_upload confirm_upload upload_screenshot upload_video register_release record_verdict get_compatibility])
+    expect(discovered.map { |entry| entry.fetch("name") }).to eq(%w[search_games get_game get_release get_catalog_history request_upload confirm_upload upload_screenshot upload_video register_release])
     discovered.first(4).each do |entry|
       expect(entry.dig("annotations", "readOnlyHint")).to be(true)
       expect(entry.fetch("inputSchema")).to include("additionalProperties" => false)
@@ -157,7 +157,7 @@ RSpec.describe "Authenticated catalog MCP", type: :request do
     expect(response).to have_http_status(:forbidden)
     rpc(method: "tools/list", extra_headers: { "Host" => "api.arcadary.org", "Origin" => "https://api.arcadary.org" })
     expect(response).to have_http_status(:ok)
-    expect(rpc(method: "tools/list").dig("result", "tools").size).to eq(11)
+    expect(rpc(method: "tools/list").dig("result", "tools").size).to eq(9)
   end
 
   it "keeps unsupported methods, missing subpaths and application failures private" do

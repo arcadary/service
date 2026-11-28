@@ -9,8 +9,7 @@ RSpec.describe "Release", type: :request do
       "release" => { "id" => release.public_id, "sha1" => release.sha1, "system" => "c64", "region" => nil, "revision" => nil, "screenshots" => [] },
       "game" => { "id" => "lookup-game", "title" => "A game", "screenshot" => nil },
       "media" => [ { "key" => "main", "position" => 1, "label" => nil, "role" => "game", "sha1" => release.sha1, "size" => nil, "format" => nil } ],
-      "startup" => { "schema" => 1, "boot" => "main", "drives" => { "8" => "main" }, "revision" => "20ac504497948774502ee889d50c8b20f4dcb493ee0a66f064e818b91cb8c9ff" },
-      "compatibility" => { "default_state" => "unknown", "results" => [] }
+      "startup" => { "schema" => 1, "boot" => "main", "drives" => { "8" => "main" }, "revision" => "20ac504497948774502ee889d50c8b20f4dcb493ee0a66f064e818b91cb8c9ff" }
     }
   end
 
@@ -32,22 +31,6 @@ RSpec.describe "Release", type: :request do
         context "upper-case hex" do
           let(:sha1) { release.sha1.upcase }
           run_test! { expect(response.parsed_body).to eq(expected_payload) }
-        end
-
-        context "with a verdict for one environment" do
-          before do
-            allow(ENV).to receive(:[]).and_call_original
-            allow(ENV).to receive(:[]).with("CATALOG_ADMIN_NAME").and_return("Admin")
-            CompatibilityService.record(release_id: release.public_id, device_class: "steam_deck", core: "vice", core_version: "3.9",
-              state: "works_with_issues", tested_at: "2026-11-28T12:00:00Z", evidence: "Played to level 3", limitations: "No sound",
-              attested: true, reason: "First test")
-          end
-          run_test! do
-            expect(response.parsed_body.dig("compatibility", "results")).to match([
-              include("device_class" => "steam_deck", "core" => "vice", "core_version" => "3.9", "state" => "works_with_issues",
-                "startup_revision" => expected_payload.dig("startup", "revision"), "limitations" => "No sound", "tested_at" => "2026-11-28T12:00:00Z")
-            ])
-          end
         end
 
         context "with an authored original controller profile" do
